@@ -1,0 +1,78 @@
+{
+  "name": "AXIOM",
+  "description": "Turkish Financial Dashboard SaaS — Real-time market data, AI-powered news analysis, community sentiment tracking",
+  "version": "0.1.0",
+  "type": "next.js",
+  "status": "Phase 1 Complete | Phase 2 In Progress",
+  "technologies": [
+    "Next.js 16.2.3",
+    "React 19",
+    "TypeScript",
+    "Tailwind CSS",
+    "TradingView Lightweight Charts",
+    "Gemini 2.0 Flash",
+    "Finnhub API",
+    "Binance API"
+  ],
+  "features": [
+    "Live crypto & stock prices",
+    "Multi-source news aggregation (RSS + Finnhub)",
+    "AI-powered news summarization (Gemini)",
+    "Market-aware analysis with sentiment context",
+    "Community voting system (Bullish/Bearish/Panic)",
+    "Live favorites/watchlist tracking",
+    "Scrolling market ticker (Top 20 cryptos + indices + Mag7)",
+    "Technical indicators (RSI, MACD, Bollinger Bands)",
+    "AI stock recommendations",
+    "Turkish + English localization"
+  ],
+  "phases": {
+    "phase1": {
+      "status": "✅ Complete",
+      "deliverables": [
+        "News aggregation from 7 sources",
+        "AI news summarization",
+        "Community voting",
+        "Live price tracking",
+        "Market ticker",
+        "Chart integration"
+      ]
+    },
+    "phase2": {
+      "status": "⚒️ Foundation Complete",
+      "deliverables": [
+        "Stock search & lookup",
+        "Fundamental analysis (P/E, ROE, debt, etc)",
+        "Technical indicators (RSI, MACD, BB, MA)",
+        "Earnings calendar & forecasts",
+        "AI-powered Buy/Sell/Hold recommendations"
+      ]
+    }
+  },
+  "codeMetrics": {
+    "totalLines": "5000+",
+    "apiEndpoints": 9,
+    "components": 14,
+    "typescriptCoverage": "95%"
+  },
+  "teamMembers": [
+    {
+      "name": "User",
+      "role": "Product Owner / Developer"
+    },
+    {
+      "name": "Claude",
+      "role": "AI Assistant"
+    }
+  ],
+  "repository": "/Users/mehmetgulec/Documents/AXIOM/axiom-dashboard",
+  "livePath": "http://localhost:3000/dashboard",
+  "documentation": [
+    ".claude/PROJECT.md",
+    ".claude/ARCHITECTURE.md",
+    ".claude/PHASE2_STOCK_ANALYSIS.md",
+    ".claude/PHASE2_IMPLEMENTATION_SUMMARY.md",
+    ".claude/QUICK_START_PHASE2.md"
+  ],
+  "notes": "Turkish-first financial dashboard for crypto/stock traders. Phase 1 complete with news + sentiment. Phase 2 stock analysis foundation built and ready for integration."
+}

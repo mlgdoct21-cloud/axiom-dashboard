@@ -1,0 +1,189 @@
+{
+  "nav": {
+    "logo": "AXIOM",
+    "signIn": "Sign In",
+    "getStarted": "Get Started",
+    "language": "Language"
+  },
+  "tabs": {
+    "news": "News",
+    "fundamental": "Fundamental",
+    "technical": "Technical",
+    "calculator": "Calculator",
+    "pricing": "Pricing"
+  },
+  "news": {
+    "title": "Financial News",
+    "searchPlaceholder": "Search news...",
+    "filter": "Filter",
+    "category": "Category",
+    "allCategories": "All Categories",
+    "stocks": "Stocks",
+    "crypto": "Crypto",
+    "forex": "Forex",
+    "economy": "Economy",
+    "loading": "Loading news...",
+    "noNews": "No news found",
+    "summary": "Summary",
+    "source": "Source",
+    "readMore": "Read More"
+  },
+  "fundamental": {
+    "title": "Fundamental Analysis",
+    "searchPlaceholder": "Search symbol (e.g., AAPL, ASELS)",
+    "selectAsset": "Select Asset",
+    "noAsset": "Please select an asset",
+    "loading": "Loading data...",
+    "error": "Error loading data",
+    "lastUpdated": "Last updated",
+    "sections": {
+      "valuation": "Valuation Ratios",
+      "profitability": "Profitability Metrics",
+      "growth": "Growth Data",
+      "debt": "Debt & Liquidity",
+      "cashFlow": "Cash Flow",
+      "qualitative": "Qualitative Factors"
+    },
+    "metrics": {
+      "pe": "P/E Ratio",
+      "peDesc": "Price paid for each $1 of earnings",
+      "pb": "P/B Ratio",
+      "pbDesc": "Market value / Book value",
+      "evEbitda": "EV/EBITDA",
+      "evEbitdaDesc": "Enterprise value / Operating profit",
+      "roe": "Return on Equity (ROE)",
+      "roeDesc": "Efficiency of shareholder capital",
+      "netMargin": "Net Profit Margin (%)",
+      "netMarginDesc": "Sales converted to net profit",
+      "salesGrowth": "Sales Growth (%)",
+      "salesGrowthDesc": "Year-over-year revenue increase",
+      "epsGrowth": "EPS Growth (%)",
+      "epsGrowthDesc": "Earnings per share increase",
+      "currentRatio": "Current Ratio",
+      "currentRatioDesc": "Current assets / Short-term liabilities",
+      "debtRatio": "Net Debt/EBITDA",
+      "debtRatioDesc": "Years to pay off debt",
+      "freeCashFlow": "Free Cash Flow",
+      "freeCashFlowDesc": "Cash after investments",
+      "dividendYield": "Dividend Yield (%)",
+      "dividendYieldDesc": "Dividend as % of stock price",
+      "management": "Management Quality",
+      "managementDesc": "Track record, transparency, ethics",
+      "moat": "Competitive Moat",
+      "moatDesc": "Factors differentiating from competitors",
+      "sectorTrend": "Sector Trend",
+      "sectorTrendDesc": "Is the sector growing or declining"
+    },
+    "rating": {
+      "excellent": "Excellent",
+      "good": "Good",
+      "warning": "Warning",
+      "risk": "Risk"
+    },
+    "comparison": "vs Industry Average"
+  },
+  "technical": {
+    "title": "Technical Analysis",
+    "searchPlaceholder": "Search symbol",
+    "selectIndicators": "Select Indicators",
+    "indicators": {
+      "rsi": "RSI (14)",
+      "macd": "MACD",
+      "bollinger": "Bollinger Bands",
+      "stochastic": "Stochastic",
+      "atr": "ATR",
+      "sma": "SMA (Simple Moving Average)",
+      "ema": "EMA (Exponential Moving Average)",
+      "volume": "Volume",
+      "fibonacci": "Fibonacci Retracement"
+    },
+    "timeframes": {
+      "1m": "1D",
+      "5m": "5D",
+      "15m": "15D",
+      "1h": "1H",
+      "4h": "4H",
+      "1d": "1D",
+      "1w": "1W",
+      "1mo": "1M"
+    },
+    "aiAnalysis": "AI Chart Analysis",
+    "loading": "Loading chart...",
+    "noData": "No data available"
+  },
+  "calculator": {
+    "title": "Trading Calculators",
+    "description": "Analyze your strategy, manage risk, and optimize positions",
+    "pnl": {
+      "title": "Profit/Loss Calculator",
+      "description": "Analyze trade outcomes"
+    },
+    "risk": {
+      "title": "Risk Management Calculator",
+      "description": "Calculate position size and manage risk"
+    },
+    "position": {
+      "title": "Position Sizing Calculator",
+      "description": "Optimize position size with leverage"
+    }
+  },
+  "pricing": {
+    "title": "Pricing Plans",
+    "description": "Plans for every level of investor",
+    "tier1": {
+      "name": "Starter",
+      "price": "Free",
+      "desc": "Start with real signals",
+      "features": [
+        "Unlimited signals",
+        "Fundamental Analysis (10 symbols)",
+        "Technical Analysis (5 indicators)",
+        "News summary (Daily)",
+        "Basic calculator"
+      ]
+    },
+    "tier2": {
+      "name": "Pro",
+      "price": "$9.99",
+      "period": "/month",
+      "desc": "For serious traders",
+      "features": [
+        "Everything in Starter +",
+        "Fundamental Analysis (Unlimited)",
+        "Technical Analysis (9 indicators)",
+        "News summary (Real-time)",
+        "Advanced calculator",
+        "AI chart analysis",
+        "Portfolio tracking"
+      ],
+      "badge": "Most Popular"
+    },
+    "tier3": {
+      "name": "Enterprise",
+      "price": "Custom",
+      "desc": "For trading firms",
+      "features": [
+        "Everything in Pro +",
+        "API access",
+        "Custom integrations",
+        "Real-time data",
+        "Dedicated support",
+        "White-label option"
+      ]
+    }
+  },
+  "footer": {
+    "about": "About",
+    "aboutText": "AXIOM helps investors make better decisions with AI-powered fundamental and technical analysis tools.",
+    "connect": "Connect",
+    "instagram": "Instagram",
+    "telegram": "Telegram Bot",
+    "twitter": "Twitter/X",
+    "email": "Email",
+    "contact": "Contact",
+    "privacy": "Privacy Policy",
+    "terms": "Terms of Service",
+    "copyright": "© 2026 AXIOM. All rights reserved.",
+    "disclaimer": "⚠️ Risk Warning: This information is for educational purposes only. Not investment advice. Consult professionals before making investment decisions."
+  }
+}

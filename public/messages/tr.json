@@ -1,0 +1,189 @@
+{
+  "nav": {
+    "logo": "AXIOM",
+    "signIn": "Giriş Yap",
+    "getStarted": "Başla",
+    "language": "Dil"
+  },
+  "tabs": {
+    "news": "Haberler",
+    "fundamental": "Temel Analiz",
+    "technical": "Teknik Analiz",
+    "calculator": "Hesapmakinesi",
+    "pricing": "Fiyatlandırma"
+  },
+  "news": {
+    "title": "Finansal Haberler",
+    "searchPlaceholder": "Haber ara...",
+    "filter": "Filtre",
+    "category": "Kategori",
+    "allCategories": "Tüm Kategoriler",
+    "stocks": "Hisse",
+    "crypto": "Kripto",
+    "forex": "Döviz",
+    "economy": "Ekonomi",
+    "loading": "Haberler yükleniyor...",
+    "noNews": "Haber bulunamadı",
+    "summary": "Özet",
+    "source": "Kaynak",
+    "readMore": "Devamını Oku"
+  },
+  "fundamental": {
+    "title": "Temel Analiz",
+    "searchPlaceholder": "Sembol ara (örn: AAPL, ASELS)",
+    "selectAsset": "Varlık Seç",
+    "noAsset": "Lütfen bir varlık seçiniz",
+    "loading": "Veriler yükleniyor...",
+    "error": "Veri yüklenirken hata oluştu",
+    "lastUpdated": "Son güncelleme",
+    "sections": {
+      "valuation": "Değerleme Oranları",
+      "profitability": "Karlılık Metrikleri",
+      "growth": "Büyüme Verileri",
+      "debt": "Borçluluk & Likidite",
+      "cashFlow": "Nakit Akışı",
+      "qualitative": "Nitel Faktörler"
+    },
+    "metrics": {
+      "pe": "F/K Oranı (P/E)",
+      "peDesc": "Her 1 TL'lik kâr için ödenen tutar",
+      "pb": "PD/DD Oranı (P/B)",
+      "pbDesc": "Piyasa değeri / Defter değeri",
+      "evEbitda": "FD/FAVÖK (EV/EBITDA)",
+      "evEbitdaDesc": "Firma değeri / Operasyonel kâr",
+      "roe": "Özkaynak Karlılığı (ROE)",
+      "roeDesc": "Ortakların sermayesinin verimlilik oranı",
+      "netMargin": "Net Kâr Marjı (%)",
+      "netMarginDesc": "Satışların ne kadarı net kâra dönüşür",
+      "salesGrowth": "Satış Büyümesi (%)",
+      "salesGrowthDesc": "Yıldan yıla ciro artışı",
+      "epsGrowth": "EPS Büyümesi (%)",
+      "epsGrowthDesc": "Hisse başına kazanç artışı",
+      "currentRatio": "Cari Oran",
+      "currentRatioDesc": "Dönen varlıklar / Kısa vadeli borçlar",
+      "debtRatio": "Net Borç/FAVÖK",
+      "debtRatioDesc": "Borçları kaç yılda ödeyebilecek",
+      "freeCashFlow": "Serbest Nakit Akışı",
+      "freeCashFlowDesc": "İnvestisyon sonrası elinde kalan para",
+      "dividendYield": "Temettü Verimi (%)",
+      "dividendYieldDesc": "Hisse fiyatına oranı temettü oranı",
+      "management": "Yönetim Kalitesi",
+      "managementDesc": "Vaatleri tutma, şeffaflık, etik değerler",
+      "moat": "Rekabet Avantajı",
+      "moatDesc": "Rakiplerden ayıran faktörler (marka, patent)",
+      "sectorTrend": "Sektör Trendi",
+      "sectorTrendDesc": "Sektör büyüyor mu yoksa küçülüyor mu"
+    },
+    "rating": {
+      "excellent": "Mükemmel",
+      "good": "İyi",
+      "warning": "Uyarı",
+      "risk": "Risk"
+    },
+    "comparison": "Sektör Ortalaması ile Karşılaştırma"
+  },
+  "technical": {
+    "title": "Teknik Analiz",
+    "searchPlaceholder": "Sembol ara",
+    "selectIndicators": "İndikatörleri Seç",
+    "indicators": {
+      "rsi": "RSI (14)",
+      "macd": "MACD",
+      "bollinger": "Bollinger Bantları",
+      "stochastic": "Stochastic",
+      "atr": "ATR",
+      "sma": "SMA (Basit Hareketli Ort.)",
+      "ema": "EMA (Üssel Hareketli Ort.)",
+      "volume": "Volume",
+      "fibonacci": "Fibonacci Retracement"
+    },
+    "timeframes": {
+      "1m": "1D",
+      "5m": "5D",
+      "15m": "15D",
+      "1h": "1S",
+      "4h": "4S",
+      "1d": "1G",
+      "1w": "1H",
+      "1mo": "1A"
+    },
+    "aiAnalysis": "AI Grafik Analizi",
+    "loading": "Grafik yükleniyor...",
+    "noData": "Veri bulunamadı"
+  },
+  "calculator": {
+    "title": "Ticaret Hesaplayıcıları",
+    "description": "Stratejinizi analiz edin, riskinizi yönetin ve pozisyonlarınızı optimize edin",
+    "pnl": {
+      "title": "Kar/Zarar Hesaplayıcısı",
+      "description": "Ticaret sonuçlarını analiz edin"
+    },
+    "risk": {
+      "title": "Risk Yönetimi Hesaplayıcısı",
+      "description": "Pozisyon boyutunu hesapla, riski kontrol et"
+    },
+    "position": {
+      "title": "Pozisyon Boyutu Hesaplayıcısı",
+      "description": "Kaldıraçla pozisyon boyutunu optimize et"
+    }
+  },
+  "pricing": {
+    "title": "Fiyatlandırma Planları",
+    "description": "Tüm seviyelerdeki yatırımcılar için plan",
+    "tier1": {
+      "name": "Başlangıç",
+      "price": "Ücretsiz",
+      "desc": "Gerçek sinyallerle başla",
+      "features": [
+        "Sınırsız sinyaller",
+        "Temel Analiz (10 sembol)",
+        "Teknik Analiz (5 indikator)",
+        "Haber özeti (Günlük)",
+        "Temel hesapmakinesi"
+      ]
+    },
+    "tier2": {
+      "name": "Pro",
+      "price": "₺499",
+      "period": "/ay",
+      "desc": "Ciddi işlemciler için",
+      "features": [
+        "Başlangıçtaki her şey +",
+        "Temel Analiz (Sınırsız sembol)",
+        "Teknik Analiz (9 indikator)",
+        "Haber özeti (Gerçek zamanlı)",
+        "Gelişmiş hesapmakinesi",
+        "AI grafik analizi",
+        "Portföy takibi"
+      ],
+      "badge": "En Popüler"
+    },
+    "tier3": {
+      "name": "Enterprise",
+      "price": "Özel",
+      "desc": "İşlem firmaları için",
+      "features": [
+        "Pro'daki her şey +",
+        "API erişimi",
+        "Özel entegrasyonlar",
+        "Gerçek zamanlı veriler",
+        "Özel destek",
+        "Beyaz etiket seçeneği"
+      ]
+    }
+  },
+  "footer": {
+    "about": "Hakkında",
+    "aboutText": "AXIOM, yapay zeka destekli temel ve teknik analiz araçları ile yatırımcılara daha iyi kararlar almalarında yardımcı olur.",
+    "connect": "Bağlantılar",
+    "instagram": "Instagram",
+    "telegram": "Telegram Bot",
+    "twitter": "Twitter/X",
+    "email": "E-posta",
+    "contact": "İletişim",
+    "privacy": "Gizlilik Politikası",
+    "terms": "Hizmet Şartları",
+    "copyright": "© 2026 AXIOM. Tüm hakları saklıdır.",
+    "disclaimer": "⚠️ Riskli Uyarı: Bu bilgiler eğitim amaçlıdır. Yatırım tavsiyesi değildir. Yatırım kararları almadan profesyonel danışmanlık alınız."
+  }
+}

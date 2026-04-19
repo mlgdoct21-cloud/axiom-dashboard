@@ -1,0 +1,433 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import NewsModal from './NewsModal';
+import PriceChart from '@/components/charts/PriceChart';
+import type { NewsItem } from '@/components/tabs/NewsTab';
+import type { NewsVote } from '@/lib/news-storage';
+
+interface NewsDetailProps {
+  item: NewsItem | null;
+  votes: NewsVote | null;
+  locale: 'en' | 'tr';
+  onVote: (voteType: 'bullish' | 'bearish' | 'panic') => void;
+  onAddFavorite?: (symbol: string) => void;
+  favorites?: string[];
+}
+
+interface PriceSnapshot {
+  symbol: string;
+  price: number;
+  change: number;         // ilk mumdan son muma degisim
+  changePercent: number;
+}
+
+function formatPrice(p: number, locale: 'en' | 'tr'): string {
+  if (p < 0.01) return p.toFixed(6);
+  if (p < 1) return p.toFixed(4);
+  return p.toLocaleString(locale === 'tr' ? 'tr-TR' : 'en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatDate(ts: number, locale: 'en' | 'tr'): string {
+  const date = new Date(ts);
+  const diff = Date.now() - ts;
+  const hours = Math.floor(diff / 3600000);
+  if (hours < 1) return `${Math.floor(diff / 60000)}${locale === 'tr' ? 'dk once' : 'm ago'}`;
+  if (hours < 24) return `${hours}${locale === 'tr' ? 'sa once' : 'h ago'}`;
+  return date.toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function displaySymbol(sym: string): string {
+  return sym.replace('BINANCE:', '').replace('OANDA:', '').replace('_', '/').replace('USDT', '');
+}
+
+export default function NewsDetail({
+  item,
+  votes,
+  locale,
+  onVote,
+  onAddFavorite,
+  favorites = [],
+}: NewsDetailProps) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [priceSnapshots, setPriceSnapshots] = useState<Record<string, PriceSnapshot>>({});
+  const [activeChartSymbol, setActiveChartSymbol] = useState<string | null>(null);
+  const [aiSummary, setAiSummary] = useState<string>('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [marketAnalysis, setMarketAnalysis] = useState<string>('');
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+
+  // Secili haber degisince aktif chart'i otomatik ilk sembole al + AI summary'yi auto-generate et
+  useEffect(() => {
+    if (item?.symbols && item.symbols.length > 0) {
+      setActiveChartSymbol(item.symbols[0]);
+    } else {
+      setActiveChartSymbol(null);
+    }
+
+    // Auto-generate AI summary and market analysis when news item changes (with debounce)
+    if (item?.title && item?.summary) {
+      setAiLoading(true);
+      setAnalysisLoading(true);
+      setAiSummary('');
+      setMarketAnalysis('');
+
+      const timer = setTimeout(() => {
+        // AI Summary
+        fetch('/api/ai/summarize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: item.title,
+            summary: item.summary,
+            locale,
+          }),
+        })
+          .then(res => res.json())
+          .then(data => setAiSummary(data.summary || ''))
+          .catch(err => {
+            console.error('[news] AI summary failed:', err);
+            setAiSummary('');
+          })
+          .finally(() => setAiLoading(false));
+
+        // Market Analysis (with price context + sentiment) — with retry
+        fetch('/api/analysis/market', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            newsId: item.id,
+            title: item.title,
+            summary: item.summary,
+            symbols: item.symbols || [],
+            bullish: votes?.bullish || 0,
+            bearish: votes?.bearish || 0,
+            panic: votes?.panic || 0,
+            locale,
+          }),
+        })
+          .then(res => res.json())
+          .then(data => setMarketAnalysis(data.analysis || ''))
+          .catch(err => {
+            console.error('[news] Market analysis failed:', err);
+            setMarketAnalysis('');
+          })
+          .finally(() => setAnalysisLoading(false));
+      }, 300); // Debounce 300ms
+
+      return () => clearTimeout(timer);
+    }
+  }, [item?.id, item?.title, item?.summary, locale]);
+
+
+  // Price snapshots for mentioned symbols — /api/quote (anlik + 24h %)
+  useEffect(() => {
+    if (!item?.symbols || item.symbols.length === 0) {
+      setPriceSnapshots({});
+      return;
+    }
+
+    const loadPrices = async () => {
+      try {
+        const symbolsToLoad = item.symbols!.slice(0, 5);
+        const params = new URLSearchParams({ symbols: symbolsToLoad.join(',') });
+        const res = await fetch(`/api/quote?${params}`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const results: Record<string, PriceSnapshot> = {};
+        (data.quotes as Array<{ symbol: string; price: number; change: number; changePercent: number }>)
+          .forEach(q => {
+            results[q.symbol] = {
+              symbol: q.symbol,
+              price: q.price,
+              change: q.change,
+              changePercent: q.changePercent,
+            };
+          });
+        setPriceSnapshots(results);
+      } catch (e) {
+        console.warn('Price snapshot failed:', e);
+      }
+    };
+
+    loadPrices();
+    // Her 20 saniyede bir anlik yenile
+    const interval = setInterval(loadPrices, 20000);
+    return () => clearInterval(interval);
+  }, [item?.symbols, item?.id]);
+
+  if (!item) {
+    return (
+      <div className="flex items-center justify-center h-full bg-[#141425]">
+        <div className="text-center">
+          <p className="text-[#6a6a80] text-sm mb-1">
+            {locale === 'tr' ? 'Haber secin' : 'Select a news item'}
+          </p>
+          <p className="text-[#444460] text-xs">
+            {locale === 'tr' ? 'Soldan bir haber tiklayin' : 'Click a news item from the left'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Vote yuzdeleri
+  const totalVotes = (votes?.bullish || 0) + (votes?.bearish || 0) + (votes?.panic || 0);
+  const bullishPct = totalVotes > 0 ? Math.round(((votes?.bullish || 0) / totalVotes) * 100) : 0;
+  const bearishPct = totalVotes > 0 ? Math.round(((votes?.bearish || 0) / totalVotes) * 100) : 0;
+  const panicPct = totalVotes > 0 ? Math.round(((votes?.panic || 0) / totalVotes) * 100) : 0;
+
+  // Breaking badge
+  const age = Date.now() - item.publishedAt;
+  const isBreaking = age < 60 * 60 * 1000; // <1h
+
+  return (
+    <>
+      <div className="flex flex-col h-full bg-[#141425]">
+        {/* Header */}
+        <div className="p-4 border-b border-[#2a2a3e]">
+          {isBreaking && (
+            <span className="inline-block mb-2 px-2 py-0.5 bg-[#ff4757] text-white text-[10px] font-bold rounded animate-pulse">
+              🔴 {locale === 'tr' ? 'SON DAKIKA' : 'BREAKING'}
+            </span>
+          )}
+          <h2 className="text-base font-bold text-[#e0e0e0] mb-2">{item.title}</h2>
+          <div className="flex items-center gap-2 text-xs flex-wrap">
+            <span className="text-[#4fc3f7] font-medium">{item.source}</span>
+            <span className="text-[#444460]">•</span>
+            <span className="text-[#8888a0]">{formatDate(item.publishedAt, locale)}</span>
+            <span className="ml-auto inline-block px-2 py-0.5 bg-[#2a2a3e] text-[#8888a0] text-[10px] rounded uppercase">
+              {item.category}
+            </span>
+          </div>
+        </div>
+
+        {/* Symbol Snapshots — Quick Win #4 + #5 */}
+        {item.symbols && item.symbols.length > 0 && (
+          <div className="border-b border-[#2a2a3e] bg-[#0f0f20]">
+            <div className="px-4 py-3">
+              <div className="text-[10px] text-[#555570] uppercase mb-2 tracking-wider">
+                {locale === 'tr' ? 'Bahsedilen Semboller' : 'Mentioned Symbols'}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {item.symbols.slice(0, 5).map(sym => {
+                  const snapshot = priceSnapshots[sym];
+                  const isFav = favorites.includes(sym);
+                  const isActive = activeChartSymbol === sym;
+                  return (
+                    <button
+                      key={sym}
+                      onClick={() => setActiveChartSymbol(sym)}
+                      className={`flex items-center gap-2 px-2.5 py-1.5 rounded transition group ${
+                        isActive
+                          ? 'bg-[#1e2a4a] border border-[#4fc3f7] shadow-[0_0_0_1px_#4fc3f7]'
+                          : 'bg-[#1a1a2e] border border-[#2a2a3e] hover:border-[#4fc3f7]'
+                      }`}
+                      title={locale === 'tr' ? 'Grafigi goster' : 'Show chart'}
+                    >
+                      <span className="font-mono text-[11px] text-[#ff9800] font-semibold">
+                        {displaySymbol(sym)}
+                      </span>
+                      {snapshot && (
+                        <>
+                          <span className="text-[11px] text-[#e0e0e0] font-mono">
+                            ${formatPrice(snapshot.price, locale)}
+                          </span>
+                          <span
+                            className={`text-[10px] font-medium ${
+                              snapshot.changePercent >= 0 ? 'text-[#26a69a]' : 'text-[#ef5350]'
+                            }`}
+                          >
+                            {snapshot.changePercent >= 0 ? '▲' : '▼'} {Math.abs(snapshot.changePercent).toFixed(2)}%
+                          </span>
+                        </>
+                      )}
+                      {onAddFavorite && !isFav && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={e => {
+                            e.stopPropagation();
+                            onAddFavorite(sym);
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.stopPropagation();
+                              onAddFavorite(sym);
+                            }
+                          }}
+                          className="text-[10px] text-[#555570] hover:text-[#4fc3f7] transition opacity-0 group-hover:opacity-100 cursor-pointer"
+                          title={locale === 'tr' ? 'Favoriye ekle' : 'Add to favorites'}
+                        >
+                          ⭐
+                        </span>
+                      )}
+                      {isFav && <span className="text-[10px] text-[#ff9800]">⭐</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Live Mini Chart — anlık mum grafigi */}
+            {activeChartSymbol && (
+              <div className="px-4 py-3 border-t border-[#2a2a3e]">
+                <div className="text-[10px] text-[#555570] uppercase mb-2 tracking-wider">
+                  {locale === 'tr' ? 'Anlık Grafik' : 'Live Chart'} — {displaySymbol(activeChartSymbol)}
+                </div>
+                <div className="h-48 rounded bg-[#141425] border border-[#2a2a3e]">
+                  <PriceChart
+                    embedded
+                    symbol={activeChartSymbol}
+                    resolution="60"
+                    locale={locale}
+                    height={192}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Main Content Area — AI Özet + Oy */}
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+          {/* AI Özet Panel (Ana Fokus) — Otomatik Yükleniyor */}
+          <div className="p-4 bg-[#0f1a2e] border border-[#2a4a6e] rounded">
+            <div className="text-[11px] text-[#4fc3f7] uppercase mb-3 font-semibold tracking-wider flex items-center gap-2">
+              🤖 {locale === 'tr' ? 'AI Özet' : 'AI Summary'}
+              {aiLoading && <span className="animate-pulse">•</span>}
+            </div>
+
+            {aiLoading ? (
+              <div className="text-[#555570] text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="animate-spin">⟳</span>
+                  {locale === 'tr' ? 'Özet oluşturuluyor...' : 'Generating summary...'}
+                </div>
+              </div>
+            ) : aiSummary ? (
+              <p className="text-[#c0c0d0] text-sm leading-relaxed whitespace-pre-line">
+                {aiSummary}
+              </p>
+            ) : (
+              <p className="text-[#555570] text-sm">
+                {locale === 'tr'
+                  ? 'Özet oluşturulamadı. Haber kaynağını kontrol et.'
+                  : 'Summary could not be generated. Check news source.'}
+              </p>
+            )}
+          </div>
+
+          {/* AXIOM Market Analysis Panel — Piyasa Konteksti */}
+          <div className="p-4 bg-[#1a0f2e] border border-[#4a2a6e] rounded">
+            <div className="text-[11px] text-[#ff9800] uppercase mb-3 font-semibold tracking-wider flex items-center gap-2">
+              📊 {locale === 'tr' ? 'AXIOM Pazar Analizi' : 'AXIOM Market Analysis'}
+              {analysisLoading && <span className="animate-pulse">•</span>}
+            </div>
+
+            {analysisLoading ? (
+              <div className="text-[#555570] text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="animate-spin">⟳</span>
+                  {locale === 'tr' ? 'Piyasa analizi yapılıyor...' : 'Analyzing market impact...'}
+                </div>
+              </div>
+            ) : marketAnalysis ? (
+              <p className="text-[#c0c0d0] text-sm leading-relaxed whitespace-pre-line">
+                {marketAnalysis}
+              </p>
+            ) : (
+              <p className="text-[#555570] text-sm">
+                {locale === 'tr'
+                  ? 'Piyasa analizi oluşturulamadı.'
+                  : 'Market analysis could not be generated.'}
+              </p>
+            )}
+          </div>
+
+          {/* Orijinal Haber Linki */}
+          {item.url && item.url !== '#' && (
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-2 px-3 bg-[#1a2a3e] border border-[#2a4a6e] text-[#4fc3f7] hover:bg-[#1e3248] rounded text-xs font-medium transition text-center"
+            >
+              {locale === 'tr' ? '📖 Tam Haberi Oku' : '📖 Read Full Article'} ↗
+            </a>
+          )}
+        </div>
+
+        {/* Voting Bar — Bottom */}
+        <div className="border-t border-[#2a2a3e] p-3">
+          {totalVotes > 0 && (
+            <div className="mb-2 h-1 flex rounded-full overflow-hidden bg-[#1a1a2e]">
+              <div className="bg-[#4caf50] transition-all" style={{ width: `${bullishPct}%` }} />
+              <div className="bg-[#f44336] transition-all" style={{ width: `${bearishPct}%` }} />
+              <div className="bg-[#ff9800] transition-all" style={{ width: `${panicPct}%` }} />
+            </div>
+          )}
+
+          <div className="flex gap-2 mb-2">
+            <button
+              onClick={() => onVote('bullish')}
+              className={`flex-1 py-1.5 rounded text-xs font-medium transition ${
+                votes?.userVote === 'bullish'
+                  ? 'bg-[#1b3a2a] text-[#4caf50] border border-[#2d5a3a]'
+                  : 'bg-[#1a1a2e] text-[#8888a0] border border-[#2a2a3e] hover:border-[#4caf50] hover:text-[#4caf50]'
+              }`}
+            >
+              👍 {locale === 'tr' ? 'Yukseli' : 'Bullish'} ({votes?.bullish || 0})
+              {bullishPct > 0 && <span className="ml-1 opacity-60">{bullishPct}%</span>}
+            </button>
+            <button
+              onClick={() => onVote('bearish')}
+              className={`flex-1 py-1.5 rounded text-xs font-medium transition ${
+                votes?.userVote === 'bearish'
+                  ? 'bg-[#3a1b1b] text-[#f44336] border border-[#5a2d2d]'
+                  : 'bg-[#1a1a2e] text-[#8888a0] border border-[#2a2a3e] hover:border-[#f44336] hover:text-[#f44336]'
+              }`}
+            >
+              👎 {locale === 'tr' ? 'Dusus' : 'Bearish'} ({votes?.bearish || 0})
+              {bearishPct > 0 && <span className="ml-1 opacity-60">{bearishPct}%</span>}
+            </button>
+            <button
+              onClick={() => onVote('panic')}
+              className={`flex-1 py-1.5 rounded text-xs font-medium transition ${
+                votes?.userVote === 'panic'
+                  ? 'bg-[#3a2a1b] text-[#ff9800] border border-[#5a3a2d]'
+                  : 'bg-[#1a1a2e] text-[#8888a0] border border-[#2a2a3e] hover:border-[#ff9800] hover:text-[#ff9800]'
+              }`}
+            >
+              🚨 {locale === 'tr' ? 'Panik' : 'Panic'} ({votes?.panic || 0})
+              {panicPct > 0 && <span className="ml-1 opacity-60">{panicPct}%</span>}
+            </button>
+          </div>
+
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="w-full py-1.5 bg-[#1a2a3e] border border-[#2a4a6e] text-[#ff9800] hover:bg-[#1e3248] rounded text-xs font-medium transition"
+          >
+            📖 {locale === 'tr' ? 'Makaleyi Oku' : 'Read Article'} ↗
+          </button>
+        </div>
+      </div>
+
+      <NewsModal
+        item={item}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        locale={locale}
+        marketAnalysis={marketAnalysis}
+      />
+    </>
+  );
+}

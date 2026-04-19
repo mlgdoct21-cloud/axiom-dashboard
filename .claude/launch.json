@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "axiom-dashboard",
+      "runtimeExecutable": "/usr/local/bin/node",
+      "runtimeArgs": ["/Users/mehmetgulec/Documents/AXIOM/axiom-dashboard/node_modules/.bin/next", "dev", "--turbopack"],
+      "port": 3000
+    }
+  ]
+}
