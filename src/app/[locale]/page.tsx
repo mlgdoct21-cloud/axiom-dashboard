@@ -60,13 +60,16 @@ export default function Home() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-1.5 rounded text-sm font-medium transition ${
+            className={`px-4 py-1.5 rounded text-sm font-medium transition-all duration-300 relative hover:-translate-y-[2px] hover:scale-105 hover:z-20 hover:shadow-[0_4px_12px_rgba(79,195,247,0.15)] ${
               activeTab === tab.id
-                ? 'bg-[#4fc3f7] text-[#0d0d1a]'
+                ? 'text-white'
                 : 'text-[#8888a0] hover:text-[#e0e0e0] hover:bg-[#1e1e38]'
             }`}
           >
-            {tab.label}
+            {activeTab === tab.id && (
+              <span className="absolute inset-0 border-b-2 border-[#4fc3f7] shadow-[0_4px_15px_rgba(79,195,247,0.4)] blur-[1px]"></span>
+            )}
+            <span className="relative z-10">{tab.label}</span>
           </button>
         ))}
       </div>

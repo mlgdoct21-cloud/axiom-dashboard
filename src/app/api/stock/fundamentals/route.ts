@@ -1,19 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
- * Stock Fundamentals Analysis
+ * Stock Fundamentals Analysis (Hybrid FMP-First)
  * GET /api/stock/fundamentals?symbol=AAPL
- *
- * Returns:
- * - Company profile (name, sector, country, founded)
- * - Valuation (P/E, P/B, PEG)
- * - Profitability (ROE, ROA, Margin)
- * - Efficiency (Asset turnover)
- * - Leverage (Debt/Equity, Current Ratio)
- * - Growth (EPS growth, revenue growth)
- * - Dividends
- *
- * Data from: Finnhub /stock/profile2 + /quote
  */
 
 interface FundamentalsResponse {
@@ -23,154 +12,111 @@ interface FundamentalsResponse {
   industry: string;
   country: string;
   founded?: number;
-
-  // Pricing
   price: number;
   currency: string;
-
-  // Valuation
   pe?: number;
   eps?: number;
   marketCap?: number;
   pb?: number;
-
-  // Profitability
   roe?: number;
   roa?: number;
   grossMargin?: number;
   operatingMargin?: number;
   netMargin?: number;
-
-  // Efficiency
   assetTurnover?: number;
-
-  // Leverage
-  debt?: number;
   debtToEquity?: number;
   currentRatio?: number;
-  fcf?: number;
-
-  // Growth
+  dividendYield?: number;
   epsgrowth?: number;
   revenueGrowth?: number;
-  earningsGrowth?: number;
-
-  // Dividends
-  dividendYield?: number;
-
   timestamp: number;
 }
 
-interface FinnhubProfile {
-  ticker?: string;
-  name?: string;
-  sector?: string;
-  country?: string;
-  founded?: number;
-  ipo?: number;
-  industry?: string;
-  weburl?: string;
-  logo?: string;
-}
+const FMP_KEY = process.env.FMP_API_KEY;
+const FINNHUB_KEY = process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
 
-interface FinnhubQuote {
-  c?: number; // Current price
-  h?: number; // High price of the day
-  l?: number; // Low price of the day
-  o?: number; // Open price of the day
-  pc?: number; // Previous close price
-  t?: number; // Unix timestamp
-}
-
-async function fetchFinnhubProfile(
-  symbol: string,
-  apiKey: string
-): Promise<FinnhubProfile | null> {
+async function fetchFMPSnapshot(symbol: string) {
+  if (!FMP_KEY) return null;
   try {
-    const res = await fetch(
-      `https://finnhub.io/api/v1/stock/profile2?symbol=${symbol}&token=${apiKey}`,
-      { next: { revalidate: 86400 } } // 24h
-    );
-    if (!res.ok) return null;
-    return await res.json();
+    const [pRes, mRes] = await Promise.all([
+      fetch(`https://financialmodelingprep.com/stable/profile?symbol=${symbol}&apikey=${FMP_KEY}`),
+      fetch(`https://financialmodelingprep.com/stable/key-metrics-ttm?symbol=${symbol}&apikey=${FMP_KEY}`)
+    ]);
+    const pData = pRes.ok ? await pRes.json() : [];
+    const mData = mRes.ok ? await mRes.json() : [];
+    return { 
+      profile: pData?.[0] || null, 
+      metrics: mData?.[0] || null 
+    };
   } catch (e) {
-    console.error('[profile2]', e);
+    console.error('[FMP Fetch Failed]', e);
     return null;
   }
 }
 
-async function fetchFinnhubQuote(
-  symbol: string,
-  apiKey: string
-): Promise<FinnhubQuote | null> {
+async function fetchFinnhubFallback(symbol: string) {
+  if (!FINNHUB_KEY) return null;
   try {
-    const res = await fetch(
-      `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${apiKey}`,
-      { next: { revalidate: 300 } } // 5m
-    );
-    if (!res.ok) return null;
-    return await res.json();
+    const [pRes, qRes] = await Promise.all([
+      fetch(`https://finnhub.io/api/v1/stock/profile2?symbol=${symbol}&token=${FINNHUB_KEY}`),
+      fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_KEY}`)
+    ]);
+    return {
+      profile: pRes.ok ? await pRes.json() : null,
+      quote: qRes.ok ? await qRes.json() : null
+    };
   } catch (e) {
-    console.error('[quote]', e);
     return null;
   }
 }
 
 export async function GET(request: NextRequest) {
   const symbol = request.nextUrl.searchParams.get('symbol')?.toUpperCase().trim();
-
-  if (!symbol) {
-    return NextResponse.json({ error: 'Symbol required' }, { status: 400 });
-  }
-
-  const apiKey = process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: 'API key missing' }, { status: 500 });
-  }
+  if (!symbol) return NextResponse.json({ error: 'Symbol required' }, { status: 400 });
 
   try {
-    const [profile, quote] = await Promise.all([
-      fetchFinnhubProfile(symbol, apiKey),
-      fetchFinnhubQuote(symbol, apiKey),
-    ]);
+    // 1. Try FMP first
+    const fmp = await fetchFMPSnapshot(symbol);
+    
+    // 2. Try Finnhub for fallback/extra data
+    const finn = await fetchFinnhubFallback(symbol);
 
-    if (!profile || !quote) {
-      return NextResponse.json(
-        { error: `Stock ${symbol} not found` },
-        { status: 404 }
-      );
+    if (!fmp?.profile && !finn?.profile) {
+      return NextResponse.json({ error: 'Stock not found' }, { status: 404 });
     }
 
-    // Note: Finnhub free tier does NOT include detailed fundamentals
-    // (P/E, ROE, Debt/Equity, etc require Premium tier)
-    // This endpoint returns what's available from free tier
-
-    const result: FundamentalsResponse = {
+    const res: FundamentalsResponse = {
       symbol,
-      name: profile.name || symbol,
-      sector: profile.sector || 'Unknown',
-      industry: profile.industry || 'Unknown',
-      country: profile.country || 'Unknown',
-      founded: profile.founded,
+      name: fmp?.profile?.companyName || finn?.profile?.name || symbol,
+      sector: fmp?.profile?.sector || finn?.profile?.sector || 'N/A',
+      industry: fmp?.profile?.industry || finn?.profile?.industry || 'N/A',
+      country: fmp?.profile?.country || finn?.profile?.country || 'N/A',
+      price: fmp?.profile?.price || finn?.quote?.c || 0,
+      currency: fmp?.profile?.currency || 'USD',
+      
+      // Valuation (Prefer FMP metrics)
+      pe: fmp?.metrics?.peRatioTTM,
+      eps: fmp?.metrics?.netIncomePerShareTTM,
+      marketCap: fmp?.profile?.marketCap,
+      pb: fmp?.metrics?.priceToBookValueRatioTTM,
 
-      // Basic pricing from quote
-      price: quote.c || 0,
-      currency: 'USD',
-
-      // NOTE: The following require Premium Finnhub tier:
-      // pe, eps, marketCap, pb, roe, roa, debt, etc
-      // For now, these are null
-      // Consider upgrade if needed
+      // Profitability
+      roe: fmp?.metrics?.roeTTM ? fmp.metrics.roeTTM * 100 : undefined,
+      roa: fmp?.metrics?.returnOnAssetsTTM ? fmp.metrics.returnOnAssetsTTM * 100 : undefined,
+      netMargin: fmp?.metrics?.netProfitMarginTTM ? fmp.metrics.netProfitMarginTTM * 100 : undefined,
+      
+      // Leverage
+      debtToEquity: fmp?.metrics?.debtEquityRatioTTM,
+      currentRatio: fmp?.metrics?.currentRatioTTM,
+      
+      // Dividends
+      dividendYield: fmp?.metrics?.dividendYieldTTM ? fmp.metrics.dividendYieldTTM * 100 : undefined,
 
       timestamp: Date.now(),
     };
 
-    return NextResponse.json(result);
+    return NextResponse.json(res);
   } catch (e) {
-    console.error('[fundamentals]', e);
-    return NextResponse.json(
-      { error: 'Failed to fetch fundamentals' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal Error' }, { status: 500 });
   }
 }

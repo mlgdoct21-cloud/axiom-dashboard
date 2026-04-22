@@ -1,91 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getActiveSources, type NewsItem, type NewsCategory } from '@/lib/news-sources';
 
-/**
- * News Aggregator API
- *
- * GET /api/news
- * GET /api/news?category=crypto
- * GET /api/news?q=bitcoin
- * GET /api/news?symbol=AAPL
- * GET /api/news?limit=50
- *
- * Tum aktif kaynaklardan paralel haber ceker, dedup eder, sort eder.
- * Next.js'in built-in fetch cache'ini kullanir (5dk revalidate).
- */
+// Axiom backend base. Örn: https://vivacious-growth-production-4875.up.railway.app/api/v1
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
-  const category = params.get('category') as NewsCategory | null;
-  const query = params.get('q')?.toLowerCase() || '';
-  const symbol = params.get('symbol')?.toUpperCase() || '';
-  const limit = Math.min(parseInt(params.get('limit') || '100', 10), 200);
+  const limit = Math.min(parseInt(params.get('limit') || '30', 10), 100);
+  const beforeId = params.get('before_id'); // infinite scroll cursor
+
+  // /news/feed = analizi tamamlanmış (analyzed=True) haberler, id DESC.
+  const q = new URLSearchParams({ limit: String(limit) });
+  if (beforeId) q.set('before_id', beforeId);
+  const targetUrl = `${BACKEND_URL}/news/feed?${q.toString()}`;
 
   try {
-    const sources = getActiveSources();
-
-    // Paralel fetch — bir kaynak yavas/down olsa bile digerleri gelir
-    const results = await Promise.allSettled(
-      sources.map(source => source.fetch())
-    );
-
-    let allNews: NewsItem[] = [];
-    const sourceStats: Record<string, number> = {};
-
-    results.forEach((result, idx) => {
-      const sourceId = sources[idx].id;
-      if (result.status === 'fulfilled') {
-        allNews.push(...result.value);
-        sourceStats[sourceId] = result.value.length;
-      } else {
-        sourceStats[sourceId] = 0;
-      }
+    const res = await fetch(targetUrl, {
+      // Kısa cache + stale-while-revalidate efekti için revalidate.
+      next: { revalidate: 30 },
     });
 
-    // Dedup — url bazli (ayni haber birden fazla kaynakta olabilir)
-    const seen = new Set<string>();
-    allNews = allNews.filter(n => {
-      const key = n.url;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    // Filtreleme
-    if (category && category !== 'general') {
-      allNews = allNews.filter(n => n.category === category);
+    if (!res.ok) {
+      throw new Error(`Backend returned ${res.status}`);
     }
 
-    if (query) {
-      allNews = allNews.filter(n =>
-        n.title.toLowerCase().includes(query) ||
-        n.summary.toLowerCase().includes(query)
-      );
-    }
+    const backendNews = await res.json();
 
-    if (symbol) {
-      allNews = allNews.filter(n =>
-        n.symbols?.some(s => s.toUpperCase().includes(symbol)) ||
-        n.title.toUpperCase().includes(symbol)
-      );
-    }
-
-    // Yeniden eskiye sirala
-    allNews.sort((a, b) => b.publishedAt - a.publishedAt);
-
-    // Limitleme
-    allNews = allNews.slice(0, limit);
+    // Backend NewsItem → Frontend NewsTab.NewsItem dönüşümü.
+    const allNews = backendNews.map((n: any) => ({
+      id: String(n.id),
+      title: n.original_title,
+      summary: n.dashboard_summary || n.ai_summary || '',
+      source: n.source,
+      category: 'general',
+      url: n.original_link,
+      publishedAt: n.created_at ? new Date(n.created_at).getTime() : Date.now(),
+      symbols: n.symbol ? [n.symbol] : undefined,
+      telegram_hook: n.telegram_hook || '',
+      dashboard_summary: n.dashboard_summary || '',
+      axiom_analysis: n.axiom_analysis || '',
+    }));
 
     return NextResponse.json({
       count: allNews.length,
-      sources: sourceStats,
+      sources: {},
       news: allNews,
       fetchedAt: Date.now(),
     });
   } catch (error) {
-    console.error('News aggregator error:', error);
+    console.error('News proxy error:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch news', news: [] },
+      { error: 'Failed to fetch news from backend', news: [] },
       { status: 500 }
     );
   }

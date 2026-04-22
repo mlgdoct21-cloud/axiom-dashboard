@@ -6,6 +6,7 @@ import NewsList from '@/components/news/NewsList';
 import NewsDetail from '@/components/news/NewsDetail';
 import FavoritesBar from '@/components/news/FavoritesBar';
 import MarketTicker from '@/components/ticker/MarketTicker';
+import { useNewsStream, type StreamedNews } from '@/hooks/useNewsStream';
 import {
   getVotes,
   getFavorites,
@@ -28,14 +29,33 @@ export interface NewsItem {
   publishedAt: number;    // Unix ms
   imageUrl?: string;
   symbols?: string[];
+  telegram_hook?: string;
+  dashboard_summary?: string;
+  axiom_analysis?: string;
 }
 
 interface NewsTabProps {
   locale: 'en' | 'tr';
 }
 
-// 2 dakikada bir haberleri yenile (canli his icin)
+// SSE bağlantısı canlı tutulamazsa (WAF/timeout) 2 dakikada bir yenile (fallback).
 const REFRESH_INTERVAL = 2 * 60 * 1000;
+
+function mapStreamedToNewsItem(n: StreamedNews): NewsItem {
+  return {
+    id: String(n.id),
+    title: n.title,
+    summary: n.dashboard_summary || '',
+    source: n.source || 'Axiom',
+    category: 'general',
+    url: n.link,
+    publishedAt: n.created_at ? new Date(n.created_at).getTime() : Date.now(),
+    symbols: n.symbol ? [n.symbol] : undefined,
+    telegram_hook: n.telegram_hook || '',
+    dashboard_summary: n.dashboard_summary || '',
+    axiom_analysis: n.axiom_analysis || '',
+  };
+}
 
 export default function NewsTab({ locale }: NewsTabProps) {
   const t = useTranslations('news');
@@ -92,11 +112,28 @@ export default function NewsTab({ locale }: NewsTabProps) {
     loadNews();
   }, [loadNews]);
 
-  // Auto-refresh (2dk)
+  // Auto-refresh (2dk) — SSE fallback'i için güvenlik ağı.
   useEffect(() => {
     const interval = setInterval(() => loadNews(true), REFRESH_INTERVAL);
     return () => clearInterval(interval);
   }, [loadNews]);
+
+  // 🔴 CANLI AKIŞ: Backend SSE → yeni haber gelince listeye başa eklensin.
+  // Kullanıcı yenilemek zorunda kalmaz. Urgent haberler de aynı kanaldan akıyor.
+  useNewsStream(
+    useCallback((streamed: StreamedNews) => {
+      const mapped = mapStreamedToNewsItem(streamed);
+      setNews((prev) => {
+        // Aynı haber zaten listede varsa (çifte ekleme) atla.
+        if (prev.some((n) => n.id === mapped.id)) return prev;
+        // Kategori filtresi aktifse (all hariç) henüz backend category
+        // döndürmüyor — şimdilik 'general' kabul ediyor, hepsini göster.
+        return [mapped, ...prev].slice(0, 200); // max 200 item tut.
+      });
+      setLastRefresh(Date.now());
+    }, []),
+    true
+  );
 
   // Secili haber + voting
   const selectedNews = selectedNewsId ? news.find(n => n.id === selectedNewsId) ?? null : null;

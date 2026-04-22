@@ -230,11 +230,24 @@ export default function FavoritesBar({
       <div className="flex-1 overflow-y-auto">
         {favorites.length === 0 ? (
           <div className="p-3 text-center text-[#555570] text-xs">
-            {locale === 'tr' ? 'Sembol ekleyin' : 'Add symbols'}
-            <div className="text-[10px] mt-2 text-[#444460]">
-              {locale === 'tr'
-                ? 'Orn: BTC, ETH, AAPL, TSLA'
-                : 'Ex: BTC, ETH, AAPL, TSLA'}
+            <div className="mb-3 text-[#c0c0d0]">{locale === 'tr' ? 'Takip Listeniz Boş' : 'Watchlist is empty'}</div>
+            <div className="flex flex-wrap justify-center gap-2 mt-4">
+              {['BTC', 'ETH', 'AAPL', 'TSLA', 'NVDA'].map(sym => (
+                <button
+                  key={sym}
+                  onClick={() => {
+                    const cryptoTickers = ['BTC', 'ETH'];
+                    if (cryptoTickers.includes(sym)) {
+                      onAddFavorite(`BINANCE:${sym}USDT`);
+                    } else {
+                      onAddFavorite(sym);
+                    }
+                  }}
+                  className="px-2 py-1 text-[10px] bg-[#1a1a2e] border border-[#2a2a3e] text-[#ff9800] hover:border-[#ff9800] hover:bg-[#1e1e38] rounded transition"
+                >
+                  + {sym}
+                </button>
+              ))}
             </div>
           </div>
         ) : (

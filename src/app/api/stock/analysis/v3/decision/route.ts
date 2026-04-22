@@ -244,30 +244,35 @@ function analyzeNazary(fund: V3DecisionRequest['fundamentals']): {
 
   // ROE Analysis (30 points)
   if (fund.roe && fund.sectorROE) {
-    if (fund.roe > fund.sectorROE * 1.25) {
+    // Normalize ROE if it comes as whole number (e.g. 34.4) vs decimal (0.344)
+    const normalizedROE = fund.roe > 1 ? fund.roe / 100 : fund.roe;
+    const normalizedSectorROE = fund.sectorROE > 1 ? fund.sectorROE / 100 : fund.sectorROE;
+
+    if (normalizedROE > normalizedSectorROE * 1.25) {
       score += 10;
-      rationale.push(`ROE sektörden %${((fund.roe / fund.sectorROE - 1) * 100).toFixed(0)} yüksek`);
-    } else if (fund.roe > fund.sectorROE) {
+      rationale.push(`ROE sektörden %${((normalizedROE / normalizedSectorROE - 1) * 100).toFixed(0)} yüksek`);
+    } else if (normalizedROE > normalizedSectorROE) {
       score += 5;
       rationale.push(`ROE sektöre yakın`);
     }
   }
 
   // Debt/Equity (10 points)
-  if (fund.debtToEquity && fund.debtToEquity < 0.8) {
-    score += 5;
-    rationale.push(`D/E ratio sağlıklı (${fund.debtToEquity.toFixed(2)})`);
+  if (fund.debtToEquity !== undefined) {
+    if (fund.debtToEquity < 0.8) {
+      score += 5;
+      rationale.push(`D/E ratio sağlıklı (${fund.debtToEquity.toFixed(2)})`);
+    } else if (fund.debtToEquity > 2.0) {
+      score -= 5;
+      rationale.push(`Borçluluk yüksek (D/E: ${fund.debtToEquity.toFixed(2)})`);
+    }
   }
 
   // FCF & Growth (20 points)
-  if (fund.epsGrowth3y && fund.epsGrowth3y > 0.15) {
+  const growth = fund.epsGrowth3y && fund.epsGrowth3y > 1 ? fund.epsGrowth3y / 100 : (fund.epsGrowth3y || 0);
+  if (growth > 0.15) {
     score += 10;
-    rationale.push(`EPS büyümesi %${(fund.epsGrowth3y * 100).toFixed(0)} (Güçlü)`);
-  }
-
-  if (fund.fcf && fund.fcf > 0) {
-    score += 5;
-    rationale.push(`FCF pozitif ve sağlıklı`);
+    rationale.push(`EPS büyümesi %${(growth * 100).toFixed(0)} (Güçlü)`);
   }
 
   return {
@@ -719,11 +724,16 @@ export async function POST(request: NextRequest) {
     const riskRewardRatio = (targetPrice - currentPrice) / (currentPrice - stopLoss);
 
     // Entry zone
-    const entryZone = calculateEntryZone({
+    const entryZoneRaw = calculateEntryZone({
       currentPrice,
       technicalScore: technical.score,
       regimeName: technical.trendType,
     });
+    
+    const entryZone = {
+      lower: entryZoneRaw.lowerBound,
+      upper: entryZoneRaw.upperBound
+    };
 
     // ========================================
     // SUPPORT & RESISTANCE

@@ -173,8 +173,10 @@ export default function NewsList({
             <button
               key={item.id}
               onClick={() => onSelectNews(item.id)}
-              className={`w-full text-left px-3 py-2.5 border-b border-[#2a2a3e] transition-colors ${
-                selectedId === item.id ? 'bg-[#1e1e38]' : 'hover:bg-[#1a1a30]'
+              className={`w-full text-left px-3 py-2.5 border-b border-[#2a2a3e] transition-all duration-300 border-l-[3px] hover:-translate-y-1 hover:scale-[1.02] hover:z-20 hover:shadow-[0_8px_20px_rgba(0,0,0,0.6)] hover:rounded-lg relative ${
+                selectedId === item.id 
+                  ? 'bg-[#1e1e38] border-l-[#4fc3f7] z-10 shadow-lg' 
+                  : 'border-l-transparent hover:bg-[#18182b] hover:border-l-[#ff9800]'
               }`}
             >
               {/* Baslik satiri: zaman + breaking badge + baslik */}
@@ -187,7 +189,7 @@ export default function NewsList({
                 </span>
                 <div className="flex-1 min-w-0">
                   {hl.badge && (
-                    <span className="inline-block mr-1.5 px-1.5 py-0.5 bg-[#ff4757] text-white text-[9px] font-bold rounded animate-pulse">
+                    <span className="inline-block mr-1.5 px-1.5 py-0.5 border border-[#ff4757]/80 text-[#ff4757] text-[9px] font-bold rounded shadow-[0_0_8px_rgba(255,71,87,0.3)] animate-pulse">
                       🔴 {hl.badge}
                     </span>
                   )}

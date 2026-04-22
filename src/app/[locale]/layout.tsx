@@ -13,7 +13,7 @@ export function generateStaticParams() {
   return SUPPORTED_LOCALES.map((locale) => ({ locale }));
 }
 
-export default async function RootLayout({ children, params }: LayoutProps) {
+export default async function LocaleLayout({ children, params }: LayoutProps) {
   const { locale } = await params;
 
   // Validate locale
@@ -25,12 +25,8 @@ export default async function RootLayout({ children, params }: LayoutProps) {
   const messages = await getMessages({ locale });
 
   return (
-    <html lang={locale}>
-      <body className="bg-[#0d0d1a] text-[#e0e0e0] overflow-hidden">
-        <NextIntlClientProvider messages={messages}>
-          {children}
-        </NextIntlClientProvider>
-      </body>
-    </html>
+    <NextIntlClientProvider messages={messages}>
+      {children}
+    </NextIntlClientProvider>
   );
 }

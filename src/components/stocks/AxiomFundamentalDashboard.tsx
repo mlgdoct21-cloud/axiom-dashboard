@@ -294,7 +294,7 @@ export default function AxiomFundamentalDashboard({
               <span className="text-2xl font-mono text-gray-200">${currentPrice.toFixed(2)}</span>
             </div>
             <p className="text-sm text-gray-400 mt-1">
-              AXIOM v3.0 · 5-Ajan Çoklu-Faktör Analizi
+              AXIOM v3.0 · FMP Institutional Data · 5-Ajan Çoklu-Faktör Analizi
             </p>
           </div>
 

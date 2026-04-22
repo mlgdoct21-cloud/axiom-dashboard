@@ -57,19 +57,20 @@ export default function AxiomV3Container({ symbol, locale = 'tr' }: AxiomV3Conta
         }
         setCurrentPrice(price);
 
-        // ----- Fundamentals -----
+        // ----- Fundamentals (Aligned with FMP-First API) -----
         let fundamentals: Record<string, number> = {};
         if (fundRes.status === 'fulfilled' && fundRes.value.ok) {
           const fundData = await fundRes.value.json();
+          // Map FMP fields and normalize (FMP returns % as whole numbers)
           fundamentals = {
-            pe: fundData.peRatio || fundData.pe || 15,
-            pb: fundData.pbRatio || fundData.pb || 2.5,
-            roe: fundData.roe || 0.15,
+            pe: fundData.pe || fundData.peRatio || 15,
+            pb: fundData.pb || fundData.pbRatio || 2.5,
+            roe: fundData.roe ? fundData.roe / 100 : 0.15, // 34.4 -> 0.344
             debtToEquity: fundData.debtToEquity || 0.5,
-            fcf: fundData.fcf || 1000000000,
-            fcfGrowth3y: 0.08,
+            fcf: fundData.marketCap || 1000000000,
+            fcfGrowth3y: 0.10,
             eps: fundData.eps || 5,
-            epsGrowth3y: 0.12,
+            epsGrowth3y: 0.15,
             sectorPE: 18,
             sectorROE: 0.14,
             sectorGrowth: 0.08,
