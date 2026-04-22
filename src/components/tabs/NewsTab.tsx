@@ -32,6 +32,10 @@ export interface NewsItem {
   telegram_hook?: string;
   dashboard_summary?: string;
   axiom_analysis?: string;
+  // Backend'den gelen analiz durumu. false → UI "özet hazırlanıyor" loading
+  // state'i gösterir; SSE ile gelen event ile true'ya geçer ve içerik dolar.
+  analyzed?: boolean;
+  is_urgent?: boolean;
 }
 
 interface NewsTabProps {
@@ -54,6 +58,10 @@ function mapStreamedToNewsItem(n: StreamedNews): NewsItem {
     telegram_hook: n.telegram_hook || '',
     dashboard_summary: n.dashboard_summary || '',
     axiom_analysis: n.axiom_analysis || '',
+    // SSE sadece batch_analyze_loop bittikten sonra publish ediliyor,
+    // dolayısıyla SSE'den gelen her item analyzed=true.
+    analyzed: true,
+    is_urgent: Boolean(n.is_urgent),
   };
 }
 
@@ -118,17 +126,32 @@ export default function NewsTab({ locale }: NewsTabProps) {
     return () => clearInterval(interval);
   }, [loadNews]);
 
-  // 🔴 CANLI AKIŞ: Backend SSE → yeni haber gelince listeye başa eklensin.
-  // Kullanıcı yenilemek zorunda kalmaz. Urgent haberler de aynı kanaldan akıyor.
+  // 🔴 CANLI AKIŞ: Backend SSE → yeni analiz edilmiş haberi listeye ekle
+  // VEYA mevcut (analyzed=false) item'ı in-place güncelle (özet doldur).
+  //
+  // İki akış var:
+  //   a) Haber hiç listede yok → en başa ekle.
+  //   b) Haber zaten listede (fast_fetch eklemiş, analyzed=false) → summary /
+  //      axiom_analysis / analyzed=true ile güncelle. Kullanıcı "hazırlanıyor"
+  //      loading'inden içerikli görünüme GEÇİŞ yapar — yenileme gerekmez.
   useNewsStream(
     useCallback((streamed: StreamedNews) => {
       const mapped = mapStreamedToNewsItem(streamed);
       setNews((prev) => {
-        // Aynı haber zaten listede varsa (çifte ekleme) atla.
-        if (prev.some((n) => n.id === mapped.id)) return prev;
-        // Kategori filtresi aktifse (all hariç) henüz backend category
-        // döndürmüyor — şimdilik 'general' kabul ediyor, hepsini göster.
-        return [mapped, ...prev].slice(0, 200); // max 200 item tut.
+        const existingIdx = prev.findIndex((n) => n.id === mapped.id);
+        if (existingIdx === -1) {
+          // Yeni haber — en başa.
+          return [mapped, ...prev].slice(0, 200);
+        }
+        // Mevcut item'ı güncelle (analyzed false → true + özet dolar)
+        const next = [...prev];
+        next[existingIdx] = {
+          ...prev[existingIdx],
+          ...mapped,
+          // Önceden user-side state'i (örn. publishedAt) koru
+          publishedAt: prev[existingIdx].publishedAt || mapped.publishedAt,
+        };
+        return next;
       });
       setLastRefresh(Date.now());
     }, []),

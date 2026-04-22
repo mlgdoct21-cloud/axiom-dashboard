@@ -26,6 +26,8 @@ export async function GET(request: NextRequest) {
     const backendNews = await res.json();
 
     // Backend NewsItem → Frontend NewsTab.NewsItem dönüşümü.
+    // `analyzed` flag'i UI loading-state için kritik: false ise dashboard
+    // "AI özeti hazırlanıyor..." gösterir, SSE ile gelen update'de true olur.
     const allNews = backendNews.map((n: any) => ({
       id: String(n.id),
       title: n.original_title,
@@ -38,6 +40,8 @@ export async function GET(request: NextRequest) {
       telegram_hook: n.telegram_hook || '',
       dashboard_summary: n.dashboard_summary || '',
       axiom_analysis: n.axiom_analysis || '',
+      analyzed: Boolean(n.analyzed),
+      is_urgent: Boolean(n.is_urgent),
     }));
 
     return NextResponse.json({
