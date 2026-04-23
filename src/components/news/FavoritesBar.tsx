@@ -21,6 +21,13 @@ interface Quote {
   source: 'binance' | 'yahoo';
 }
 
+interface SearchHit {
+  symbol: string;
+  display: string;
+  description: string;
+  type: 'stock' | 'crypto' | 'bist' | 'forex';
+}
+
 // Anlik fiyat her 15 saniyede yenilenir
 const QUOTE_REFRESH_INTERVAL = 15000;
 // Sparkline 1h candle * 24 = son 24 saat
@@ -87,7 +94,12 @@ export default function FavoritesBar({
   const [newSymbol, setNewSymbol] = useState('');
   const [lastUpdate, setLastUpdate] = useState<number>(0);
   const [pulsing, setPulsing] = useState<Set<string>>(new Set());
+  const [searchResults, setSearchResults] = useState<SearchHit[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [highlightIdx, setHighlightIdx] = useState(0);
   const prevPricesRef = useRef<Record<string, number>>({});
+  const searchBoxRef = useRef<HTMLDivElement>(null);
 
   // Anlik fiyat fetch
   const loadQuotes = async () => {
@@ -168,17 +180,75 @@ export default function FavoritesBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [favorites.join(',')]);
 
+  // Debounced otomatik-tamamlama: crypto + stock + BIST paralel
+  useEffect(() => {
+    const q = newSymbol.trim();
+    if (q.length < 1) {
+      setSearchResults([]);
+      setShowDropdown(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const [cryptoRes, stockRes, bistRes] = await Promise.all([
+          fetch(`/api/search?q=${encodeURIComponent(q)}&type=crypto`).then(r => r.ok ? r.json() : { results: [] }),
+          fetch(`/api/search?q=${encodeURIComponent(q)}&type=stock`).then(r => r.ok ? r.json() : { results: [] }),
+          fetch(`/api/search?q=${encodeURIComponent(q)}&type=bist`).then(r => r.ok ? r.json() : { results: [] }),
+        ]);
+        const merged: SearchHit[] = [
+          ...(cryptoRes.results || []).slice(0, 5),
+          ...(stockRes.results || []).slice(0, 5),
+          ...(bistRes.results || []).slice(0, 5),
+        ];
+        setSearchResults(merged);
+        setShowDropdown(merged.length > 0);
+        setHighlightIdx(0);
+      } catch (e) {
+        console.error('Watchlist search error:', e);
+      } finally {
+        setSearching(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [newSymbol]);
+
+  // Disarida tiklaninca dropdown kapat
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (searchBoxRef.current && !searchBoxRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
+  const pickResult = (hit: SearchHit) => {
+    if (!favorites.includes(hit.symbol)) {
+      onAddFavorite(hit.symbol);
+    }
+    setNewSymbol('');
+    setSearchResults([]);
+    setShowDropdown(false);
+  };
+
   const handleAddFavorite = () => {
     if (!newSymbol.trim()) return;
+    // Dropdown'da sonuc varsa ilkini ekle
+    if (searchResults.length > 0) {
+      pickResult(searchResults[highlightIdx] || searchResults[0]);
+      return;
+    }
+    // Fallback: akilli prefix (offline/hata durumunda)
     let input = newSymbol.trim().toUpperCase();
-    // Akilli prefix: BTC -> BINANCE:BTCUSDT, USDT ile bitmiyorsa ve 4+ harfli ise
     if (!input.includes(':') && !input.includes('.')) {
-      // 2-6 harfli ve yaygin kripto semboluyse BINANCE ekle
       const cryptoTickers = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA', 'DOGE', 'AVAX', 'DOT', 'LINK', 'MATIC', 'SHIB', 'PEPE'];
       if (cryptoTickers.includes(input)) {
         input = `BINANCE:${input}USDT`;
       }
-      // aksi durumda AAPL, TSLA gibi hisse varsayiyoruz
     }
     if (!favorites.includes(input)) {
       onAddFavorite(input);
@@ -208,21 +278,81 @@ export default function FavoritesBar({
             </span>
           )}
         </div>
-        <div className="flex gap-1">
-          <input
-            type="text"
-            placeholder={locale === 'tr' ? 'BTC, AAPL...' : 'BTC, AAPL...'}
-            value={newSymbol}
-            onChange={e => setNewSymbol(e.target.value.toUpperCase())}
-            onKeyDown={e => e.key === 'Enter' && handleAddFavorite()}
-            className="flex-1 px-2 py-1 bg-[#1a1a2e] border border-[#2a2a3e] rounded text-xs text-[#e0e0e0] placeholder-[#555570] focus:border-[#4fc3f7] focus:outline-none"
-          />
+        <div className="flex gap-1 relative" ref={searchBoxRef}>
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              placeholder={locale === 'tr' ? 'BTC, AAPL, ASELS...' : 'BTC, AAPL, ASELS...'}
+              value={newSymbol}
+              onChange={e => setNewSymbol(e.target.value.toUpperCase())}
+              onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAddFavorite();
+                } else if (e.key === 'ArrowDown' && searchResults.length > 0) {
+                  e.preventDefault();
+                  setHighlightIdx(i => Math.min(i + 1, searchResults.length - 1));
+                } else if (e.key === 'ArrowUp' && searchResults.length > 0) {
+                  e.preventDefault();
+                  setHighlightIdx(i => Math.max(i - 1, 0));
+                } else if (e.key === 'Escape') {
+                  setShowDropdown(false);
+                }
+              }}
+              className="w-full px-2 py-1 pr-6 bg-[#1a1a2e] border border-[#2a2a3e] rounded text-xs text-[#e0e0e0] placeholder-[#555570] focus:border-[#4fc3f7] focus:outline-none"
+            />
+            {searching && (
+              <div className="absolute right-1.5 top-1.5 w-3 h-3 border-2 border-[#4fc3f7] border-t-transparent rounded-full animate-spin" />
+            )}
+          </div>
           <button
             onClick={handleAddFavorite}
             className="px-2 py-1 bg-[#1a1a2e] border border-[#2a2a3e] text-[#4fc3f7] rounded text-xs hover:bg-[#1e1e38] transition"
           >
             +
           </button>
+
+          {showDropdown && searchResults.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 max-h-72 overflow-y-auto bg-[#1a1a2e] border border-[#2a2a3e] rounded shadow-xl z-50">
+              {searchResults.map((hit, idx) => {
+                const typeBadge = hit.type === 'crypto' ? 'CRYPTO'
+                  : hit.type === 'bist' ? 'BIST'
+                  : hit.type === 'forex' ? 'FX' : 'STOCK';
+                const typeColor = hit.type === 'crypto' ? 'text-[#f7a74f]'
+                  : hit.type === 'bist' ? 'text-[#4caf50]'
+                  : 'text-[#4fc3f7]';
+                const isHi = idx === highlightIdx;
+                return (
+                  <button
+                    key={`${hit.type}-${hit.symbol}`}
+                    onMouseDown={e => { e.preventDefault(); pickResult(hit); }}
+                    onMouseEnter={() => setHighlightIdx(idx)}
+                    className={`w-full px-2 py-1.5 text-left transition border-b border-[#2a2a3e] last:border-b-0 flex items-center justify-between gap-2 ${
+                      isHi ? 'bg-[#2a2a3e]' : 'hover:bg-[#22223a]'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[11px] font-bold text-[#e0e0e0] font-mono truncate">
+                        {hit.display}
+                      </div>
+                      <div className="text-[9px] text-[#8888a0] truncate">
+                        {hit.description}
+                      </div>
+                    </div>
+                    <span className={`text-[8px] font-mono ${typeColor} whitespace-nowrap`}>
+                      {typeBadge}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {showDropdown && !searching && newSymbol.trim() && searchResults.length === 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a2e] border border-[#2a2a3e] rounded shadow-xl z-50 p-2 text-center text-[10px] text-[#8888a0]">
+              {locale === 'tr' ? 'Sonuç bulunamadı' : 'No results'}
+            </div>
+          )}
         </div>
       </div>
 

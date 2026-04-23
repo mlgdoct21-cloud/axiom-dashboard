@@ -227,6 +227,214 @@ export function getTechnicalIndicator(
 }
 
 /**
+ * MACD - Moving Average Convergence Divergence
+ * Returns: { macd, signal, histogram }
+ */
+export interface MACDPoint {
+  time: number;
+  macd: number;
+  signal: number;
+  histogram: number;
+}
+
+export function calculateMACD(
+  candles: ChartPoint[],
+  fast = 12,
+  slow = 26,
+  signalPeriod = 9
+): MACDPoint[] {
+  if (candles.length < slow + signalPeriod) return [];
+
+  const emaFast = calculateEMA(candles, fast);
+  const emaSlow = calculateEMA(candles, slow);
+
+  // Align on time — slow EMA başlar daha geç, ona göre indeksle
+  const slowMap = new Map(emaSlow.map(p => [p.time, p.value]));
+  const macdLine: IndicatorPoint[] = [];
+  for (const f of emaFast) {
+    const s = slowMap.get(f.time);
+    if (s !== undefined) {
+      macdLine.push({ time: f.time, value: f.value - s });
+    }
+  }
+
+  // Signal = EMA(macdLine, signalPeriod)
+  if (macdLine.length < signalPeriod) return [];
+  const k = 2 / (signalPeriod + 1);
+  const firstSlice = macdLine.slice(0, signalPeriod);
+  let sig = firstSlice.reduce((s, p) => s + p.value, 0) / signalPeriod;
+  const signalLine: IndicatorPoint[] = [{ time: macdLine[signalPeriod - 1].time, value: sig }];
+  for (let i = signalPeriod; i < macdLine.length; i++) {
+    sig = macdLine[i].value * k + sig * (1 - k);
+    signalLine.push({ time: macdLine[i].time, value: sig });
+  }
+
+  const signalMap = new Map(signalLine.map(p => [p.time, p.value]));
+  const result: MACDPoint[] = [];
+  for (const m of macdLine) {
+    const sv = signalMap.get(m.time);
+    if (sv !== undefined) {
+      result.push({
+        time: m.time,
+        macd: m.value,
+        signal: sv,
+        histogram: m.value - sv,
+      });
+    }
+  }
+  return result;
+}
+
+/**
+ * Bollinger Bands
+ * Returns: { upper, middle, lower }
+ */
+export interface BollingerPoint {
+  time: number;
+  upper: number;
+  middle: number;
+  lower: number;
+}
+
+export function calculateBollinger(
+  candles: ChartPoint[],
+  period = 20,
+  stdDev = 2
+): BollingerPoint[] {
+  const result: BollingerPoint[] = [];
+  for (let i = period - 1; i < candles.length; i++) {
+    const slice = candles.slice(i - period + 1, i + 1);
+    const mean = slice.reduce((s, p) => s + p.close, 0) / period;
+    const variance = slice.reduce((s, p) => s + (p.close - mean) ** 2, 0) / period;
+    const sd = Math.sqrt(variance);
+    result.push({
+      time: candles[i].time,
+      middle: mean,
+      upper: mean + stdDev * sd,
+      lower: mean - stdDev * sd,
+    });
+  }
+  return result;
+}
+
+/**
+ * Stochastic Oscillator %K and %D
+ */
+export interface StochasticPoint {
+  time: number;
+  k: number;
+  d: number;
+}
+
+export function calculateStochastic(
+  candles: ChartPoint[],
+  kPeriod = 14,
+  dPeriod = 3
+): StochasticPoint[] {
+  if (candles.length < kPeriod + dPeriod) return [];
+
+  const kValues: IndicatorPoint[] = [];
+  for (let i = kPeriod - 1; i < candles.length; i++) {
+    const slice = candles.slice(i - kPeriod + 1, i + 1);
+    const hh = Math.max(...slice.map(c => c.high));
+    const ll = Math.min(...slice.map(c => c.low));
+    const close = candles[i].close;
+    const k = hh === ll ? 50 : ((close - ll) / (hh - ll)) * 100;
+    kValues.push({ time: candles[i].time, value: k });
+  }
+
+  // %D = SMA of %K, dPeriod
+  const result: StochasticPoint[] = [];
+  for (let i = dPeriod - 1; i < kValues.length; i++) {
+    const slice = kValues.slice(i - dPeriod + 1, i + 1);
+    const d = slice.reduce((s, p) => s + p.value, 0) / dPeriod;
+    result.push({ time: kValues[i].time, k: kValues[i].value, d });
+  }
+  return result;
+}
+
+/**
+ * ATR - Average True Range
+ */
+export function calculateATR(candles: ChartPoint[], period = 14): IndicatorPoint[] {
+  if (candles.length <= period) return [];
+
+  const trueRanges: number[] = [];
+  for (let i = 1; i < candles.length; i++) {
+    const h = candles[i].high;
+    const l = candles[i].low;
+    const pc = candles[i - 1].close;
+    const tr = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
+    trueRanges.push(tr);
+  }
+
+  // Wilder smoothing: ilk ATR = period ort., sonraki = (prev*(n-1) + TR)/n
+  let atr = trueRanges.slice(0, period).reduce((s, v) => s + v, 0) / period;
+  const result: IndicatorPoint[] = [{ time: candles[period].time, value: atr }];
+  for (let i = period; i < trueRanges.length; i++) {
+    atr = (atr * (period - 1) + trueRanges[i]) / period;
+    result.push({ time: candles[i + 1].time, value: atr });
+  }
+  return result;
+}
+
+/**
+ * Fibonacci Retracement Levels — son swing high/low'dan türetilir.
+ * Görselleştirme: yatay priceLine'lar + swing anchor marker'ları.
+ */
+export interface FibonacciLevel {
+  label: string;
+  price: number;
+  color: string;
+}
+
+export interface FibonacciResult {
+  levels: FibonacciLevel[];
+  highTime: number;
+  highPrice: number;
+  lowTime: number;
+  lowPrice: number;
+}
+
+export function calculateFibonacci(candles: ChartPoint[]): FibonacciResult | null {
+  if (candles.length === 0) return null;
+
+  // Swing high/low'un hangi mumda olduğunu da bul (anchor gösterimi için)
+  let highIdx = 0;
+  let lowIdx = 0;
+  for (let i = 1; i < candles.length; i++) {
+    if (candles[i].high > candles[highIdx].high) highIdx = i;
+    if (candles[i].low < candles[lowIdx].low) lowIdx = i;
+  }
+
+  const high = candles[highIdx].high;
+  const low = candles[lowIdx].low;
+  const range = high - low;
+  const levelSpecs = [
+    { ratio: 0.0, color: '#e0e0e0' },
+    { ratio: 0.236, color: '#4fc3f7' },
+    { ratio: 0.382, color: '#26a69a' },
+    { ratio: 0.5, color: '#ffb74d' },
+    { ratio: 0.618, color: '#ef5350' },
+    { ratio: 0.786, color: '#ba68c8' },
+    { ratio: 1.0, color: '#e0e0e0' },
+  ];
+  const levels = levelSpecs.map(l => ({
+    label: `${(l.ratio * 100).toFixed(1)}%`,
+    price: high - range * l.ratio,
+    color: l.color,
+  }));
+
+  return {
+    levels,
+    highTime: candles[highIdx].time,
+    highPrice: high,
+    lowTime: candles[lowIdx].time,
+    lowPrice: low,
+  };
+}
+
+/**
  * Kategori -> Sembol eslemeleri
  * Haber kategorisine gore ilgili grafigi gostermek icin
  */

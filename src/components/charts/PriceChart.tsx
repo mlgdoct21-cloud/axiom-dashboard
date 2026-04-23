@@ -8,11 +8,17 @@ import {
   LineSeries,
   type IChartApi,
   type ISeriesApi,
+  type IPriceLine,
   type Time,
 } from 'lightweight-charts';
 import {
   getCandles,
   getTechnicalIndicator,
+  calculateMACD,
+  calculateBollinger,
+  calculateStochastic,
+  calculateATR,
+  calculateFibonacci,
   POPULAR_SYMBOLS,
   type ChartPoint,
   type Resolution,
@@ -74,7 +80,16 @@ export default function PriceChart({
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
-  const indicatorSeriesRefs = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  // Tek-seri indikatörler (SMA, EMA, RSI, ATR) için map<key, series>
+  // Çoklu-seri indikatörler (MACD, Bollinger, Stochastic) için key'ler:
+  //   "macd:line", "macd:signal", "macd:hist"
+  //   "bollinger:upper", "bollinger:middle", "bollinger:lower"
+  //   "stochastic:k", "stochastic:d"
+  const indicatorSeriesRefs = useRef<
+    Map<string, ISeriesApi<'Line'> | ISeriesApi<'Histogram'>>
+  >(new Map());
+  // Fibonacci priceLine'ları — candle series üzerinde yatay çizgiler
+  const fibLinesRef = useRef<IPriceLine[]>([]);
   const candlesDataRef = useRef<ChartPoint[]>([]);
 
   const [internalSymbol, setInternalSymbol] = useState<string>(
@@ -131,19 +146,28 @@ export default function PriceChart({
           bottom: 0.2,
         },
       },
-      // Mouse ve touch kontrollerini tam aktif et
+      // Mouse ve touch kontrolleri (TradingView tarzı):
+      //   - Chart body wheel → X zoom (mumlar kalınlaşır/incelir, CUSTOM)
+      //   - Chart body click-drag → X pan (library-native pressedMouseMove)
+      //   - Fiyat ekseni wheel → Y zoom (CUSTOM — scaleMargins)
+      //   - Fiyat ekseni drag → Y zoom (library-native axisPressedMouseMove)
+      //
+      // NOT: handleScale.mouseWheel=false — library'nin global wheel handler'i
+      // fiyat ekseni uzerindeki wheel'i de X-zoom yaptigi icin custom handler'la
+      // mum kaydirma fiyat eksenine sicradiginda bozuluyor. Custom onWheel'de
+      // konuma gore ayirt edip dogru zoom'u uyguluyoruz.
       handleScroll: {
-        mouseWheel: true,           // Mouse tekerleği ile zoom
-        pressedMouseMove: true,     // Sol tik sürükleme ile kaydirma (X ekseni)
-        horzTouchDrag: true,        // Dokunmatik yatay kaydirma
-        vertTouchDrag: true,        // Dokunmatik dikey kaydirma
+        mouseWheel: false,
+        pressedMouseMove: true,     // Click-drag chart body → X pan
+        horzTouchDrag: true,
+        vertTouchDrag: true,
       },
       handleScale: {
         axisPressedMouseMove: {
-          time: true,               // X-ekseni üzerinde sürükleme ile zoom
-          price: true,              // Y-ekseni üzerinde sürükleme ile zoom (yukari/asagi)
+          time: true,               // Zaman ekseni drag → X zoom
+          price: true,              // Fiyat ekseni drag → Y zoom
         },
-        mouseWheel: true,
+        mouseWheel: false,          // Custom onWheel handler yonetir
         pinch: true,
       },
     });
@@ -170,19 +194,17 @@ export default function PriceChart({
     candleSeriesRef.current = candleSeries;
     volumeSeriesRef.current = volumeSeries;
 
-    // === Custom Y-ekseni kontrolleri (TradingView gibi) ===
-    // 1) Chart alani: sol tik + drag -> Y pan (grab hissi)
-    // 2) Fiyat ekseni: mouse wheel -> Y zoom (mumlari buyut/kucult)
-    // 3) Fiyat ekseni: drag -> native axisPressedMouseMove.price ile zoom (zaten aktif)
-    // 4) Cift tik -> autoScale'e don
+    // === Custom kontroller (TradingView gibi) ===
+    // 1) Chart alaninda wheel -> X pan (mumlar saga/sola kayar)
+    // 2) Chart alaninda click-drag -> X pan (library: pressedMouseMove=true)
+    // 3) Fiyat ekseni wheel -> Y zoom (mumlari dikey buyut/kucult)
+    // 4) Fiyat ekseni drag -> Y zoom (library: axisPressedMouseMove.price=true)
+    // 5) Cift tik -> autoScale reset
     const container = containerRef.current;
-    let isDraggingY = false;
-    let lastPointerY = 0;
     let topMargin = 0.1;
     let bottomMargin = 0.2;
     const MIN_MARGIN = 0;
     const MAX_MARGIN = 0.95;
-    const PAN_SENSITIVITY = 1.4;   // Daha akici hareket icin artirildi
     const ZOOM_STEP = 0.04;        // Wheel basina %4 margin degisimi
     const PRICE_AXIS_WIDTH = 70;
     const TIME_AXIS_HEIGHT = 30;
@@ -202,64 +224,49 @@ export default function PriceChart({
       return relX > rect.width - PRICE_AXIS_WIDTH && relY < rect.height - TIME_AXIS_HEIGHT;
     };
 
-    const isOnChartArea = (e: { clientX: number; clientY: number }) => {
-      const rect = container.getBoundingClientRect();
-      const relX = e.clientX - rect.left;
-      const relY = e.clientY - rect.top;
-      return (
-        relX < rect.width - PRICE_AXIS_WIDTH &&
-        relY < rect.height - TIME_AXIS_HEIGHT
-      );
-    };
+    // NOT: Chart body click-drag = X pan (library'nin pressedMouseMove ayarı
+    // handler ediyor). Burada custom pointer handler YOK — önceden Y-pan
+    // yapıyordu, kullanıcı X-pan istediği için kaldırıldı.
 
-    const onPointerDown = (e: PointerEvent) => {
-      if (e.button !== 0) return;
-      if (!isOnChartArea(e)) return;
-
-      isDraggingY = true;
-      lastPointerY = e.clientY;
-      chart.priceScale('right').applyOptions({ autoScale: false });
-      container.style.cursor = 'grabbing';
-
-      try {
-        container.setPointerCapture(e.pointerId);
-      } catch {}
-    };
-
-    const onPointerMove = (e: PointerEvent) => {
-      if (!isDraggingY) return;
-      const dy = e.clientY - lastPointerY;
-      lastPointerY = e.clientY;
-
-      const delta = (dy / container.clientHeight) * PAN_SENSITIVITY;
-
-      // Grab hissi: asagi suruk -> icerik asagi kaydir
-      // Data asagi = topMargin buyuk, bottomMargin kucuk
-      clampMargins(topMargin + delta, bottomMargin - delta);
-    };
-
-    const onPointerUp = (e: PointerEvent) => {
-      if (!isDraggingY) return;
-      isDraggingY = false;
-      container.style.cursor = 'crosshair';
-      try {
-        container.releasePointerCapture(e.pointerId);
-      } catch {}
-    };
-
-    // Fiyat ekseninde wheel -> Y zoom (mumlari dikey buyut/kucult)
+    // Wheel davranışı (hepsi custom, library handleScale.mouseWheel=false):
+    //   - Fiyat ekseninde: Y zoom → scaleMargins top+bottom artir/azaltir
+    //   - Chart gövdesinde/zaman ekseninde: X zoom → visibleLogicalRange daralt/genislet
+    //     (merkez: fare pozisyonu, mumlar kalinlasir/incelir — TradingView gibi)
+    const X_ZOOM_FACTOR = 0.1; // Wheel basina %10 X zoom
     const onWheel = (e: WheelEvent) => {
-      if (!isOnPriceAxis(e)) return;
-
       e.preventDefault();
       e.stopPropagation();
 
-      chart.priceScale('right').applyOptions({ autoScale: false });
+      if (isOnPriceAxis(e)) {
+        // Fiyat ekseni → Y zoom
+        chart.priceScale('right').applyOptions({ autoScale: false });
+        const dir = e.deltaY > 0 ? 1 : -1;
+        clampMargins(topMargin + dir * ZOOM_STEP, bottomMargin + dir * ZOOM_STEP);
+        return;
+      }
 
-      // deltaY > 0: zoom out (margins buyur, mumlar kuculur)
-      // deltaY < 0: zoom in (margins kuculur, mumlar buyur)
-      const dir = e.deltaY > 0 ? 1 : -1;
-      clampMargins(topMargin + dir * ZOOM_STEP, bottomMargin + dir * ZOOM_STEP);
+      // Chart body/zaman ekseni → X zoom (mum genisligi)
+      const ts = chart.timeScale();
+      const range = ts.getVisibleLogicalRange();
+      if (!range) return;
+      const from = range.from as number;
+      const to = range.to as number;
+      const span = to - from;
+      if (span <= 0) return;
+
+      // Zoom merkezi: fare altindaki mantiksal pozisyon
+      const rect = container.getBoundingClientRect();
+      const relX = e.clientX - rect.left;
+      const chartWidth = rect.width - PRICE_AXIS_WIDTH;
+      const ratio = Math.max(0, Math.min(1, relX / chartWidth));
+      const anchor = from + span * ratio;
+
+      const factor = e.deltaY > 0 ? (1 + X_ZOOM_FACTOR) : (1 - X_ZOOM_FACTOR);
+      const newSpan = Math.max(5, Math.min(10000, span * factor));
+      ts.setVisibleLogicalRange({
+        from: anchor - (anchor - from) * (newSpan / span),
+        to:   anchor + (to - anchor) * (newSpan / span),
+      });
     };
 
     // Cift tik -> Y autoScale reset
@@ -282,13 +289,8 @@ export default function PriceChart({
     const onResetY = () => {
       topMargin = 0.1;
       bottomMargin = 0.2;
-      isDraggingY = false;
     };
 
-    container.addEventListener('pointerdown', onPointerDown);
-    container.addEventListener('pointermove', onPointerMove);
-    container.addEventListener('pointerup', onPointerUp);
-    container.addEventListener('pointercancel', onPointerUp);
     container.addEventListener('dblclick', onDoubleClick);
     container.addEventListener('wheel', onWheel, { passive: false });
     container.addEventListener('axiom:reset-y', onResetY);
@@ -301,10 +303,6 @@ export default function PriceChart({
     window.addEventListener('resize', handleResize);
 
     return () => {
-      container.removeEventListener('pointerdown', onPointerDown);
-      container.removeEventListener('pointermove', onPointerMove);
-      container.removeEventListener('pointerup', onPointerUp);
-      container.removeEventListener('pointercancel', onPointerUp);
       container.removeEventListener('dblclick', onDoubleClick);
       container.removeEventListener('wheel', onWheel);
       container.removeEventListener('axiom:reset-y', onResetY);
@@ -415,49 +413,258 @@ export default function PriceChart({
 
   // İndikatorlar
   useEffect(() => {
-    if (!chartRef.current || candlesDataRef.current.length === 0) return;
+    const chart = chartRef.current;
+    if (!chart || candlesDataRef.current.length === 0) return;
 
+    // Eski indikatörleri temizle
     indicatorSeriesRefs.current.forEach((series) => {
-      try { chartRef.current?.removeSeries(series); } catch (e) {}
+      try { chart.removeSeries(series); } catch {}
     });
     indicatorSeriesRefs.current.clear();
 
-    const supportedIndicators = ['sma', 'ema', 'rsi'];
-    const colors: Record<string, string> = {
-      sma: '#4fc3f7',
-      ema: '#9c27b0',
-      rsi: '#ff9800',
-    };
+    // Eski Fibonacci çizgilerini + marker'ları temizle
+    const candleSeries = candleSeriesRef.current;
+    fibLinesRef.current.forEach(line => {
+      try { candleSeries?.removePriceLine(line); } catch {}
+    });
+    fibLinesRef.current = [];
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const s = candleSeries as any;
+      if (s && typeof s.setMarkers === 'function') s.setMarkers([]);
+    } catch {}
+
+    // Volume varsayılan görünür; kullanıcı 'volume' seçtiyse görünür, seçmediyse
+    // volumeSeriesRef'i gizle (TradingView hesitasyonu: volume her zaman altta
+    // görünsün isterseniz bu koşulu kaldırın).
+    if (volumeSeriesRef.current) {
+      const volumeVisible = activeIndicators.includes('volume') || activeIndicators.length === 0;
+      volumeSeriesRef.current.applyOptions({ visible: volumeVisible });
+    }
+
+    const candles = candlesDataRef.current;
 
     activeIndicators.forEach(ind => {
-      if (!supportedIndicators.includes(ind)) return;
+      switch (ind) {
+        case 'sma': {
+          const data = getTechnicalIndicator(candles, 'sma');
+          if (data.length === 0) return;
+          const s = chart.addSeries(LineSeries, {
+            color: '#4fc3f7',
+            lineWidth: 2,
+            priceScaleId: 'right',
+            title: 'SMA(20)',
+          });
+          s.setData(data.map(p => ({ time: p.time as Time, value: p.value })));
+          indicatorSeriesRefs.current.set('sma', s);
+          return;
+        }
+        case 'ema': {
+          const data = getTechnicalIndicator(candles, 'ema');
+          if (data.length === 0) return;
+          const s = chart.addSeries(LineSeries, {
+            color: '#9c27b0',
+            lineWidth: 2,
+            priceScaleId: 'right',
+            title: 'EMA(20)',
+          });
+          s.setData(data.map(p => ({ time: p.time as Time, value: p.value })));
+          indicatorSeriesRefs.current.set('ema', s);
+          return;
+        }
+        case 'rsi': {
+          const data = getTechnicalIndicator(candles, 'rsi');
+          if (data.length === 0) return;
+          const s = chart.addSeries(LineSeries, {
+            color: '#ff9800',
+            lineWidth: 2,
+            priceScaleId: 'rsi',
+            title: 'RSI(14)',
+          });
+          chart.priceScale('rsi').applyOptions({
+            scaleMargins: { top: 0.75, bottom: 0 },
+          });
+          s.setData(data.map(p => ({ time: p.time as Time, value: p.value })));
+          indicatorSeriesRefs.current.set('rsi', s);
+          return;
+        }
+        case 'macd': {
+          const data = calculateMACD(candles);
+          if (data.length === 0) return;
+          const macdLine = chart.addSeries(LineSeries, {
+            color: '#4fc3f7',
+            lineWidth: 2,
+            priceScaleId: 'macd',
+            title: 'MACD',
+          });
+          const signalLine = chart.addSeries(LineSeries, {
+            color: '#ff9800',
+            lineWidth: 2,
+            priceScaleId: 'macd',
+            title: 'Signal',
+          });
+          const hist = chart.addSeries(HistogramSeries, {
+            priceScaleId: 'macd',
+            title: 'Hist',
+          });
+          chart.priceScale('macd').applyOptions({
+            scaleMargins: { top: 0.75, bottom: 0 },
+          });
+          macdLine.setData(data.map(p => ({ time: p.time as Time, value: p.macd })));
+          signalLine.setData(data.map(p => ({ time: p.time as Time, value: p.signal })));
+          hist.setData(data.map(p => ({
+            time: p.time as Time,
+            value: p.histogram,
+            color: p.histogram >= 0 ? '#26a69a80' : '#ef535080',
+          })));
+          indicatorSeriesRefs.current.set('macd:line', macdLine);
+          indicatorSeriesRefs.current.set('macd:signal', signalLine);
+          indicatorSeriesRefs.current.set('macd:hist', hist);
+          return;
+        }
+        case 'bollinger': {
+          const data = calculateBollinger(candles);
+          if (data.length === 0) return;
+          const upper = chart.addSeries(LineSeries, {
+            color: '#e57373',
+            lineWidth: 1,
+            priceScaleId: 'right',
+            title: 'BB Upper',
+          });
+          const middle = chart.addSeries(LineSeries, {
+            color: '#4fc3f7',
+            lineWidth: 1,
+            priceScaleId: 'right',
+            title: 'BB Mid',
+          });
+          const lower = chart.addSeries(LineSeries, {
+            color: '#e57373',
+            lineWidth: 1,
+            priceScaleId: 'right',
+            title: 'BB Lower',
+          });
+          upper.setData(data.map(p => ({ time: p.time as Time, value: p.upper })));
+          middle.setData(data.map(p => ({ time: p.time as Time, value: p.middle })));
+          lower.setData(data.map(p => ({ time: p.time as Time, value: p.lower })));
+          indicatorSeriesRefs.current.set('bollinger:upper', upper);
+          indicatorSeriesRefs.current.set('bollinger:middle', middle);
+          indicatorSeriesRefs.current.set('bollinger:lower', lower);
+          return;
+        }
+        case 'stochastic': {
+          const data = calculateStochastic(candles);
+          if (data.length === 0) return;
+          const kLine = chart.addSeries(LineSeries, {
+            color: '#4fc3f7',
+            lineWidth: 2,
+            priceScaleId: 'stoch',
+            title: '%K',
+          });
+          const dLine = chart.addSeries(LineSeries, {
+            color: '#ff9800',
+            lineWidth: 2,
+            priceScaleId: 'stoch',
+            title: '%D',
+          });
+          chart.priceScale('stoch').applyOptions({
+            scaleMargins: { top: 0.75, bottom: 0 },
+          });
+          kLine.setData(data.map(p => ({ time: p.time as Time, value: p.k })));
+          dLine.setData(data.map(p => ({ time: p.time as Time, value: p.d })));
+          indicatorSeriesRefs.current.set('stochastic:k', kLine);
+          indicatorSeriesRefs.current.set('stochastic:d', dLine);
+          return;
+        }
+        case 'atr': {
+          const data = calculateATR(candles);
+          if (data.length === 0) return;
+          const s = chart.addSeries(LineSeries, {
+            color: '#ba68c8',
+            lineWidth: 2,
+            priceScaleId: 'atr',
+            title: 'ATR(14)',
+          });
+          chart.priceScale('atr').applyOptions({
+            scaleMargins: { top: 0.75, bottom: 0 },
+          });
+          s.setData(data.map(p => ({ time: p.time as Time, value: p.value })));
+          indicatorSeriesRefs.current.set('atr', s);
+          return;
+        }
+        case 'fibonacci': {
+          if (!candleSeries) return;
+          const fib = calculateFibonacci(candles);
+          if (!fib) return;
 
-      const data = getTechnicalIndicator(
-        candlesDataRef.current,
-        ind as 'rsi' | 'sma' | 'ema'
-      );
-      if (data.length === 0 || !chartRef.current) return;
+          // 1) Yatay retracement seviyeleri
+          fib.levels.forEach(l => {
+            const line = candleSeries.createPriceLine({
+              price: l.price,
+              color: l.color,
+              lineWidth: 1,
+              lineStyle: 2,
+              axisLabelVisible: true,
+              title: `Fib ${l.label}`,
+            });
+            fibLinesRef.current.push(line);
+          });
 
-      const isRSI = ind === 'rsi';
-      const lineSeries = chartRef.current.addSeries(LineSeries, {
-        color: colors[ind],
-        lineWidth: 2,
-        priceScaleId: isRSI ? 'rsi' : 'right',
-        title: ind.toUpperCase(),
-      });
+          // 2) Swing anchor trend çizgisi: High → Low'u diagonal bir
+          //    line series ile çiz (kullanıcı hangi mumlardan hesaplandığını
+          //    görsün). 'fib_trend' ayrı priceScaleId kullanmıyor, right axis.
+          const trendSeries = chart.addSeries(LineSeries, {
+            color: '#ffeb3b',
+            lineWidth: 2,
+            lineStyle: 0, // Solid
+            priceScaleId: 'right',
+            lastValueVisible: false,
+            priceLineVisible: false,
+            title: 'Fib Swing',
+            crosshairMarkerVisible: false,
+          });
+          const trendPoints = [
+            { time: fib.highTime, price: fib.highPrice },
+            { time: fib.lowTime, price: fib.lowPrice },
+          ].sort((a, b) => a.time - b.time);
+          trendSeries.setData(trendPoints.map(p => ({
+            time: p.time as Time,
+            value: p.price,
+          })));
+          indicatorSeriesRefs.current.set('fibonacci:trend', trendSeries);
 
-      if (isRSI) {
-        chartRef.current.priceScale('rsi').applyOptions({
-          scaleMargins: { top: 0.7, bottom: 0.1 },
-        });
+          // 3) Swing anchor markerlar: H (high) ve L (low) mum üzerinde
+          //    görünsün ki kullanıcı anchor noktasını net görsün.
+          try {
+            const markers = [
+              {
+                time: fib.highTime as Time,
+                position: 'aboveBar' as const,
+                color: '#ffeb3b',
+                shape: 'arrowDown' as const,
+                text: `H ${fib.highPrice.toFixed(2)}`,
+              },
+              {
+                time: fib.lowTime as Time,
+                position: 'belowBar' as const,
+                color: '#ffeb3b',
+                shape: 'arrowUp' as const,
+                text: `L ${fib.lowPrice.toFixed(2)}`,
+              },
+            ].sort((a, b) =>
+              ((a.time as number) - (b.time as number))
+            );
+            // Lightweight-charts v5: markers API series üzerinden
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const series = candleSeries as any;
+            if (typeof series.setMarkers === 'function') {
+              series.setMarkers(markers);
+            }
+          } catch {}
+          return;
+        }
+        default:
+          return;
       }
-
-      lineSeries.setData(data.map(p => ({
-        time: p.time as Time,
-        value: p.value,
-      })));
-
-      indicatorSeriesRefs.current.set(ind, lineSeries);
     });
   }, [activeIndicators.join(','), loading]);
 
@@ -525,9 +732,9 @@ export default function PriceChart({
 
         {/* Kontrol ipucu */}
         <div className="px-3 py-1.5 bg-[#1a1a2e] border-t border-[#2a2a3e] text-[10px] text-[#6a6a80] flex items-center gap-3 flex-wrap">
-          <span>🖱 {locale === 'tr' ? 'Grafik Suruk: Y pan' : 'Chart Drag: Pan Y'}</span>
-          <span>📏 {locale === 'tr' ? 'Fiyat Ekseni Tekerlek/Suruk: Dikey Zoom' : 'Price Axis Wheel/Drag: Vertical Zoom'}</span>
-          <span>⟲ {locale === 'tr' ? 'Tekerlek: X Zoom' : 'Wheel: X Zoom'}</span>
+          <span>🖱 {locale === 'tr' ? 'Grafik Tekerlek: X Zoom (mumlar kalinlasir/incelir)' : 'Chart Wheel: X Zoom (candles thicken/thin)'}</span>
+          <span>✋ {locale === 'tr' ? 'Grafik Suruk: Komple Saga/Sola Kaydir' : 'Chart Drag: Pan Left/Right'}</span>
+          <span>📏 {locale === 'tr' ? 'Fiyat Ekseni Tekerlek/Suruk: Y Zoom' : 'Price Axis Wheel/Drag: Y Zoom'}</span>
           <span>👆👆 {locale === 'tr' ? 'Cift tik: Y reset' : 'Double-click: Reset Y'}</span>
           <button
             onClick={() => {

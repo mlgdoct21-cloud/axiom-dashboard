@@ -20,7 +20,9 @@ const INDICATORS = [
   'rsi', 'macd', 'bollinger', 'stochastic', 'atr', 'sma', 'ema', 'volume', 'fibonacci'
 ];
 
-const SUPPORTED_INDICATORS = new Set(['rsi', 'sma', 'ema']);
+const SUPPORTED_INDICATORS = new Set([
+  'rsi', 'sma', 'ema', 'macd', 'bollinger', 'stochastic', 'atr', 'volume', 'fibonacci'
+]);
 
 const TIMEFRAMES: { id: string; label: string; resolution: Resolution }[] = [
   { id: '5m', label: '5M', resolution: '5' },
