@@ -874,8 +874,8 @@ export async function POST(request: NextRequest) {
       chop: technical.chop,
 
       entryZone: {
-        lower: Math.round(entryZone.lowerBound * 100) / 100,
-        upper: Math.round(entryZone.upperBound * 100) / 100,
+        lower: Math.round(entryZone.lower * 100) / 100,
+        upper: Math.round(entryZone.upper * 100) / 100,
       },
       targetPrice: Math.round(targetPrice * 100) / 100,
       stopLoss: Math.round(stopLoss * 100) / 100,
