@@ -95,7 +95,8 @@
       "sma": "SMA (Basit Hareketli Ort.)",
       "ema": "EMA (Üssel Hareketli Ort.)",
       "volume": "Volume",
-      "fibonacci": "Fibonacci Retracement"
+      "fibonacci": "Fibonacci Retracement",
+      "sr": "Destek / Direnç + Trend"
     },
     "timeframes": {
       "1m": "1D",

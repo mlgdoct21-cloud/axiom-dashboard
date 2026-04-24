@@ -95,7 +95,8 @@
       "sma": "SMA (Simple Moving Average)",
       "ema": "EMA (Exponential Moving Average)",
       "volume": "Volume",
-      "fibonacci": "Fibonacci Retracement"
+      "fibonacci": "Fibonacci Retracement",
+      "sr": "Support / Resistance + Trend"
     },
     "timeframes": {
       "1m": "1D",

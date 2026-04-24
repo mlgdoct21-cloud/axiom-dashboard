@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import InsiderReportPanel from '@/components/stocks/InsiderReportPanel';
 
 const PriceChart = dynamic(() => import('@/components/charts/PriceChart'), { ssr: false });
 
@@ -59,7 +60,12 @@ function Agent1Card({ d }: { d: any }) {
         {d?.earningsQuality && (
           <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3">
             <div className="text-[10px] text-[#4fc3f7] uppercase mb-1">Kazanç Kalitesi</div>
-            {d.earningsQuality.rating && <RatingBadge r={d.earningsQuality.rating} />}
+            <div className="flex items-center gap-2">
+              {d.earningsQuality.rating && <RatingBadge r={d.earningsQuality.rating} />}
+              {d.earningsQuality.cashConversionRatio != null && (
+                <span className="text-[10px] text-[#888]">CCR: {d.earningsQuality.cashConversionRatio}x</span>
+              )}
+            </div>
             <p className="text-xs text-[#999] mt-2">{d.earningsQuality.finding}</p>
             <p className="text-xs text-[#c0c0d0] mt-1">{d.earningsQuality.verdict}</p>
           </div>
@@ -69,6 +75,7 @@ function Agent1Card({ d }: { d: any }) {
             <div className="text-[10px] text-[#ff9800] uppercase mb-1">Borç & Ödeme</div>
             {d.debtSolvency.rating && <RatingBadge r={d.debtSolvency.rating} />}
             {d.debtSolvency.netDebtEbitda != null && <div className="text-xs text-[#888] mt-1">ND/EBITDA: {d.debtSolvency.netDebtEbitda}x</div>}
+            {d.debtSolvency.interestCoverage != null && <div className="text-xs text-[#888]">Faiz Karş.: {d.debtSolvency.interestCoverage}x</div>}
             <p className="text-xs text-[#c0c0d0] mt-1">{d.debtSolvency.verdict}</p>
           </div>
         )}
@@ -85,6 +92,11 @@ function Agent1Card({ d }: { d: any }) {
             <div className="text-[10px] text-[#4fc3f7] uppercase mb-1">Likidite</div>
             {d.liquidity.workingCapitalAdvantage && <div className="text-xs text-[#26de81]">✓ İşletme Avantajı</div>}
             <p className="text-xs text-[#c0c0d0] mt-1">{d.liquidity.verdict}</p>
+            {d?.operatingMarginTrend && (
+              <div className="text-[10px] text-[#888] mt-2 pt-2 border-t border-[#2a2a3e]">
+                <span className="text-[#ff9800]">Op. Marj:</span> {d.operatingMarginTrend}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -120,6 +132,7 @@ function Agent2Card({ d }: { d: any }) {
           <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3">
             <div className="text-[10px] text-[#4fc3f7] uppercase mb-1">Rekabet Hendek</div>
             <div className="text-xs font-bold text-[#ff9800]">{d.moatAnalysis.moatType}</div>
+            {d.moatAnalysis.grossMarginLevel && <div className="text-[10px] text-[#888] mt-1">Brüt Marj: {d.moatAnalysis.grossMarginLevel}</div>}
             {d.moatAnalysis.moatPresent != null && <div className={`text-xs mt-1 ${d.moatAnalysis.moatPresent ? 'text-[#26de81]' : 'text-[#888]'}`}>{d.moatAnalysis.moatPresent ? '✓ Moat var' : '~ Belirsiz'}</div>}
             <p className="text-xs text-[#999] mt-1">{d.moatAnalysis.verdict}</p>
           </div>
@@ -128,6 +141,8 @@ function Agent2Card({ d }: { d: any }) {
           <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3">
             <div className="text-[10px] text-[#ff9800] uppercase mb-1">Değerleme</div>
             {d.valuation.overallVerdict && <div className="text-xs font-bold" style={{ color: d.valuation.overallVerdict === 'UCUZ' ? '#26de81' : d.valuation.overallVerdict === 'PAHALI' ? '#ff4757' : '#ff9800' }}>{d.valuation.overallVerdict}</div>}
+            {d.valuation.pegSignal && <div className="text-[10px] text-[#888] mt-1">PEG: {d.valuation.pegSignal}</div>}
+            {d.valuation.evEbitdaSignal && <div className="text-[10px] text-[#888]">EV/EBITDA: {d.valuation.evEbitdaSignal}</div>}
             <p className="text-xs text-[#999] mt-1">{d.valuation.analysis}</p>
           </div>
         )}
@@ -145,6 +160,27 @@ function Agent3Card({ d }: { d: any }) {
         <p className="text-sm text-[#c0c0d0]">{d?.defenseStrategy}</p>
         {d?.overallRiskLevel && <span className="text-xs font-bold px-2 py-0.5 rounded shrink-0 ml-3" style={{ color: rc(d.overallRiskLevel), background: rc(d.overallRiskLevel) + '22' }}>{d.overallRiskLevel}</span>}
       </div>
+      {(d?.marketRisk || d?.insiderSignal) && (
+        <div className="grid grid-cols-2 gap-3">
+          {d?.marketRisk && (
+            <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3">
+              <div className="text-[10px] text-[#ff9800] uppercase mb-1">Piyasa Riski</div>
+              {d.marketRisk.beta != null && <div className="text-xs text-[#c0c0d0]">Beta: <span className="font-bold">{d.marketRisk.beta}</span></div>}
+              {d.marketRisk.shortInterestSignal && <div className="text-[10px] text-[#888]">Short: {d.marketRisk.shortInterestSignal}</div>}
+              {d.marketRisk.liquidityRisk && <div className="text-[10px]" style={{ color: rc(d.marketRisk.liquidityRisk) }}>Likidite: {d.marketRisk.liquidityRisk}</div>}
+              {d.marketRisk.betaInterpretation && <p className="text-xs text-[#999] mt-1">{d.marketRisk.betaInterpretation}</p>}
+            </div>
+          )}
+          {d?.insiderSignal && (
+            <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3">
+              <div className="text-[10px] text-[#4fc3f7] uppercase mb-1">İçeriden Alım/Satım</div>
+              <div className="text-sm font-bold" style={{ color: d.insiderSignal === 'POZİTİF' ? '#26de81' : d.insiderSignal === 'NEGATİF' ? '#ff4757' : '#888' }}>
+                {d.insiderSignal}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       {d?.financialRedFlags?.length > 0 && (
         <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3">
           <div className="text-[10px] text-[#ff4757] uppercase mb-2">Kırmızı Bayraklar</div>
@@ -199,6 +235,7 @@ function Agent4Card({ d }: { d: any }) {
             <div className="text-[10px] text-[#ff9800] uppercase mb-1">Fibonacci</div>
             {d.fibonacci.keySupport != null && <div className="text-xs text-[#c0c0d0]">Destek: <span className="text-[#26de81] font-bold">${d.fibonacci.keySupport}</span></div>}
             {d.fibonacci.keyResistance != null && <div className="text-xs text-[#c0c0d0]">Direnç: <span className="text-[#ff4757] font-bold">${d.fibonacci.keyResistance}</span></div>}
+            {d.fibonacci.goldenRatioSupport != null && <div className="text-[10px] text-[#888]">%61.8: ${d.fibonacci.goldenRatioSupport}</div>}
             <p className="text-xs text-[#999] mt-1">{d.fibonacci.analysis}</p>
           </div>
         )}
@@ -224,18 +261,56 @@ function Agent4Card({ d }: { d: any }) {
 }
 
 // ─── Revenue mini bar ─────────────────────────────────────────────────────────
+function fmtRevM(v: number): string {
+  const abs = Math.abs(v);
+  if (abs >= 1e12) return `${(v / 1e12).toFixed(1)}T`;
+  if (abs >= 1e9)  return `${(v / 1e9).toFixed(1)}B`;
+  if (abs >= 1e6)  return `${(v / 1e6).toFixed(0)}M`;
+  if (abs >= 1e3)  return `${(v / 1e3).toFixed(0)}K`;
+  return v === 0 ? '—' : String(v);
+}
+
 function RevBar({ data }: { data: any[] }) {
   if (!data?.length) return null;
   const maxR = Math.max(...data.map((r: any) => r.revenue || 0));
+  const isPreRevenue = maxR === 0;
+  const maxVal = isPreRevenue
+    ? Math.max(...data.map((r: any) => Math.abs(r.netIncome || 0)))
+    : maxR;
+
   return (
     <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3">
-      <div className="text-[10px] text-[#555570] uppercase tracking-wider mb-2">Gelir Trendi (4Y)</div>
-      <div className="flex items-end gap-1.5 h-14">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="text-[10px] text-[#555570] uppercase tracking-wider">
+          {isPreRevenue ? 'Gider Trendi (4Y)' : 'Gelir Trendi (4Y)'}
+        </div>
+        {isPreRevenue && (
+          <span className="text-[9px] bg-yellow-500/15 text-yellow-400 border border-yellow-500/30 rounded px-1 py-0.5">
+            PRE-REVENUE
+          </span>
+        )}
+      </div>
+      <div className="flex items-end gap-1.5">
         {[...data].reverse().map((r: any, i: number) => {
-          const h = maxR > 0 ? Math.max(6, Math.round((r.revenue / maxR) * 48)) : 6;
+          const val = isPreRevenue ? Math.abs(r.netIncome || 0) : (r.revenue || 0);
+          const isProfit = isPreRevenue ? false : (r.netIncome ?? 0) >= 0;
+          const h = maxVal > 0 ? Math.max(44, Math.round((val / maxVal) * 64)) : 44;
+          const bg = isProfit ? 'bg-emerald-500/70' : 'bg-red-500/70';
           return (
             <div key={i} className="flex-1 flex flex-col items-center gap-1">
-              <div className="w-full rounded-sm bg-[#4fc3f7]/50" style={{ height: `${h}px` }} />
+              <div
+                className={`w-full rounded flex flex-col items-center justify-center gap-0.5 ${bg}`}
+                style={{ height: `${h}px` }}
+              >
+                <span className="text-[9px] font-bold font-mono text-white leading-tight">
+                  {fmtRevM(val)}
+                </span>
+                {!isPreRevenue && r.operatingMargin !== 0 && r.operatingMargin != null && (
+                  <span className="text-[8px] text-white/70">
+                    %{r.operatingMargin > 0 ? '+' : ''}{r.operatingMargin}
+                  </span>
+                )}
+              </div>
               <div className="text-[9px] text-[#444]">{r.date}</div>
             </div>
           );
@@ -250,14 +325,29 @@ const US_SYMS = ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NFLX'
 const TR_SYMS = ['ASELS', 'GARAN', 'KCHOL', 'THYAO', 'AKBNK', 'BIMAS'];
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-interface FundamentalTabProps { locale: 'en' | 'tr' }
+import { useSearchParams } from 'next/navigation';
 
-export default function FundamentalTab({ locale }: FundamentalTabProps) {
-  const [symbol,      setSymbol]      = useState('AAPL');
+interface FundamentalTabProps {
+  locale: 'en' | 'tr';
+  /** When provided, the tab runs in controlled mode:
+   *  - Parent owns the symbol; analysis re-runs whenever this prop changes
+   *  - Header / market toggle / quick-symbol buttons are hidden
+   *  When omitted, the tab manages its own symbol (reads from URL, shows controls). */
+  symbol?: string;
+}
+
+export default function FundamentalTab({ locale, symbol: symbolProp }: FundamentalTabProps) {
+  const controlled = symbolProp !== undefined;
+  const searchParams = useSearchParams();
+  const telegramSymbol = searchParams?.get('symbol');
+  const telegramReport = searchParams?.get('report');
+
+  const [symbol,      setSymbol]      = useState(() => symbolProp || telegramSymbol || 'AAPL');
   const [input,       setInput]       = useState('');
   const [market,      setMarket]      = useState<'US' | 'TR'>('US');
   const [indicators,  setIndicators]  = useState<string[]>(['sma']);
   const [activeTab,   setActiveTab]   = useState(0);
+  const [autoOpenReport, setAutoOpenReport] = useState(telegramReport === 'telegram');
 
   // SSE state
   const [status,    setStatus]    = useState('');
@@ -272,6 +362,7 @@ export default function FundamentalTab({ locale }: FundamentalTabProps) {
   const [done,      setDone]      = useState(false);
   const [error,     setError]     = useState<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
+  const insiderReportRef = useRef<any>(null);
 
   const runAnalysis = (sym: string) => {
     setStatus(''); setMetrics(null); setRevTrend([]); setFibonacci(null);
@@ -296,6 +387,16 @@ export default function FundamentalTab({ locale }: FundamentalTabProps) {
   // Auto-run on first mount
   useEffect(() => { runAnalysis(symbol); return () => { esRef.current?.close(); }; }, []);
 
+  // Controlled mode: re-run analysis whenever the parent changes the symbol prop
+  useEffect(() => {
+    if (!controlled) return;
+    if (symbolProp && symbolProp !== symbol) {
+      setSymbol(symbolProp);
+      runAnalysis(symbolProp);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbolProp]);
+
   const handleSymbol = (sym: string) => { setSymbol(sym); runAnalysis(sym); };
   const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); const s = input.trim().toUpperCase(); if (s) { setInput(''); handleSymbol(s); } };
   const toggleInd = (id: string) => setIndicators(p => p.includes(id) ? p.filter(i => i !== id) : [...p, id]);
@@ -316,41 +417,45 @@ export default function FundamentalTab({ locale }: FundamentalTabProps) {
   return (
     <div className="max-w-7xl mx-auto space-y-4 p-4" style={{ background: '#0a0a18', minHeight: '100%' }}>
 
-      {/* ── Header & Controls ── */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-white">Temel Analiz</h1>
-          <p className="text-xs text-[#555570]">5 Analist · Veri Hattı · Gemini 2.0 Flash</p>
-        </div>
+      {/* ── Header & Controls (hidden in controlled mode; parent owns symbol UI) ── */}
+      {!controlled && (
+        <>
+          <div className="flex flex-wrap items-center gap-3">
+            <div>
+              <h1 className="text-xl font-bold text-white">Temel Analiz</h1>
+              <p className="text-xs text-[#555570]">5 Analist · Veri Hattı · Gemini 2.0 Flash</p>
+            </div>
 
-        {/* Market toggle */}
-        <div className="flex gap-1 ml-auto">
-          {(['US', 'TR'] as const).map(m => (
-            <button key={m} onClick={() => setMarket(m)}
-              className="px-3 py-1.5 rounded text-xs font-semibold transition"
-              style={{ background: market === m ? (m === 'US' ? '#4fc3f733' : '#ff474733') : '#1a1a2e', color: market === m ? (m === 'US' ? '#4fc3f7' : '#ff4757') : '#666680', border: `1px solid ${market === m ? (m === 'US' ? '#4fc3f7' : '#ff4757') : '#2a2a3e'}` }}>
-              {m === 'US' ? '🇺🇸 ABD' : '🇹🇷 BIST'}
-            </button>
-          ))}
-        </div>
+            {/* Market toggle */}
+            <div className="flex gap-1 ml-auto">
+              {(['US', 'TR'] as const).map(m => (
+                <button key={m} onClick={() => setMarket(m)}
+                  className="px-3 py-1.5 rounded text-xs font-semibold transition"
+                  style={{ background: market === m ? (m === 'US' ? '#4fc3f733' : '#ff474733') : '#1a1a2e', color: market === m ? (m === 'US' ? '#4fc3f7' : '#ff4757') : '#666680', border: `1px solid ${market === m ? (m === 'US' ? '#4fc3f7' : '#ff4757') : '#2a2a3e'}` }}>
+                  {m === 'US' ? '🇺🇸 ABD' : '🇹🇷 BIST'}
+                </button>
+              ))}
+            </div>
 
-        {/* Custom input */}
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <input value={input} onChange={e => setInput(e.target.value)} placeholder="Sembol (örn: TSLA)" className="px-3 py-1.5 bg-[#1a1a2e] border border-[#2a2a3e] rounded text-white placeholder-[#444] text-sm focus:ring-1 focus:ring-[#4fc3f7] focus:border-[#4fc3f7] outline-none" />
-          <button type="submit" className="px-4 py-1.5 bg-[#4fc3f7] hover:bg-[#4fc3f7]/80 text-[#0a0a18] font-bold rounded text-sm transition">Analiz Et</button>
-        </form>
-      </div>
+            {/* Custom input */}
+            <form onSubmit={handleSubmit} className="flex gap-2">
+              <input value={input} onChange={e => setInput(e.target.value)} placeholder="Sembol (örn: TSLA)" className="px-3 py-1.5 bg-[#1a1a2e] border border-[#2a2a3e] rounded text-white placeholder-[#444] text-sm focus:ring-1 focus:ring-[#4fc3f7] focus:border-[#4fc3f7] outline-none" />
+              <button type="submit" className="px-4 py-1.5 bg-[#4fc3f7] hover:bg-[#4fc3f7]/80 text-[#0a0a18] font-bold rounded text-sm transition">Analiz Et</button>
+            </form>
+          </div>
 
-      {/* ── Quick symbol buttons ── */}
-      <div className="flex flex-wrap gap-1.5">
-        {(market === 'US' ? US_SYMS : TR_SYMS).map(sym => (
-          <button key={sym} onClick={() => handleSymbol(sym)}
-            className="px-3 py-1.5 rounded text-xs font-semibold transition"
-            style={{ background: symbol === sym ? '#4fc3f722' : '#1a1a2e', color: symbol === sym ? '#4fc3f7' : '#666680', border: `1px solid ${symbol === sym ? '#4fc3f7' : '#2a2a3e'}` }}>
-            {sym}
-          </button>
-        ))}
-      </div>
+          {/* ── Quick symbol buttons ── */}
+          <div className="flex flex-wrap gap-1.5">
+            {(market === 'US' ? US_SYMS : TR_SYMS).map(sym => (
+              <button key={sym} onClick={() => handleSymbol(sym)}
+                className="px-3 py-1.5 rounded text-xs font-semibold transition"
+                style={{ background: symbol === sym ? '#4fc3f722' : '#1a1a2e', color: symbol === sym ? '#4fc3f7' : '#666680', border: `1px solid ${symbol === sym ? '#4fc3f7' : '#2a2a3e'}` }}>
+                {sym}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* ── Status bar ── */}
       {!done && status && (
@@ -504,6 +609,14 @@ export default function FundamentalTab({ locale }: FundamentalTabProps) {
           <div className="col-span-2 space-y-2">{[1,2,3,4,5].map(i => <Skel key={i} h={10} />)}</div>
         </div>
       )}
+
+      {/* ── Insider Report Panel (CEO promise vs. reality) ── */}
+      <InsiderReportPanel
+        ref={insiderReportRef}
+        symbol={symbol}
+        locale={locale}
+        autoOpen={autoOpenReport}
+      />
 
       {/* ── Agent Tabs ── */}
       <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded-lg overflow-hidden">

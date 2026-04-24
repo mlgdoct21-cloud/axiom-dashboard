@@ -7,6 +7,20 @@ interface FavoritesBarProps {
   onAddFavorite: (symbol: string) => void;
   onRemoveFavorite: (symbol: string) => void;
   locale: 'en' | 'tr';
+  // Üst sekme filtresi — 'crypto' / 'stocks' / 'forex' / ... .
+  // 'all' veya undefined ise tüm semboller listelenir.
+  category?: 'all' | 'crypto' | 'stocks' | 'forex' | 'economy' | 'general';
+}
+
+// Bir sembolün hangi varlık sınıfına ait olduğunu döndür.
+// Crypto: BINANCE:BTCUSDT, Forex: OANDA:EUR_USD, Stocks: BIST:ASELS veya
+// düz ticker (AAPL, MSFT). Diğer şeyler 'other' kabul edilir.
+function classifySymbol(sym: string): 'crypto' | 'forex' | 'stocks' | 'other' {
+  if (sym.startsWith('BINANCE:')) return 'crypto';
+  if (sym.startsWith('OANDA:')) return 'forex';
+  if (sym.startsWith('BIST:')) return 'stocks';
+  if (/^[A-Z]{1,5}(\.[A-Z]{1,3})?$/.test(sym)) return 'stocks';
+  return 'other';
 }
 
 interface Quote {
@@ -88,7 +102,16 @@ export default function FavoritesBar({
   onAddFavorite,
   onRemoveFavorite,
   locale,
+  category = 'all',
 }: FavoritesBarProps) {
+  // Üst sekmeye göre gösterilecek semboller. Fiyat/sparkline çekim hâlâ
+  // tüm `favorites` üzerinden, sadece UI listesi daraltılır — sekme
+  // değişince yeniden API çağırmayı gereksiz kılar.
+  const filteredFavorites =
+    category === 'all' || category === 'general' || category === 'economy'
+      ? favorites
+      : favorites.filter(s => classifySymbol(s) === category);
+
   const [quotes, setQuotes] = useState<Record<string, Quote>>({});
   const [sparklines, setSparklines] = useState<Record<string, number[]>>({});
   const [newSymbol, setNewSymbol] = useState('');
@@ -358,9 +381,15 @@ export default function FavoritesBar({
 
       {/* Liste */}
       <div className="flex-1 overflow-y-auto">
-        {favorites.length === 0 ? (
+        {filteredFavorites.length === 0 ? (
           <div className="p-3 text-center text-[#555570] text-xs">
-            <div className="mb-3 text-[#c0c0d0]">{locale === 'tr' ? 'Takip Listeniz Boş' : 'Watchlist is empty'}</div>
+            <div className="mb-3 text-[#c0c0d0]">
+              {favorites.length === 0
+                ? (locale === 'tr' ? 'Takip Listeniz Boş' : 'Watchlist is empty')
+                : (locale === 'tr'
+                    ? `Bu kategoride sembol yok (${category})`
+                    : `No symbols in this category (${category})`)}
+            </div>
             <div className="flex flex-wrap justify-center gap-2 mt-4">
               {['BTC', 'ETH', 'AAPL', 'TSLA', 'NVDA'].map(sym => (
                 <button
@@ -381,7 +410,7 @@ export default function FavoritesBar({
             </div>
           </div>
         ) : (
-          favorites.map(symbol => {
+          filteredFavorites.map(symbol => {
             const q = quotes[symbol];
             const spark = sparklines[symbol];
             const isPositive = q ? q.changePercent >= 0 : true;

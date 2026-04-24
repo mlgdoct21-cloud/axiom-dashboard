@@ -19,6 +19,7 @@ import {
   calculateStochastic,
   calculateATR,
   calculateFibonacci,
+  calculateSupportResistance,
   POPULAR_SYMBOLS,
   type ChartPoint,
   type Resolution,
@@ -90,6 +91,8 @@ export default function PriceChart({
   >(new Map());
   // Fibonacci priceLine'ları — candle series üzerinde yatay çizgiler
   const fibLinesRef = useRef<IPriceLine[]>([]);
+  // S/R priceLine'ları (yatay destek/direnç)
+  const srLinesRef = useRef<IPriceLine[]>([]);
   const candlesDataRef = useRef<ChartPoint[]>([]);
 
   const [internalSymbol, setInternalSymbol] = useState<string>(
@@ -172,12 +175,29 @@ export default function PriceChart({
       },
     });
 
+    // priceZoom: margin'ler sinira geldikten sonra fiyat araligini daraltarak
+    // mumlari daha da buyutuyor. 1.0 = dogal, <1 = buyutulmus, >1 = kuculmus.
+    let priceZoom = 1.0;
     const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#26a69a',
       downColor: '#ef5350',
       borderVisible: false,
       wickUpColor: '#26a69a',
       wickDownColor: '#ef5350',
+      autoscaleInfoProvider: (baseImpl) => {
+        const base = baseImpl();
+        if (!base?.priceRange) return base;
+        const { minValue, maxValue } = base.priceRange;
+        const mid = (minValue + maxValue) / 2;
+        const half = (maxValue - minValue) / 2;
+        return {
+          ...base,
+          priceRange: {
+            minValue: mid - half * priceZoom,
+            maxValue: mid + half * priceZoom,
+          },
+        };
+      },
     });
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
@@ -204,8 +224,8 @@ export default function PriceChart({
     let topMargin = 0.1;
     let bottomMargin = 0.2;
     const MIN_MARGIN = 0;
-    const MAX_MARGIN = 0.95;
-    const ZOOM_STEP = 0.04;        // Wheel basina %4 margin degisimi
+    const MAX_MARGIN = 0.99;
+    const ZOOM_STEP = 0.12;        // Wheel basina %12 margin degisimi (genis amplitud)
     const PRICE_AXIS_WIDTH = 70;
     const TIME_AXIS_HEIGHT = 30;
 
@@ -239,9 +259,22 @@ export default function PriceChart({
 
       if (isOnPriceAxis(e)) {
         // Fiyat ekseni → Y zoom
-        chart.priceScale('right').applyOptions({ autoScale: false });
         const dir = e.deltaY > 0 ? 1 : -1;
-        clampMargins(topMargin + dir * ZOOM_STEP, bottomMargin + dir * ZOOM_STEP);
+        const atMin = topMargin <= MIN_MARGIN + 1e-6 && bottomMargin <= MIN_MARGIN + 1e-6;
+        const atMax = topMargin >= MAX_MARGIN - 1e-6 && bottomMargin >= MAX_MARGIN - 1e-6;
+
+        // Margin sinirina gelindiyse priceZoom ile fiyat araligini daralt/genislet
+        // (mumlar margin 0'in otesinde de buyumeye/kuculmeye devam eder)
+        if (dir < 0 && atMin) {
+          priceZoom = Math.max(0.02, priceZoom * 0.85);
+          chart.priceScale('right').applyOptions({ autoScale: true });
+        } else if (dir > 0 && atMax) {
+          priceZoom = Math.min(50, priceZoom / 0.85);
+          chart.priceScale('right').applyOptions({ autoScale: true });
+        } else {
+          chart.priceScale('right').applyOptions({ autoScale: false });
+          clampMargins(topMargin + dir * ZOOM_STEP, bottomMargin + dir * ZOOM_STEP);
+        }
         return;
       }
 
@@ -278,6 +311,7 @@ export default function PriceChart({
 
       topMargin = 0.1;
       bottomMargin = 0.2;
+      priceZoom = 1.0;
       chart.priceScale('right').applyOptions({
         autoScale: true,
         scaleMargins: { top: 0.1, bottom: 0.2 },
@@ -289,6 +323,7 @@ export default function PriceChart({
     const onResetY = () => {
       topMargin = 0.1;
       bottomMargin = 0.2;
+      priceZoom = 1.0;
     };
 
     container.addEventListener('dblclick', onDoubleClick);
@@ -428,6 +463,11 @@ export default function PriceChart({
       try { candleSeries?.removePriceLine(line); } catch {}
     });
     fibLinesRef.current = [];
+    // Eski S/R çizgilerini temizle
+    srLinesRef.current.forEach(line => {
+      try { candleSeries?.removePriceLine(line); } catch {}
+    });
+    srLinesRef.current = [];
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const s = candleSeries as any;
@@ -660,6 +700,60 @@ export default function PriceChart({
               series.setMarkers(markers);
             }
           } catch {}
+          return;
+        }
+        case 'sr': {
+          if (!candleSeries) return;
+          const sr = calculateSupportResistance(candles);
+          if (!sr) return;
+
+          // 1) Destek çizgileri (yeşil, kesikli)
+          sr.supports.forEach((lvl, i) => {
+            const line = candleSeries.createPriceLine({
+              price: lvl.price,
+              color: '#26a69a',
+              lineWidth: lvl.touches >= 3 ? 2 : 1,
+              lineStyle: 2, // Dashed
+              axisLabelVisible: true,
+              title: `S${i + 1}${lvl.touches >= 2 ? ` (${lvl.touches}×)` : ''}`,
+            });
+            srLinesRef.current.push(line);
+          });
+
+          // 2) Direnç çizgileri (kırmızı, kesikli)
+          sr.resistances.forEach((lvl, i) => {
+            const line = candleSeries.createPriceLine({
+              price: lvl.price,
+              color: '#ef5350',
+              lineWidth: lvl.touches >= 3 ? 2 : 1,
+              lineStyle: 2,
+              axisLabelVisible: true,
+              title: `R${i + 1}${lvl.touches >= 2 ? ` (${lvl.touches}×)` : ''}`,
+            });
+            srLinesRef.current.push(line);
+          });
+
+          // 3) Trend çizgisi (diagonal LineSeries, up=yeşil / down=kırmızı)
+          if (sr.trendline) {
+            const t = sr.trendline;
+            const color = t.direction === 'up' ? '#26a69a' : '#ef5350';
+            const trendSeries = chart.addSeries(LineSeries, {
+              color,
+              lineWidth: 2,
+              lineStyle: 0, // Solid
+              priceScaleId: 'right',
+              lastValueVisible: false,
+              priceLineVisible: false,
+              title: t.direction === 'up' ? 'Trend ↑' : 'Trend ↓',
+              crosshairMarkerVisible: false,
+            });
+            const points = [
+              { time: t.startTime, value: t.startPrice },
+              { time: t.endTime,   value: t.endPrice   },
+            ].sort((a, b) => a.time - b.time);
+            trendSeries.setData(points.map(p => ({ time: p.time as Time, value: p.value })));
+            indicatorSeriesRefs.current.set('sr:trend', trendSeries);
+          }
           return;
         }
         default:

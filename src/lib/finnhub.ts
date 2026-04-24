@@ -434,6 +434,304 @@ export function calculateFibonacci(candles: ChartPoint[]): FibonacciResult | nul
   };
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Destek / Direnç + Trend Çizgisi (algoritmik)
+// ──────────────────────────────────────────────────────────────────────────────
+
+export interface SRLevel {
+  /** Ortalama pivot fiyatı (aynı bölgede birden fazla dokunuş varsa ağırlıklı) */
+  price: number;
+  /** Bu seviyeye dokunuş sayısı (>=2 güçlü seviye) */
+  touches: number;
+  /** En son dokunuşun bar index'i (recency ranking için) */
+  lastTouchIdx: number;
+  /** 0-1 arası toplam kalite skoru (touches + volume + recency + bounce) */
+  strength: number;
+}
+
+export interface TrendLine {
+  /** 'up' = yükselen (swing low'ları birleştirir), 'down' = düşen (high'ları) */
+  direction: 'up' | 'down';
+  /** Çizginin başlangıç ve bitiş noktaları (bitiş = son mum, extrapolated) */
+  startTime: number;
+  startPrice: number;
+  endTime: number;
+  endPrice: number;
+  /** Lineer regresyon R² (0-1). < 0.7 → zayıf fit, kullanma. */
+  r2: number;
+  /** Fit için kullanılan pivot sayısı */
+  pivotCount: number;
+}
+
+export interface SupportResistanceResult {
+  supports: SRLevel[];
+  resistances: SRLevel[];
+  trendline: TrendLine | null;
+}
+
+/** Veri boyutuna göre adaptif lookback: daha fazla bar → daha geniş pencere. */
+function adaptiveLookback(n: number): number {
+  if (n < 60) return 3;
+  if (n < 150) return 4;
+  if (n < 300) return 5;
+  if (n < 600) return 7;
+  return 10;
+}
+
+/** Ortalama hacim — pivot için volume-weight hesaplamada referans. */
+function averageVolume(candles: ChartPoint[]): number {
+  const sum = candles.reduce((s, c) => s + (c.volume || 0), 0);
+  return sum / candles.length || 1;
+}
+
+/**
+ * Fractal pivot detection: bir mumun high'ı, sol+sağ `lookback` mumun
+ * highs'ından büyükse → pivot high. Low için ters.
+ */
+function findPivots(
+  candles: ChartPoint[],
+  lookback: number,
+): { highs: number[]; lows: number[] } {
+  const highs: number[] = [];
+  const lows: number[] = [];
+  for (let i = lookback; i < candles.length - lookback; i++) {
+    let isHigh = true;
+    let isLow = true;
+    for (let j = i - lookback; j <= i + lookback; j++) {
+      if (j === i) continue;
+      if (candles[j].high >= candles[i].high) isHigh = false;
+      if (candles[j].low  <= candles[i].low)  isLow  = false;
+    }
+    if (isHigh) highs.push(i);
+    if (isLow)  lows.push(i);
+  }
+  return { highs, lows };
+}
+
+/**
+ * Bounce doğrulaması: gerçek bir S/R seviyesi, sonraki N bar içinde
+ * fiyatın o noktadan anlamlı şekilde geri çekilmesini gerektirir.
+ * Yoksa pivot "zayıf" sayılır ve skoru düşürülür (tamamen atmıyoruz).
+ */
+function bounceQuality(
+  candles: ChartPoint[],
+  pivotIdx: number,
+  side: 'high' | 'low',
+  horizon: number = 5,
+  minReversal: number = 0.005, // %0.5
+): number {
+  const pivot = candles[pivotIdx];
+  const pivotPrice = side === 'high' ? pivot.high : pivot.low;
+  const end = Math.min(pivotIdx + horizon, candles.length - 1);
+  if (end <= pivotIdx) return 0.5;
+
+  let maxReversal = 0;
+  for (let i = pivotIdx + 1; i <= end; i++) {
+    const cp = side === 'high' ? candles[i].low : candles[i].high;
+    const rev = side === 'high'
+      ? (pivotPrice - cp) / pivotPrice
+      : (cp - pivotPrice) / pivotPrice;
+    if (rev > maxReversal) maxReversal = rev;
+  }
+  // minReversal %0.5 bounce → 0.5 kalite, %2 → ~1.0 (sat.)
+  return Math.min(1, maxReversal / (minReversal * 4));
+}
+
+/**
+ * Pivot'ları fiyat yakınlığına göre grupla (1 seviye = birden çok dokunuş).
+ * Ağırlıkli ortalama (volume + quality) + üstel recency + bounce validation
+ * ile kalite skoru (0-1) üretir.
+ */
+function clusterLevels(
+  candles: ChartPoint[],
+  pivotIdxs: number[],
+  pickPrice: (c: ChartPoint) => number,
+  side: 'high' | 'low',
+  tolerance: number,
+  avgVol: number,
+  recencyHalfLife: number,
+): SRLevel[] {
+  if (pivotIdxs.length === 0) return [];
+  const sorted = [...pivotIdxs].sort((a, b) => pickPrice(candles[a]) - pickPrice(candles[b]));
+  const clusters: SRLevel[] = [];
+  const totalBars = candles.length;
+
+  let bucket: number[] = [sorted[0]];
+  let bucketAvg = pickPrice(candles[sorted[0]]);
+
+  const flush = () => {
+    const touches = bucket.length;
+    // Fiyat: volume-weighted average
+    let priceW = 0, volSum = 0;
+    for (const i of bucket) {
+      const v = Math.max(1, candles[i].volume || 1);
+      priceW += pickPrice(candles[i]) * v;
+      volSum += v;
+    }
+    const avgPrice = priceW / volSum;
+    const lastTouchIdx = Math.max(...bucket);
+
+    // Bileşen skorları (0-1)
+    const touchScore = Math.min(1, Math.log2(touches + 1) / 3); // 1→0.33, 3→0.67, 7→1
+    const avgBounce = bucket.reduce((s, i) => s + bounceQuality(candles, i, side), 0) / touches;
+    const recency = Math.exp(-(totalBars - 1 - lastTouchIdx) / recencyHalfLife);
+    const avgVolRatio = bucket.reduce((s, i) => s + (candles[i].volume || 0), 0) / touches / avgVol;
+    const volScore = Math.min(1, avgVolRatio / 1.5); // 1.5× ortalama hacim → tam puan
+
+    // Ağırlıklar: touches 35%, bounce 25%, recency 25%, volume 15%
+    const strength = 0.35 * touchScore + 0.25 * avgBounce + 0.25 * recency + 0.15 * volScore;
+
+    clusters.push({ price: avgPrice, touches, lastTouchIdx, strength });
+  };
+
+  for (let k = 1; k < sorted.length; k++) {
+    const p = pickPrice(candles[sorted[k]]);
+    if (Math.abs(p - bucketAvg) / bucketAvg <= tolerance) {
+      bucket.push(sorted[k]);
+      // volume-weighted running avg
+      let w = 0, v = 0;
+      for (const i of bucket) {
+        const vol = Math.max(1, candles[i].volume || 1);
+        w += pickPrice(candles[i]) * vol;
+        v += vol;
+      }
+      bucketAvg = w / v;
+    } else {
+      flush();
+      bucket = [sorted[k]];
+      bucketAvg = p;
+    }
+  }
+  flush();
+  return clusters;
+}
+
+/**
+ * Strength skoruna göre top N; currentPrice'a göre support/resistance ayrımı.
+ */
+function rankLevels(
+  levels: SRLevel[],
+  currentPrice: number,
+  side: 'support' | 'resistance',
+  topN: number,
+): SRLevel[] {
+  const filtered = levels.filter(l =>
+    side === 'support' ? l.price < currentPrice : l.price > currentPrice
+  );
+  return [...filtered].sort((a, b) => b.strength - a.strength).slice(0, topN);
+}
+
+/**
+ * Lineer regresyon + R² (fit kalitesi).
+ * Son N pivot'u kullanır; 5-7 nokta idealdir (az = gürültü, çok = eskimiş pivot).
+ */
+function fitTrendline(
+  candles: ChartPoint[],
+  pivotIdxs: number[],
+  pickPrice: (c: ChartPoint) => number,
+  maxPivots: number = 7,
+): { slope: number; intercept: number; r2: number; n: number } | null {
+  if (pivotIdxs.length < 3) return null;
+  const useIdxs = pivotIdxs.slice(-maxPivots);
+  const pts = useIdxs.map(i => ({ x: i, y: pickPrice(candles[i]) }));
+  const n = pts.length;
+  const sumX = pts.reduce((s, p) => s + p.x, 0);
+  const sumY = pts.reduce((s, p) => s + p.y, 0);
+  const sumXY = pts.reduce((s, p) => s + p.x * p.y, 0);
+  const sumXX = pts.reduce((s, p) => s + p.x * p.x, 0);
+  const denom = n * sumXX - sumX * sumX;
+  if (denom === 0) return null;
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  // R² hesapla
+  const meanY = sumY / n;
+  let ssRes = 0, ssTot = 0;
+  for (const p of pts) {
+    const yhat = slope * p.x + intercept;
+    ssRes += (p.y - yhat) ** 2;
+    ssTot += (p.y - meanY) ** 2;
+  }
+  const r2 = ssTot === 0 ? 0 : 1 - ssRes / ssTot;
+  return { slope, intercept, r2, n };
+}
+
+/**
+ * Destek/direnç + dominant trend çizgisi hesapla (prod-kalite).
+ *
+ * İyileştirmeler (v2):
+ *  - Adaptive lookback (mum sayısına göre 3-10)
+ *  - Volume-weighted price averaging (düşük hacim pivot'u az sayar)
+ *  - Bounce validation (gerçek reversal olmayan pivot zayıf)
+ *  - Exponential recency decay (half-life = totalBars/3)
+ *  - Trend line: 5-7 pivot + R² >= 0.7 kalite filtresi
+ *  - Strength skoru 0-1 — UI'da çizgi kalınlığı için kullanılabilir
+ *
+ * @param lookback   undefined → candles.length'e göre adaptif
+ * @param tolerance  Seviye kümeleme tolerance (fiyatın oranı, 0.015 = %1.5)
+ * @param topN       Dönülecek support ve resistance sayısı
+ */
+export function calculateSupportResistance(
+  candles: ChartPoint[],
+  lookback?: number,
+  tolerance: number = 0.015,
+  topN: number = 3,
+): SupportResistanceResult | null {
+  const lb = lookback ?? adaptiveLookback(candles.length);
+  if (candles.length < lb * 2 + 5) return null;
+
+  const { highs, lows } = findPivots(candles, lb);
+  if (highs.length === 0 && lows.length === 0) return null;
+
+  const lastPrice = candles[candles.length - 1].close;
+  const totalBars = candles.length;
+  const avgVol = averageVolume(candles);
+  const halfLife = Math.max(20, totalBars / 3);
+
+  const highClusters = clusterLevels(candles, highs, c => c.high, 'high', tolerance, avgVol, halfLife);
+  const lowClusters  = clusterLevels(candles, lows,  c => c.low,  'low',  tolerance, avgVol, halfLife);
+
+  // Bir fiyat kümesi hem support hem resistance olabilir — currentPrice'a göre böl
+  const allLevels = [...highClusters, ...lowClusters];
+  const resistances = rankLevels(allLevels, lastPrice, 'resistance', topN);
+  const supports    = rankLevels(allLevels, lastPrice, 'support',    topN);
+
+  // Trend çizgisi: en iyi R²'ye sahip yön kazanır. Kalite filtresi: r² >= 0.7
+  const upFit   = fitTrendline(candles, lows,  c => c.low);
+  const downFit = fitTrendline(candles, highs, c => c.high);
+
+  let trendline: TrendLine | null = null;
+  const MIN_R2 = 0.7;
+  const upOk   = upFit   && upFit.r2   >= MIN_R2 && upFit.slope   > 0;
+  const downOk = downFit && downFit.r2 >= MIN_R2 && downFit.slope < 0;
+
+  // İkisi de geçerliyse: daha yüksek R² × |slope| (daha belirgin ve dik trend) kazanır
+  let winner: 'up' | 'down' | null = null;
+  if (upOk && downOk) {
+    const upStr   = upFit!.r2   * Math.abs(upFit!.slope);
+    const downStr = downFit!.r2 * Math.abs(downFit!.slope);
+    winner = upStr >= downStr ? 'up' : 'down';
+  } else if (upOk)   winner = 'up';
+  else if (downOk)   winner = 'down';
+
+  if (winner) {
+    const fit = winner === 'up' ? upFit! : downFit!;
+    const pivots = winner === 'up' ? lows : highs;
+    const firstIdx = pivots[Math.max(0, pivots.length - fit.n)];
+    const lastIdx  = candles.length - 1;
+    trendline = {
+      direction: winner,
+      startTime: candles[firstIdx].time,
+      startPrice: fit.slope * firstIdx + fit.intercept,
+      endTime: candles[lastIdx].time,
+      endPrice: fit.slope * lastIdx + fit.intercept,
+      r2: fit.r2,
+      pivotCount: fit.n,
+    };
+  }
+
+  return { supports, resistances, trendline };
+}
+
 /**
  * Kategori -> Sembol eslemeleri
  * Haber kategorisine gore ilgili grafigi gostermek icin

@@ -45,13 +45,69 @@ interface NewsTabProps {
 // SSE bağlantısı canlı tutulamazsa (WAF/timeout) 2 dakikada bir yenile (fallback).
 const REFRESH_INTERVAL = 2 * 60 * 1000;
 
+// Ilk acilista kullanicinin takip listesi boşsa doldurulacak varsayılanlar:
+//   5 popüler kripto + Magnificent 7 ABD hisseleri.
+const DEFAULT_FAVORITES = [
+  'BINANCE:BTCUSDT',
+  'BINANCE:ETHUSDT',
+  'BINANCE:SOLUSDT',
+  'BINANCE:XRPUSDT',
+  'BINANCE:AVAXUSDT',
+  'AAPL',
+  'MSFT',
+  'GOOGL',
+  'AMZN',
+  'NVDA',
+  'TSLA',
+  'META',
+];
+
+// Seed sürüm etiketi — DEFAULT_FAVORITES listesi her güncellendiğinde burayı
+// değiştir. Mevcut kullanıcıların localStorage'ı eski seed ile dolu olsa bile
+// yeni sürüm ile bir kez zorla seed yapılır (kullanıcı sembol sildiyse de).
+const FAVORITES_SEED_VERSION = '2026-04-23-mag7-crypto-v1';
+const SEED_VERSION_KEY = 'axiom_favorites_seed_version';
+
+// SSE'den gelen haber için kategoriyi sembol prefix'i + baslik kelimelerinden
+// türet — /api/news route'u ile ayni sinirlandirma. Backend bazen
+// prefix'siz kripto sembolu (BTCUSD, APRILUSD) veya sembolsuz (Turkce Bitcoin
+// basligi) gonderiyor — bu yuzden baslik fallback'i kritik.
+const _CRYPTO_TICKERS = new Set([
+  'BTC', 'ETH', 'SOL', 'XRP', 'AVAX', 'BNB', 'ADA', 'DOGE', 'DOT', 'LINK',
+  'MATIC', 'SHIB', 'PEPE', 'LTC', 'ATOM', 'NEAR', 'APT', 'ARB', 'OP', 'INJ',
+  'SUI', 'TRX', 'UNI', 'FIL', 'ICP', 'ETC', 'XLM', 'HBAR', 'VET', 'FTM',
+  'ALGO', 'GRT', 'AAVE', 'MKR', 'SAND', 'MANA', 'APE', 'CRV', 'RUNE', 'KAS',
+  'TON', 'PI', 'WLD', 'RENDER', 'RNDR', 'TAO',
+]);
+const _CRYPTO_REGEX = /\b(bitcoin|ethereum|btc|eth|xrp|sol|ada|doge|dot|link|avax|bnb|polkadot|avalanche|solana|cardano|dogecoin|chainlink|ripple|tron|binance|coinbase|kraken|kripto|crypto|cryptocurrency|altcoin|stablecoin|memecoin|blockchain|web3|defi|nft|polymarket|pepe|shiba|shib)\b/i;
+const _STOCK_REGEX = /\b(hisse|hisseler|nasdaq|nyse|dow\s+jones|s&p\s*500|bist|earnings|bilanco|bilanço|temettu|temettü|dividend|stocks?|shares?|ipo|equities|wall\s+street)\b/i;
+function classifyNewsCategory(
+  symbol?: string | null,
+  title?: string | null,
+): 'crypto' | 'stocks' | 'forex' | 'economy' | 'general' {
+  if (symbol) {
+    const s = symbol.toUpperCase();
+    if (s.startsWith('BINANCE:') || s.startsWith('COINBASE:') || s.startsWith('KRAKEN:')) return 'crypto';
+    if (s.startsWith('OANDA:') || s.startsWith('FX:')) return 'forex';
+    if (s.startsWith('BIST:')) return 'stocks';
+    if (/^[A-Z0-9]{2,10}USD[TC]?$/.test(s)) return 'crypto';
+    if (_CRYPTO_TICKERS.has(s)) return 'crypto';
+    if (/^[A-Z]{1,5}(\.[A-Z]{1,3})?$/.test(s)) return 'stocks';
+  }
+  if (title) {
+    if (_CRYPTO_REGEX.test(title)) return 'crypto';
+    if (_STOCK_REGEX.test(title)) return 'stocks';
+  }
+  return 'general';
+}
+
 function mapStreamedToNewsItem(n: StreamedNews): NewsItem {
   return {
     id: String(n.id),
     title: n.title,
     summary: n.dashboard_summary || '',
     source: n.source || 'Axiom',
-    category: 'general',
+    category: classifyNewsCategory(n.symbol, n.title),
     url: n.link,
     publishedAt: n.created_at ? new Date(n.created_at).getTime() : Date.now(),
     symbols: n.symbol ? [n.symbol] : undefined,
@@ -78,10 +134,25 @@ export default function NewsTab({ locale }: NewsTabProps) {
   const [lastRefresh, setLastRefresh] = useState<number>(0);
   const [sourceStats, setSourceStats] = useState<Record<string, number>>({});
 
-  // Ilk yuklemede votes/favorites/category'i localStorage'dan oku
+  // Ilk yuklemede votes/favorites/category'i localStorage'dan oku.
+  // Seed sürümü eski ise (ilk kullanıcı dahil) DEFAULT_FAVORITES ile zorla
+  // doldur — kullanıcı eskiden eklediği 2-3 sembolle kalmasın, temiz bir
+  // watchlist alsın.
   useEffect(() => {
     setVotes(getVotes());
-    setFavorites(getFavorites());
+    const seededVersion = typeof window !== 'undefined'
+      ? localStorage.getItem(SEED_VERSION_KEY)
+      : null;
+    const storedFavs = getFavorites();
+    if (seededVersion !== FAVORITES_SEED_VERSION || storedFavs.length === 0) {
+      setFavorites(DEFAULT_FAVORITES);
+      saveFavorites(DEFAULT_FAVORITES);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(SEED_VERSION_KEY, FAVORITES_SEED_VERSION);
+      }
+    } else {
+      setFavorites(storedFavs);
+    }
     setCategory(getLastCategory());
   }, []);
 
@@ -158,6 +229,15 @@ export default function NewsTab({ locale }: NewsTabProps) {
     true
   );
 
+  // UI listesi için kategoriye göre filtre. Backend proxy zaten category
+  // query parametresi ile filtreli veri döndürüyor, ama SSE'den akan canlı
+  // haberler state'e eklendiği için render anında tekrar filtrelemek gerek;
+  // aksi halde "Kripto" sekmesindeyken forex haberi listeye sızabilir.
+  const displayedNews =
+    category === 'all'
+      ? news
+      : news.filter(n => (n.category || 'general') === category);
+
   // Secili haber + voting
   const selectedNews = selectedNewsId ? news.find(n => n.id === selectedNewsId) ?? null : null;
   const selectedVotes = selectedNewsId ? votes[selectedNewsId] ?? null : null;
@@ -190,7 +270,7 @@ export default function NewsTab({ locale }: NewsTabProps) {
         {/* Sol: haber listesi + kategori tablari */}
         <div className="col-span-1 md:col-span-3 border-r border-[#2a2a3e] flex flex-col overflow-hidden">
         <NewsList
-          items={news}
+          items={displayedNews}
           loading={loading}
           error={error}
           selectedId={selectedNewsId}
@@ -224,6 +304,7 @@ export default function NewsTab({ locale }: NewsTabProps) {
             onAddFavorite={handleAddFavorite}
             onRemoveFavorite={handleRemoveFavorite}
             locale={locale}
+            category={category}
           />
         </div>
       </div>

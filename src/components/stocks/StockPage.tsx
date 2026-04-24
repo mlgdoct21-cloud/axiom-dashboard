@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import StockSearch from './StockSearch';
 import StockHeader from './StockHeader';
-import FundamentalsTab from './FundamentalsTab';
+import FundamentalTab from '@/components/tabs/FundamentalTab';
 import TechnicalsTab from './TechnicalsTab';
 import AnalystTab from './AnalystTab';
 import AxiomV3Container from './AxiomV3Container';
@@ -43,7 +43,7 @@ export default function StockPage({ initialSymbol, locale }: StockPageProps) {
 
     switch (activeTab) {
       case 'fundamentals':
-        return <FundamentalsTab symbol={selectedSymbol} locale={locale} />;
+        return <FundamentalTab symbol={selectedSymbol} locale={locale} />;
       case 'technicals':
         return <TechnicalsTab symbol={selectedSymbol} locale={locale} />;
       case 'analyst':
