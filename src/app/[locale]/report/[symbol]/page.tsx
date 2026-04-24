@@ -14,12 +14,12 @@ type ReportPayload = {
   meta: {
     companyName?: string;
     ceo?: string;
-    currentPrice?: number;
-    altmanZScore?: number;
-    piotroskiScore?: number;
-    targetUpsidePct?: number;
-    insiderNetBuying?: number;
-    beatRate?: number;
+    currentPrice?: number | null;
+    altmanZScore?: number | null;
+    piotroskiScore?: number | null;
+    targetUpsidePct?: number | null;
+    insiderNetBuying?: number | boolean | null;
+    beatRate?: number | null;
   };
   cached?: boolean;
 };
@@ -116,14 +116,19 @@ function renderInline(text: string): string {
   return out;
 }
 
-function formatMoney(n?: number): string {
-  if (n == null) return '—';
+function formatMoney(n?: number | null | boolean): string {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
   return `$${n.toFixed(2)}`;
 }
 
-function formatPct(n?: number): string {
-  if (n == null) return '—';
+function formatPct(n?: number | null | boolean): string {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
   return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
+}
+
+function formatNum(n?: number | null | boolean, digits = 2): string {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
+  return n.toFixed(digits);
 }
 
 export default function ReportPage() {
@@ -252,16 +257,22 @@ export default function ReportPage() {
                 <MetricBox
                   label={t.upside}
                   value={formatPct(data.meta.targetUpsidePct)}
-                  tone={data.meta.targetUpsidePct != null ? (data.meta.targetUpsidePct > 0 ? 'pos' : 'neg') : undefined}
+                  tone={typeof data.meta.targetUpsidePct === 'number' ? (data.meta.targetUpsidePct > 0 ? 'pos' : 'neg') : undefined}
                 />
-                <MetricBox label={t.altman} value={data.meta.altmanZScore?.toFixed(2) ?? '—'} />
-                <MetricBox label={t.piotroski} value={`${data.meta.piotroskiScore ?? '—'}/9`} />
+                <MetricBox label={t.altman} value={formatNum(data.meta.altmanZScore)} />
+                <MetricBox
+                  label={t.piotroski}
+                  value={typeof data.meta.piotroskiScore === 'number' ? `${data.meta.piotroskiScore}/9` : '—'}
+                />
                 <MetricBox
                   label={t.insider}
-                  value={formatMoney(data.meta.insiderNetBuying)}
-                  tone={data.meta.insiderNetBuying != null ? (data.meta.insiderNetBuying > 0 ? 'pos' : 'neg') : undefined}
+                  value={typeof data.meta.insiderNetBuying === 'number' ? formatMoney(data.meta.insiderNetBuying) : '—'}
+                  tone={typeof data.meta.insiderNetBuying === 'number' ? (data.meta.insiderNetBuying > 0 ? 'pos' : 'neg') : undefined}
                 />
-                <MetricBox label={t.beat} value={formatPct(data.meta.beatRate != null ? data.meta.beatRate * 100 : undefined)} />
+                <MetricBox
+                  label={t.beat}
+                  value={formatPct(typeof data.meta.beatRate === 'number' ? data.meta.beatRate * 100 : undefined)}
+                />
               </div>
             </div>
 
