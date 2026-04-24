@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 
 type ReportPayload = {
   symbol: string;
@@ -125,14 +126,10 @@ function formatPct(n?: number): string {
   return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`;
 }
 
-export default function ReportPage({
-  params,
-}: {
-  params: Promise<{ locale: string; symbol: string }>;
-}) {
-  const { locale, symbol: rawSymbol } = use(params);
-  const symbol = rawSymbol.toUpperCase();
-  const loc = locale === 'en' ? 'en' : 'tr';
+export default function ReportPage() {
+  const params = useParams<{ locale: string; symbol: string }>();
+  const symbol = (params?.symbol || '').toUpperCase();
+  const loc = params?.locale === 'en' ? 'en' : 'tr';
 
   const [data, setData] = useState<ReportPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
