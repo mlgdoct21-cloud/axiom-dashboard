@@ -32,9 +32,11 @@ export interface CorporateIntelligence {
     url: string;
   }>;
   analystConsensus: {
+    strongBuy: number;
     buy: number;
     hold: number;
     sell: number;
+    strongSell: number;
     label: string;
   } | null;
   insiderBuying: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' | null;
@@ -44,6 +46,14 @@ export interface CorporateIntelligence {
   keyRisks: string[];
   narrativeSummary: string;
   qualitativeScore: number;
+  dataCompleteness: {
+    profile: boolean;
+    news: number;
+    peers: number;
+    analyst: boolean;
+    insider: boolean;
+    llmSynthesis: boolean;
+  };
   timestamp: number;
 }
 
@@ -138,9 +148,11 @@ export async function GET(req: NextRequest) {
     peers: fmp?.peers || [],
     recentMoves: llm?.recentMoves || [],
     analystConsensus: fmp?.rec ? {
-      buy: fmp.rec.buy,
-      hold: fmp.rec.hold,
-      sell: fmp.rec.sell,
+      strongBuy: fmp.rec.strongBuy || 0,
+      buy: fmp.rec.buy || 0,
+      hold: fmp.rec.hold || 0,
+      sell: fmp.rec.sell || 0,
+      strongSell: fmp.rec.strongSell || 0,
       label: (fmp.rec.buy > fmp.rec.sell) ? 'BUY' : 'HOLD'
     } : null,
     insiderBuying: null, // FMP Insider data needs a different endpoint if needed
@@ -150,6 +162,14 @@ export async function GET(req: NextRequest) {
     keyRisks: llm?.keyRisks || [],
     narrativeSummary: llm?.narrativeSummary || '',
     qualitativeScore: llm?.qualitativeScore || 50,
+    dataCompleteness: {
+      profile: !!(fmp?.profile || finn),
+      news: Array.isArray(fmp?.news) ? fmp.news.length : 0,
+      peers: Array.isArray(fmp?.peers) ? fmp.peers.length : 0,
+      analyst: !!fmp?.rec,
+      insider: false,
+      llmSynthesis: !!llm
+    },
     timestamp: Date.now()
   };
 

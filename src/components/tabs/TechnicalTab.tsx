@@ -107,7 +107,8 @@ export default function TechnicalTab({ locale }: TechnicalTabProps) {
   const [signalLoading, setSignalLoading] = useState(false);
   const [signalError, setSignalError] = useState<string | null>(null);
   // TODO: auth geldiginde session'dan cek. Simdilik test icin sinirsiz.
-  const userTier: 'free' | 'premium' | 'advance' = 'advance';
+  type UserTier = 'free' | 'premium' | 'advance';
+  const userTier = 'advance' as UserTier;
 
   const generateSignal = async () => {
     setSignalLoading(true);

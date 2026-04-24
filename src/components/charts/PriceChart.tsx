@@ -10,6 +10,7 @@ import {
   type ISeriesApi,
   type IPriceLine,
   type Time,
+  type AutoscaleInfo,
 } from 'lightweight-charts';
 import {
   getCandles,
@@ -184,7 +185,7 @@ export default function PriceChart({
       borderVisible: false,
       wickUpColor: '#26a69a',
       wickDownColor: '#ef5350',
-      autoscaleInfoProvider: (baseImpl) => {
+      autoscaleInfoProvider: (baseImpl: () => AutoscaleInfo | null) => {
         const base = baseImpl();
         if (!base?.priceRange) return base;
         const { minValue, maxValue } = base.priceRange;

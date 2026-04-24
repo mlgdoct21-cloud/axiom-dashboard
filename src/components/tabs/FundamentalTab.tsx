@@ -612,7 +612,6 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
 
       {/* ── Insider Report Panel (CEO promise vs. reality) ── */}
       <InsiderReportPanel
-        ref={insiderReportRef}
         symbol={symbol}
         locale={locale}
         autoOpen={autoOpenReport}
