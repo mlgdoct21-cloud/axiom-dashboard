@@ -107,7 +107,7 @@ type AgentInput = {
     beatRate: number;
   };
   insiderTrading: {
-    sixMonths: { totalBuys: number; totalSells: number; netBuyingActivity: boolean };
+    sixMonths: { totalBuys: number; totalSells: number; netBuyingActivity: boolean; netDollarFlow: number };
     recentTransactions: {
       type: 'BUY' | 'SELL' | 'OTHER';
       personName: string;
@@ -232,6 +232,7 @@ function toAgentInput(symbol: string, locale: Locale, raw: any): AgentInput {
         totalBuys,
         totalSells,
         netBuyingActivity: totalBuys > totalSells,
+        netDollarFlow: totalBuys - totalSells,
       },
       recentTransactions,
     },
@@ -576,7 +577,7 @@ export async function GET(request: NextRequest) {
         altmanZScore: agentInput.financialMetrics.altmanZScore,
         piotroskiScore: agentInput.financialMetrics.piotroskiScore,
         targetUpsidePct: agentInput.financialMetrics.targetUpsidePct,
-        insiderNetBuying: agentInput.insiderTrading.sixMonths.netBuyingActivity,
+        insiderNetBuying: agentInput.insiderTrading.sixMonths.netDollarFlow,
         beatRate: agentInput.earnings.beatRate,
       },
     };
