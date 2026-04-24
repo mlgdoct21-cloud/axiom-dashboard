@@ -578,7 +578,6 @@ export async function GET(request: NextRequest) {
         targetUpsidePct: agentInput.financialMetrics.targetUpsidePct,
         insiderNetBuying: agentInput.insiderTrading.sixMonths.netBuyingActivity,
         beatRate: agentInput.earnings.beatRate,
-        hasTranscript: !!agentInput.latestTranscript,
       },
     };
 
