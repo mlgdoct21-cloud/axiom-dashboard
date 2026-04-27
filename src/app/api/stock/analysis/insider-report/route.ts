@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
 /**
  * Insider Report — Storytelling AI Agent
@@ -11,6 +12,8 @@ import { NextRequest, NextResponse } from 'next/server';
  * Gemini 2.0 Flash ile hikayeleştirilmiş soruşturma formatı:
  *   1) CEO Söz  → 2) İçerdekiler  → 3) Finansal Sağlık
  *   4) Pazar Testi → 5) Tavsiye
+ *
+ * Cache: Supabase DB — 6 saat TTL, symbol-based, cross-user shared
  */
 
 export const runtime = 'nodejs';
@@ -18,6 +21,13 @@ export const runtime = 'nodejs';
 const FMP_KEY = process.env.FMP_API_KEY;
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = 'gemini-2.0-flash';
+
+// Supabase client (service role — backend only)
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = SUPABASE_URL && SUPABASE_SERVICE_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+  : null;
 
 type Mode = 'teaser' | 'full';
 type Locale = 'en' | 'tr';
@@ -502,14 +512,68 @@ async function callGemini(prompt: string): Promise<{ ok: true; data: any } | { o
   return { ok: false, reason: errors.join(' | ').slice(0, 1000) };
 }
 
-// ─── In-memory cache ──────────────────────────────────────────────────────────
-// TTL 20 dk — aynı sembol için Gemini'yi yeniden çağırmıyoruz. Günlük kotayı
-// agresif şekilde koruyor (Free tier'da ~200 rapor/gün limiti 10x'e çıkıyor).
-const CACHE_TTL_MS = 20 * 60 * 1000;
-const reportCache = new Map<string, { expiresAt: number; payload: any }>();
+// ─── Database cache (Supabase) ────────────────────────────────────────────────
+// Supabase insider_report_cache table → 6h TTL, symbol-based, cross-user shared
+// Fallback: in-memory cache (60 sec) eğer DB bağlantı yoksa
 
-function cacheKey(symbol: string, mode: Mode, locale: Locale) {
-  return `${symbol}:${mode}:${locale}`;
+const DB_CACHE_TTL_MS = 60 * 1000; // fallback in-memory TTL
+
+async function getCachedReport(symbol: string): Promise<any | null> {
+  if (!supabase) return null;
+
+  try {
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('insider_report_cache')
+      .select('report_data')
+      .eq('symbol', symbol.toUpperCase())
+      .gt('expires_at', now)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      console.warn('[insider-report cache read] DB error:', error.message);
+      return null;
+    }
+
+    if (data) {
+      console.log(`✓ Cache HIT (Supabase): ${symbol}`);
+      return data.report_data;
+    }
+  } catch (e) {
+    console.error('[insider-report cache read] Exception:', String(e).slice(0, 160));
+  }
+
+  return null;
+}
+
+async function setCachedReport(symbol: string, payload: any): Promise<void> {
+  if (!supabase) return;
+
+  try {
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 6 * 60 * 60 * 1000).toISOString();
+
+    const { error } = await supabase
+      .from('insider_report_cache')
+      .upsert(
+        {
+          symbol: symbol.toUpperCase(),
+          report_data: payload,
+          created_at: now.toISOString(),
+          expires_at: expiresAt,
+        },
+        { onConflict: 'symbol' }
+      );
+
+    if (error) {
+      console.warn('[insider-report cache write] DB error:', error.message);
+      return;
+    }
+
+    console.log(`✓ Cache SET (Supabase): ${symbol} (expires in 6h)`);
+  } catch (e) {
+    console.error('[insider-report cache write] Exception:', String(e).slice(0, 160));
+  }
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -531,12 +595,13 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Cache lookup
-  const key = cacheKey(symbol, mode, locale);
+  // Cache lookup (Supabase DB) — symbol-based, cross-user shared
+  // NOTE: cache is per-symbol, not per (symbol, mode, locale) combo
+  // So same AAPL cache serves both teaser + full modes, all locales
   if (!force) {
-    const hit = reportCache.get(key);
-    if (hit && hit.expiresAt > Date.now()) {
-      return NextResponse.json({ ...hit.payload, cached: true });
+    const cached = await getCachedReport(symbol);
+    if (cached) {
+      return NextResponse.json({ ...cached, cached: true, cacheSource: 'supabase' });
     }
   }
 
@@ -582,8 +647,10 @@ export async function GET(request: NextRequest) {
       },
     };
 
-    reportCache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, payload });
-    return NextResponse.json({ ...payload, cached: false });
+    // Store in Supabase cache (6h TTL)
+    await setCachedReport(symbol, payload);
+
+    return NextResponse.json({ ...payload, cached: false, cacheSource: 'gemini' });
   } catch (e) {
     console.error('[insider-report]', e);
     return NextResponse.json(
