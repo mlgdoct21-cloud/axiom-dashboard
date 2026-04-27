@@ -125,6 +125,39 @@ function extractMdAndA(html: string, formType: '10-K' | '10-Q'): string | null {
   return text.slice(0, 2500);
 }
 
+// ─── Streaming partial fetch ─────────────────────────────────────────────────
+// SEC 10-K files can be 2–5 MB. We only need the first ~500 KB to reach Item 7.
+// Streaming + early cancel avoids timeout on Vercel serverless (10s limit).
+
+async function fetchPartial(url: string, maxBytes = 500_000): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': SEC_UA },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok || !res.body) return null;
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        text += decoder.decode(value, { stream: true });
+        if (text.length >= maxBytes) break;
+      }
+    } finally {
+      reader.cancel().catch(() => null);
+    }
+
+    return text || null;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export type SecFilingsData = {
@@ -146,25 +179,12 @@ export async function getSecFilingsData(symbol: string): Promise<SecFilingsData>
       getLatestFilingUrl(cik, '10-Q'),
     ]);
 
-    // Fetch both HTMLs in parallel (8s timeout each)
+    // Stream fetch — read only first 500 KB of each filing.
+    // AAPL 10-K is 1.5 MB total but Item 7 starts at ~160 KB,
+    // so 500 KB is plenty and avoids timeout on large files.
     const [annualHtml, quarterlyHtml] = await Promise.all([
-      annualUrl
-        ? fetch(annualUrl, {
-            headers: { 'User-Agent': SEC_UA },
-            signal: AbortSignal.timeout(8000),
-          })
-            .then((r) => (r.ok ? r.text() : null))
-            .catch(() => null)
-        : Promise.resolve(null),
-
-      quarterlyUrl
-        ? fetch(quarterlyUrl, {
-            headers: { 'User-Agent': SEC_UA },
-            signal: AbortSignal.timeout(8000),
-          })
-            .then((r) => (r.ok ? r.text() : null))
-            .catch(() => null)
-        : Promise.resolve(null),
+      annualUrl ? fetchPartial(annualUrl) : Promise.resolve(null),
+      quarterlyUrl ? fetchPartial(quarterlyUrl) : Promise.resolve(null),
     ]);
 
     return {
