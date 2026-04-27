@@ -1,7 +1,7 @@
-// SEC EDGAR — Free MD&A extraction (10-K annual + 10-Q quarterly)
+// SEC EDGAR -- Free MD&A extraction (10-K annual + 10-Q quarterly)
 //
 // Flow:
-//   Symbol → CIK  (sec.gov/files/company_tickers.json — 1h memory cache)
+//   Symbol → CIK  (sec.gov/files/company_tickers.json -- 1h memory cache)
 //   CIK → Filing URL  (data.sec.gov/submissions/CIK{n}.json)
 //   URL → MD&A text   (HTML fetch + regex Item 7 for 10-K, Item 2 for 10-Q)
 //
@@ -67,52 +67,61 @@ async function getLatestFilingUrl(
 // 10-K: MD&A = Item 7  → ends at Item 7A or Item 8
 // 10-Q: MD&A = Item 2  → ends at Item 3
 //
-// SEC filings use inconsistent HTML across companies/years — patterns cover
+// SEC filings use inconsistent HTML across companies/years -- patterns cover
 // the most common variants (bold text, anchor names, inline headings).
 
-function extractMdAndA(html: string, formType: '10-K' | '10-Q'): string | null {
-  let startPattern: RegExp;
-  let endPattern: RegExp;
-
-  if (formType === '10-K') {
-    // Item 7 — Management's Discussion and Analysis
-    startPattern =
-      /item\s*7[\s.:–-]*\s*management['’s]*\s*(discussion|tartışma)/i;
-    // Ends at Item 7A (quantitative risk) or Item 8 (financial statements)
-    endPattern = /item\s*7\s*[a-z][\s.:]|item\s*8[\s.:–-]/i;
-  } else {
-    // 10-Q: Part I, Item 2 — Management's Discussion and Analysis
-    startPattern =
-      /item\s*2[\s.:–-]*\s*management['’s]*\s*(discussion|tartışma)/i;
-    // Ends at Item 3 (quantitative risk disclosures)
-    endPattern = /item\s*3[\s.:–-]/i;
-  }
-
-  const start = html.search(startPattern);
-  if (start === -1) return null;
-
-  const afterStart = html.slice(start);
-  const end = afterStart.search(endPattern);
-
-  // Clamp: use end boundary or max 80KB to avoid runaway memory
-  const chunk = end > 200 ? afterStart.slice(0, end) : afterStart.slice(0, 80_000);
-
-  // Strip HTML tags + decode common entities + normalise whitespace
-  const text = chunk
+function stripHtml(raw: string): string {
+  return raw
     .replace(/<[^>]+>/g, ' ')
+    .replace(/&#\d+;/g, ' ')
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
     .replace(/&quot;/gi, '"')
-    .replace(/&#\d+;/g, ' ')
     .replace(/\s{2,}/g, ' ')
     .trim();
+}
 
-  // Discard if extraction looks empty / noise
+function extractMdAndA(html: string, formType: '10-K' | '10-Q'): string | null {
+  // 10-K files typically have a TOC entry for "Item 7" (short, ~1KB)
+  // followed by the real MD&A section (long, 100KB+).
+  // Strategy: iterate all "Item N" matches, pick the longest section.
+  // Stop once we find one > 5KB (that's the real one).
+  let startRe: RegExp;
+  let endRe: RegExp;
+
+  if (formType === '10-K') {
+    startRe = /item\s*7[.\s]/gi;
+    endRe = /item\s*7\s*a[\s.:]|item\s*8[\s.:]/i;
+  } else {
+    // 10-Q Part I Item 2
+    startRe = /item\s*2[.\s]/gi;
+    endRe = /item\s*3[\s.:]/i;
+  }
+
+  let bestStart = -1;
+  let bestLen = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = startRe.exec(html)) !== null) {
+    const after = html.slice(match.index);
+    const endIdx = after.search(endRe);
+    const sectionLen = endIdx > 0 ? endIdx : 80_000;
+    if (sectionLen > bestLen) {
+      bestLen = sectionLen;
+      bestStart = match.index;
+    }
+    if (sectionLen > 5_000) break; // real MD&A section found, stop iterating
+  }
+
+  if (bestStart === -1) return null;
+
+  const chunk = html.slice(bestStart, bestStart + Math.min(bestLen, 80_000));
+  const text = stripHtml(chunk);
+
   if (text.length < 300) return null;
 
-  // Keep first 2500 chars — enough context for Gemini, keeps tokens low
   return text.slice(0, 2500);
 }
 
