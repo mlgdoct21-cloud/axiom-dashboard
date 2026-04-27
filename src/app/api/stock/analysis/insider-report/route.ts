@@ -23,14 +23,16 @@ const GEMINI_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = 'gemini-2.0-flash';
 
 // Supabase client — lazy init (request time'da, build time'da değil)
+// URL public olduğu için hardcode — sadece service key env var'dan gelir
+const SUPABASE_URL = 'https://enpaxcwxjuripymboahm.supabase.co';
+
 function getSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    console.warn('[insider-report] Supabase env vars missing', { hasUrl: !!url, hasKey: !!key });
+  if (!key) {
+    console.warn('[insider-report] SUPABASE_SERVICE_ROLE_KEY missing');
     return null;
   }
-  return createClient(url, key);
+  return createClient(SUPABASE_URL, key);
 }
 
 type Mode = 'teaser' | 'full';
