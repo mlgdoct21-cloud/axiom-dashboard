@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getSecFilingsData } from '@/lib/sec-edgar';
 
 /**
  * Insider Report — Storytelling AI Agent
@@ -72,6 +73,7 @@ async function collectInsiderReportData(symbol: string) {
     surprisesRes,
     priceTargetRes,
     analystRatingRes,
+    secFilingsRes,
   ] = await Promise.allSettled([
     fmp('profile', { symbol }),
     fmp('financial-scores', { symbol }),
@@ -80,6 +82,7 @@ async function collectInsiderReportData(symbol: string) {
     fmp('earnings', { symbol, limit: '12' }),
     fmp('price-target-consensus', { symbol }),
     fmp('ratings-snapshot', { symbol }),
+    getSecFilingsData(symbol), // SEC.gov — 10-K (Item 7) + 10-Q (Item 2), free
   ]);
 
   const pick = <T,>(r: PromiseSettledResult<T>): T | null =>
@@ -95,8 +98,9 @@ async function collectInsiderReportData(symbol: string) {
   const surprisesRaw = (pick(surprisesRes) as any) || [];
   const priceTarget = (pick(priceTargetRes) as any)?.[0] || null;
   const rating = (pick(analystRatingRes) as any)?.[0] || null;
+  const secFilings = pick(secFilingsRes) ?? { annual: null, quarterly: null };
 
-  return { profile, scores, insider, insiderStats, surprises: surprisesRaw, priceTarget, rating };
+  return { profile, scores, insider, insiderStats, surprises: surprisesRaw, priceTarget, rating, secFilings };
 }
 
 // ─── Input synthesis ──────────────────────────────────────────────────────────
@@ -138,10 +142,14 @@ type AgentInput = {
     lowTarget?: number;
     consensus?: string;
   };
+  secFilings: {
+    annual: string | null;    // 10-K MD&A (Item 7)
+    quarterly: string | null; // 10-Q MD&A (Item 2)
+  };
 };
 
 function toAgentInput(symbol: string, locale: Locale, raw: any): AgentInput {
-  const { profile, scores, insider, insiderStats, surprises, priceTarget, rating } = raw;
+  const { profile, scores, insider, insiderStats, surprises, priceTarget, rating, secFilings } = raw;
 
   // Insider stats: /stable/insider-trading/statistics çeyreklik özet veriyor.
   // Son 2 çeyreği topla (~6 ay). Form 4 kodlarında "open market" sinyali
@@ -258,6 +266,10 @@ function toAgentInput(symbol: string, locale: Locale, raw: any): AgentInput {
       lowTarget: priceTarget?.targetLow ? Number(priceTarget.targetLow) : undefined,
       consensus: rating?.rating || rating?.ratingRecommendation,
     },
+    secFilings: {
+      annual: secFilings?.annual ?? null,
+      quarterly: secFilings?.quarterly ?? null,
+    },
   };
 }
 
@@ -317,7 +329,7 @@ ZORUNLU KURAL — HALLÜSİNASYON YASAK:
 - Bir veri yoksa "veri mevcut değil" de, tahmin ETME
 - Earnings call transcript'i bu raporda YOK — CEO sözü alıntılama
 
-YAPI — 5 Perde:
+YAPI — 6 Perde:
 
 1) Piyasa ve Rekabet Bağlamı (100–150 kelime)
    - Şirket hangi sektörde? Hangi endüstride? (companyProfile.sector/industry)
@@ -325,36 +337,44 @@ YAPI — 5 Perde:
    - Şirketin pozisyonu: market cap ve sektör dinamikleri karşısında neresinde?
    - Bu perde piyasa arka planı — sayısal iddia YOK
 
-2) İçerdekiler Ne Yapıyor? (150–200 kelime)
+2) Yönetim Resmi Söylüyor Ki… (100–150 kelime)
+   - secFilings.annual → SEC 10-K yıllık rapordaki MD&A: yönetim büyük resimde ne söylüyor?
+   - secFilings.quarterly → SEC 10-Q çeyreklik rapordaki MD&A: son 3 aydaki tablo nedir?
+   - İki rapor arasında tutarsızlık var mı? (yıllık iyimser, çeyreklik kötümser → ⚠️)
+   - Her iki alan da null ise: "SEC 10-K/10-Q verisi bu hisse için alınamadı" yaz, perde'yi atla
+   - SADECE alıntıdaki bilgiyi yaz — yorum ekleme, uydurma yapma
+
+3) İçerdekiler Ne Yapıyor? (150–200 kelime)
    - Son 6 ayda OPEN-MARKET insider alım/satım: kaç alım, kaç satış
    - En son 1–2 gerçek alım/satım işlemi: kim (insiderTrading.recentTransactions'tan), ne zaman, kaç hisse, hangi fiyattan
    - Equity award (A-Award) sayma — sadece gerçek alım/satım yorumla
    - Net alım varsa → "yönetim güven gösteriyor"
    - Net satış varsa → "⚠️ uyarı" ama sebepleri nötr listele (vergi planlaması, opsiyon kullanımı, portföy dengelemesi VE stratejik endişe olabilir — tek bir sebebe tuzak kurma)
    - recentTransactions boşsa veya tümü OTHER ise "son 6 ayda kayıt altına geçen açık piyasa işlemi bulunamadı" yaz
+   - SEC verisi varsa: "Yönetim 10-K/10-Q'da X dedi — insider davranışı bununla UYUMLU MU?" sorusunu yanıtla
 
-3) Finansal Sağlık Testi (150–200 kelime)
+4) Finansal Sağlık Testi (150–200 kelime)
    - Altman Z-Score yorumu: >3 güvenli / 1.8–3 dikkat / <1.8 iflas riski
    - Piotroski F-Score: 7–9 sağlam / 4–6 orta / 0–3 zayıf
    - İki skoru BİRLİKTE yorumla: ne söylüyorlar?
    - Veri yoksa "skor mevcut değil" yaz — uydurma
 
-4) Pazar Testi ve Fiyat Potansiyeli (200–250 kelime)
+5) Pazar Testi ve Fiyat Potansiyeli (200–250 kelime)
    - Mevcut fiyat vs. analyst consensus target, upside%
    - Earnings beat rate (son 4 çeyrek) — kaç çeyrek beat, kaç miss?
    - Son çeyreklik surprise yüzdeleri
    - Downside (low target) vs. upside (high target) senaryoları
    - Analyst consensus rating ne diyor?
 
-5) Sonuç ve Tavsiye (100–150 kelime)
+6) Sonuç ve Tavsiye (100–150 kelime)
    - BUY / HOLD / CAUTION — net karar
-   - 3 madde halinde ANA GEREKÇE (insider + finansal + valuation)
+   - 3 madde halinde ANA GEREKÇE (insider + SEC beyanı + valuation)
    - Hangi yatırımcı profiline uygun (risk iştahı)
    - Son söz: takip edilecek katalist
 
 FORMAT KURALLARI:
 - Markdown: her perde ## emoji + başlık
-- Emoji başlıklar: 🌐 Bağlam / 🔍 İçerdekiler / 💪 Finansal / 💰 Potansiyel / ✅ Sonuç
+- Emoji başlıklar: 🌐 Bağlam / 📋 Yönetim Beyanı / 🔍 İçerdekiler / 💪 Finansal / 💰 Potansiyel / ✅ Sonuç
 - Negatif sinyal varsa ⚠️
 - Z-Score, Piotroski, Altman orijinal terim
 - Şirket ve insan isimleri orijinal (çevirme)
@@ -379,40 +399,46 @@ ${inputJson}`;
 
   const taskEn = `Using the data below, write a detailed INVESTIGATIVE REPORT for an investor (800–1200 words).
 
-STRUCTURE — 5 Acts:
+STRUCTURE — 6 Acts:
 
-1) The CEO's Word (100–150 words)
-   - Quote the CEO's boldest claim from the transcript (if none, write "N/A")
-   - Why this matters
-   - Is the strategy realistic?
+1) Market & Competitive Context (100–150 words)
+   - Sector, industry, macro trends 2025–2026
+   - Company's position by market cap
 
-2) What Are Insiders Doing? (150–200 words)
+2) What Management Officially Says (100–150 words)
+   - secFilings.annual → 10-K annual MD&A: big-picture strategy
+   - secFilings.quarterly → 10-Q quarterly MD&A: latest quarter tone
+   - Is there a gap between annual optimism and quarterly reality? (→ ⚠️ if so)
+   - If both are null: write "SEC 10-K/10-Q data unavailable for this ticker" and skip act
+   - ONLY use what is in the excerpts — no invention
+
+3) What Are Insiders Doing? (150–200 words)
    - Buy/sell ratio in last 6 months
    - Latest transaction: who, when, how many shares, at what price
    - Net buying → "management shows confidence"
    - Net selling → "⚠️ warning signal"
-   - Does insider behavior support the CEO's claim?
+   - If SEC data available: "Management said X in 10-K/10-Q — does insider behavior ALIGN?"
 
-3) Financial Health Check (150–200 words)
+4) Financial Health Check (150–200 words)
    - Altman Z-Score: >3 safe / 1.8–3 caution / <1.8 risk
    - Piotroski F-Score: 7–9 healthy / 4–6 average / 0–3 weak
-   - Enough liquidity to deliver the CEO's vision?
+   - Read both scores together
 
-4) Market Test & Price Potential (200–250 words)
+5) Market Test & Price Potential (200–250 words)
    - Current price vs. analyst target, upside%
    - Earnings beat rate (last 4 quarters)
    - Downside risk (low target), upside scenario
 
-5) Verdict & Recommendation (100–150 words)
+6) Verdict & Recommendation (100–150 words)
    - BUY / HOLD / CAUTION
+   - 3 key reasons (insider + SEC statement + valuation)
    - Suitable investor profile
    - Closing word
 
 FORMAT RULES:
 - Markdown: each act as ## emoji + title
-- Emoji headers: 📈 CEO / 🔍 Insiders / 💪 Financial / 💰 Upside / ✅ Verdict
+- Emoji headers: 🌐 Context / 📋 Management / 🔍 Insiders / 💪 Financial / 💰 Upside / ✅ Verdict
 - ⚠️ for negative signals
-- Quote CEO claim verbatim, no translation
 
 REQUIRED: append this CTA block at the end (markdown):
 ---
@@ -652,6 +678,8 @@ export async function GET(request: NextRequest) {
         targetUpsidePct: agentInput.financialMetrics.targetUpsidePct,
         insiderNetBuying: agentInput.insiderTrading.sixMonths.netDollarFlow,
         beatRate: agentInput.earnings.beatRate,
+        secAnnualAvailable: !!agentInput.secFilings.annual,
+        secQuarterlyAvailable: !!agentInput.secFilings.quarterly,
       },
     };
 
