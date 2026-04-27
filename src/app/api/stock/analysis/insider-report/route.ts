@@ -22,20 +22,16 @@ const FMP_KEY = process.env.FMP_API_KEY;
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = 'gemini-2.0-flash';
 
-// Supabase client (service role — backend only)
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-  console.warn('[insider-report] Supabase not configured', {
-    hasUrl: !!SUPABASE_URL,
-    hasKey: !!SUPABASE_SERVICE_KEY,
-  });
+// Supabase client — lazy init (request time'da, build time'da değil)
+function getSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    console.warn('[insider-report] Supabase env vars missing', { hasUrl: !!url, hasKey: !!key });
+    return null;
+  }
+  return createClient(url, key);
 }
-
-const supabase = SUPABASE_URL && SUPABASE_SERVICE_KEY
-  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-  : null;
 
 type Mode = 'teaser' | 'full';
 type Locale = 'en' | 'tr';
@@ -527,6 +523,7 @@ async function callGemini(prompt: string): Promise<{ ok: true; data: any } | { o
 const DB_CACHE_TTL_MS = 60 * 1000; // fallback in-memory TTL
 
 async function getCachedReport(symbol: string): Promise<any | null> {
+  const supabase = getSupabase();
   if (!supabase) return null;
 
   try {
@@ -555,6 +552,7 @@ async function getCachedReport(symbol: string): Promise<any | null> {
 }
 
 async function setCachedReport(symbol: string, payload: any): Promise<void> {
+  const supabase = getSupabase();
   if (!supabase) return;
 
   try {
