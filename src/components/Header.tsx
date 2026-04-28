@@ -48,6 +48,9 @@ export function Header() {
             <Link href="/dashboard/signals" className="text-[#8888a0] hover:text-[#e0e0e0] text-sm font-medium transition">
               Signals
             </Link>
+            <Link href="/dashboard/crypto" className="text-[#8888a0] hover:text-[#e0e0e0] text-sm font-medium transition">
+              🔬 Crypto Intel
+            </Link>
             <Link href="/dashboard/settings" className="text-[#8888a0] hover:text-[#e0e0e0] text-sm font-medium transition">
               Settings
             </Link>
