@@ -1,6 +1,10 @@
 // GitHub dev health metrics
 import { Octokit } from '@octokit/rest';
 
+if (!process.env.GITHUB_API_TOKEN) {
+  throw new Error('GITHUB_API_TOKEN environment variable is not set');
+}
+
 const octokit = new Octokit({
   auth: process.env.GITHUB_API_TOKEN
 });
