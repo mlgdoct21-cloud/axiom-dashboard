@@ -11,9 +11,10 @@ import FundamentalTab from '@/components/tabs/FundamentalTab';
 import TechnicalTab from '@/components/tabs/TechnicalTab';
 import CalculatorTab from '@/components/tabs/CalculatorTab';
 import PricingTab from '@/components/tabs/PricingTab';
+import CryptoIntelligencePage from '@/components/crypto/CryptoIntelligencePage';
 import LanguageSelector from '@/components/LanguageSelector';
 
-type TabType = 'news' | 'fundamental' | 'technical' | 'calculator' | 'pricing';
+type TabType = 'news' | 'fundamental' | 'technical' | 'calculator' | 'pricing' | 'crypto';
 
 export default function Home() {
   const t = useTranslations();
@@ -32,6 +33,7 @@ export default function Home() {
     { id: 'technical', label: t('tabs.technical') },
     { id: 'calculator', label: t('tabs.calculator') },
     { id: 'pricing', label: t('tabs.pricing') },
+    { id: 'crypto', label: '🔬 Crypto Intel' },
   ];
 
   return (
@@ -95,6 +97,11 @@ export default function Home() {
         {activeTab === 'pricing' && (
           <div className="h-full overflow-auto p-4">
             <PricingTab locale={locale} />
+          </div>
+        )}
+        {activeTab === 'crypto' && (
+          <div className="h-full overflow-auto p-4">
+            <CryptoIntelligencePage />
           </div>
         )}
       </main>
