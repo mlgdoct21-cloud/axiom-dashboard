@@ -1,23 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import DevHealthCard from './DevHealthCard';
-import TokenomicsCard from './TokenomicsCard';
-import CryptoAnalysisCard from './CryptoAnalysisCard';
-import WhitepaperCard from './WhitepaperCard';
+import CryptoReportPanel from './CryptoReportPanel';
 
-const SYMBOLS = ['SOL', 'ETH', 'BTC', 'ARB', 'AVAX', 'ADA', 'DOT', 'LINK'];
+const SYMBOLS = ['BTC', 'ETH', 'SOL', 'ARB', 'AVAX', 'ADA', 'DOT', 'LINK'];
 
 export default function CryptoIntelligencePage() {
-  const [symbol, setSymbol] = useState('SOL');
+  const [symbol, setSymbol] = useState('BTC');
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 max-w-4xl mx-auto">
       {/* Header */}
       <div>
-        <h1 className="text-xl font-bold text-[#e0e0e0]">🔬 Crypto Intelligence</h1>
+        <h1 className="text-xl font-bold text-[#e0e0e0]">🔬 Kripto İstihbarat Raporu</h1>
         <p className="text-sm text-[#555570] mt-1">
-          On-chain data + GitHub activity + AI analysis — all in one place
+          Kurumsal seviye kripto analizi — 6 perdeli Türkçe AI raporu
         </p>
       </div>
 
@@ -38,13 +35,8 @@ export default function CryptoIntelligencePage() {
         ))}
       </div>
 
-      {/* Cards grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <DevHealthCard symbol={symbol} />
-        <TokenomicsCard symbol={symbol} />
-        <CryptoAnalysisCard symbol={symbol} />
-        <WhitepaperCard symbol={symbol} />
-      </div>
+      {/* Report panel */}
+      <CryptoReportPanel symbol={symbol} />
     </div>
   );
 }
