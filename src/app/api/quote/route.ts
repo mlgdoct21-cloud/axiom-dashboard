@@ -6,17 +6,15 @@ import { NextRequest, NextResponse } from 'next/server';
  * GET /api/quote?symbols=BINANCE:BTCUSDT,AAPL,OANDA:EUR_USD
  *
  * Kaynaklar:
- *  - Binance: /api/v3/ticker/24hr (crypto, ucretsiz, limitsiz)
- *  - Yahoo Finance: /v7/finance/quote (stocks/forex/BIST, ucretsiz)
- *
- * Cache: 15 saniye (canli his icin hizli yenilenmeli ama API'yi bombalamayalim)
+ *  - CoinGecko: /coins/markets (crypto, ucretsiz, Vercel IP'lerinden erisilebilir)
+ *  - Finnhub: /quote (stocks/forex/BIST)
  */
 
 interface Quote {
   symbol: string;
   price: number;
-  change: number;         // Mutlak deger
-  changePercent: number;  // Yuzde
+  change: number;
+  changePercent: number;
   volume?: number;
   high24h?: number;
   low24h?: number;
@@ -24,53 +22,108 @@ interface Quote {
   source: 'binance' | 'yahoo';
 }
 
-// Binance 24hr ticker
-async function fetchBinanceQuotes(symbols: string[]): Promise<Quote[]> {
+// Binance symbol → CoinGecko ID
+const BINANCE_TO_CG: Record<string, string> = {
+  BTCUSDT: 'bitcoin',
+  ETHUSDT: 'ethereum',
+  BNBUSDT: 'binancecoin',
+  XRPUSDT: 'ripple',
+  SOLUSDT: 'solana',
+  ADAUSDT: 'cardano',
+  DOGEUSDT: 'dogecoin',
+  AVAXUSDT: 'avalanche-2',
+  DOTUSDT: 'polkadot',
+  LINKUSDT: 'chainlink',
+  MATICUSDT: 'matic-network',
+  SHIBUSDT: 'shiba-inu',
+  LTCUSDT: 'litecoin',
+  BCHUSDT: 'bitcoin-cash',
+  XLMUSDT: 'stellar',
+  UNIUSDT: 'uniswap',
+  ATOMUSDT: 'cosmos',
+  ICPUSDT: 'internet-computer',
+  VETUSDT: 'vechain',
+  ARBUSDT: 'arbitrum',
+  NEARUSDT: 'near',
+  SUIUSDT: 'sui',
+  TRXUSDT: 'tron',
+  FILUSDT: 'filecoin',
+  ETCUSDT: 'ethereum-classic',
+  HBARUSDT: 'hedera-hashgraph',
+  FTMUSDT: 'fantom',
+  ALGOUSDT: 'algorand',
+  GRTUSDT: 'the-graph',
+  AAVEUSDT: 'aave',
+  TONUSDT: 'the-open-network',
+  RENDERUSDT: 'render-token',
+  KASUSDT: 'kaspa',
+};
+
+const CG_TO_BINANCE: Record<string, string> = Object.fromEntries(
+  Object.entries(BINANCE_TO_CG).map(([k, v]) => [v, k])
+);
+
+async function fetchCoinGeckoQuotes(symbols: string[]): Promise<Quote[]> {
   if (symbols.length === 0) return [];
 
-  const binanceSymbols = symbols.map(s => s.replace('BINANCE:', ''));
-  // Bulk ticker: /api/v3/ticker/24hr?symbols=["BTCUSDT","ETHUSDT"]
-  const symbolsParam = encodeURIComponent(JSON.stringify(binanceSymbols));
-  const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${symbolsParam}`;
+  // BINANCE:BTCUSDT veya COINBASE:BTCUSD → BTCUSDT
+  const rawSymbols = symbols.map(s =>
+    s.replace('BINANCE:', '').replace('COINBASE:', '').toUpperCase()
+  );
+  // USDC suffix normalize: BTCUSD → BTCUSDT fallback
+  const coinIds = rawSymbols
+    .map(s => BINANCE_TO_CG[s] ?? BINANCE_TO_CG[s + 'T'])
+    .filter((id): id is string => Boolean(id));
+
+  if (coinIds.length === 0) return [];
 
   try {
+    const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${coinIds.join(',')}&order=market_cap_desc&sparkline=false`;
     const res = await fetch(url, { next: { revalidate: 15 } });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.error('[quote/coingecko] status', res.status, await res.text());
+      return [];
+    }
     const data: Array<{
-      symbol: string;
-      lastPrice: string;
-      priceChange: string;
-      priceChangePercent: string;
-      volume: string;
-      highPrice: string;
-      lowPrice: string;
+      id: string;
+      current_price: number;
+      price_change_24h: number;
+      price_change_percentage_24h: number;
+      total_volume: number;
+      high_24h: number;
+      low_24h: number;
     }> = await res.json();
 
-    return data.map(d => ({
-      symbol: `BINANCE:${d.symbol}`,
-      price: parseFloat(d.lastPrice),
-      change: parseFloat(d.priceChange),
-      changePercent: parseFloat(d.priceChangePercent),
-      volume: parseFloat(d.volume),
-      high24h: parseFloat(d.highPrice),
-      low24h: parseFloat(d.lowPrice),
-      timestamp: Date.now(),
-      source: 'binance' as const,
-    }));
+    return data.map(coin => {
+      const binanceSym = CG_TO_BINANCE[coin.id] ?? (coin.id.toUpperCase() + 'USDT');
+      // Reconstruct original prefixed symbol
+      const originalSym = symbols.find(s =>
+        s.replace('BINANCE:', '').replace('COINBASE:', '').toUpperCase() === binanceSym ||
+        s.replace('BINANCE:', '').replace('COINBASE:', '').toUpperCase() === binanceSym.slice(0, -1)
+      ) ?? `BINANCE:${binanceSym}`;
+
+      return {
+        symbol: originalSym,
+        price: coin.current_price,
+        change: coin.price_change_24h ?? 0,
+        changePercent: coin.price_change_percentage_24h ?? 0,
+        volume: coin.total_volume,
+        high24h: coin.high_24h,
+        low24h: coin.low_24h,
+        timestamp: Date.now(),
+        source: 'binance' as const,
+      };
+    });
   } catch (e) {
-    console.error('[quote/binance]', e);
+    console.error('[quote/coingecko]', e);
     return [];
   }
 }
 
-// Stocks/Forex/BIST: Finnhub quote endpoint
-// Yahoo v7 quote API kapali, onun yerine Finnhub'in /quote'unu kullaniyoruz
-// BIST icin Finnhub'a .IS ekliyoruz, OANDA forex icin Finnhub'in OANDA:prefix'i zaten calisir
 async function fetchFinnhubQuote(symbol: string): Promise<Quote | null> {
   const apiKey = process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
   if (!apiKey) return null;
 
-  // BIST: BIST:ASELS -> ASELS.IS (Finnhub .IS suffix kullanir)
   let finnhubSymbol = symbol;
   if (symbol.startsWith('BIST:')) {
     finnhubSymbol = symbol.replace('BIST:', '') + '.IS';
@@ -81,13 +134,11 @@ async function fetchFinnhubQuote(symbol: string): Promise<Quote | null> {
     const res = await fetch(url, { next: { revalidate: 15 } });
     if (!res.ok) return null;
     const q: {
-      c?: number;  // current
-      d?: number;  // change
-      dp?: number; // percent change
-      h?: number;  // high
-      l?: number;  // low
-      o?: number;  // open
-      pc?: number; // previous close
+      c?: number;
+      d?: number;
+      dp?: number;
+      h?: number;
+      l?: number;
     } = await res.json();
 
     if (!q.c || q.c === 0) return null;
@@ -100,7 +151,7 @@ async function fetchFinnhubQuote(symbol: string): Promise<Quote | null> {
       high24h: q.h,
       low24h: q.l,
       timestamp: Date.now(),
-      source: 'yahoo', // (kaynak etiket, UI'de "Live" yeter)
+      source: 'yahoo',
     };
   } catch (e) {
     console.error('[quote/finnhub]', symbol, e);
@@ -110,7 +161,6 @@ async function fetchFinnhubQuote(symbol: string): Promise<Quote | null> {
 
 async function fetchStockQuotes(symbols: string[]): Promise<Quote[]> {
   if (symbols.length === 0) return [];
-  // Finnhub bulk quote yok — paralel tek tek cekiyoruz
   const results = await Promise.all(symbols.map(s => fetchFinnhubQuote(s)));
   return results.filter((q): q is Quote => q !== null);
 }
@@ -130,21 +180,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ quotes: [] });
   }
 
-  // Binance vs Yahoo olarak bol
-  const binanceSymbols = symbols.filter(s => s.startsWith('BINANCE:') || s.startsWith('COINBASE:'));
-  const yahooSymbols = symbols.filter(s => !binanceSymbols.includes(s));
+  const cryptoSymbols = symbols.filter(s => s.startsWith('BINANCE:') || s.startsWith('COINBASE:'));
+  const stockSymbols = symbols.filter(s => !cryptoSymbols.includes(s));
 
   try {
-    const [binanceQuotes, stockQuotes] = await Promise.all([
-      fetchBinanceQuotes(binanceSymbols),
-      fetchStockQuotes(yahooSymbols),
+    const [cryptoQuotes, stockQuotes] = await Promise.all([
+      fetchCoinGeckoQuotes(cryptoSymbols),
+      fetchStockQuotes(stockSymbols),
     ]);
 
-    const quotes = [...binanceQuotes, ...stockQuotes];
+    const quotes = [...cryptoQuotes, ...stockQuotes];
 
     return NextResponse.json(
       { quotes, count: quotes.length },
-      { headers: { 'Cache-Control': 's-maxage=10, stale-while-revalidate=20' } }
+      { headers: { 'Cache-Control': 's-maxage=15, stale-while-revalidate=30' } }
     );
   } catch (e) {
     console.error('[quote]', e);

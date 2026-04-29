@@ -6,11 +6,9 @@ import { NextRequest, NextResponse } from 'next/server';
  * GET /api/ticker
  *
  * Returns live prices + 24h % change for:
- * - Top 20 cryptocurrencies (Binance)
+ * - Top 20 cryptocurrencies (CoinGecko — Vercel erisilebilir)
  * - S&P 500, NASDAQ (Finnhub)
  * - Magnificent 7 (NVDA, TSLA, GOOGL, MSFT, AAPL, AMZN, META)
- *
- * Cache: 5 seconds (real-time feel)
  */
 
 interface TickerItem {
@@ -21,42 +19,64 @@ interface TickerItem {
   type: 'crypto' | 'index' | 'stock';
 }
 
-// Top 20 cryptos by market cap (Binance symbols)
-const TOP_CRYPTOS = [
-  'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'SOLusdt',
-  'ADAUSDT', 'DOGEUSDT', 'AVAXUSDT', 'DOTUSDT', 'LINKUSDT',
-  'MATICUSDT', 'SHIBUUSDT', 'LTCUSDT', 'BCHUSDT', 'XLMUSDT',
-  'UNIUSDT', 'ATOMUSDT', 'ICPUSDT', 'VETUSDT', 'ARBUSDT'
+// Top 20 cryptos — CoinGecko IDs
+const TOP_CRYPTO_IDS = [
+  'bitcoin', 'ethereum', 'binancecoin', 'ripple', 'solana',
+  'cardano', 'dogecoin', 'avalanche-2', 'polkadot', 'chainlink',
+  'matic-network', 'shiba-inu', 'litecoin', 'bitcoin-cash', 'stellar',
+  'uniswap', 'cosmos', 'internet-computer', 'vechain', 'arbitrum',
 ];
 
-// Magnificent 7
+const CG_ID_TO_SYMBOL: Record<string, string> = {
+  'bitcoin': 'BTCUSDT',
+  'ethereum': 'ETHUSDT',
+  'binancecoin': 'BNBUSDT',
+  'ripple': 'XRPUSDT',
+  'solana': 'SOLUSDT',
+  'cardano': 'ADAUSDT',
+  'dogecoin': 'DOGEUSDT',
+  'avalanche-2': 'AVAXUSDT',
+  'polkadot': 'DOTUSDT',
+  'chainlink': 'LINKUSDT',
+  'matic-network': 'MATICUSDT',
+  'shiba-inu': 'SHIBUSDT',
+  'litecoin': 'LTCUSDT',
+  'bitcoin-cash': 'BCHUSDT',
+  'stellar': 'XLMUSDT',
+  'uniswap': 'UNIUSDT',
+  'cosmos': 'ATOMUSDT',
+  'internet-computer': 'ICPUSDT',
+  'vechain': 'VETUSDT',
+  'arbitrum': 'ARBUSDT',
+};
+
 const MAG7 = ['NVDA', 'TSLA', 'GOOGL', 'MSFT', 'AAPL', 'AMZN', 'META'];
+const INDICES = ['^GSPC', '^IXIC'];
 
-// Indices
-const INDICES = ['^GSPC', '^IXIC']; // S&P 500, NASDAQ
-
-async function fetchBinanceTicker(): Promise<TickerItem[]> {
-  const apiKey = process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
-  if (!apiKey) return [];
-
+async function fetchCoinGeckoTicker(): Promise<TickerItem[]> {
   try {
-    const symbolsParam = encodeURIComponent(JSON.stringify(TOP_CRYPTOS));
-    const res = await fetch(
-      `https://api.binance.com/api/v3/ticker/24hr?symbols=${symbolsParam}`,
-      { next: { revalidate: 5 } }
-    );
-    if (!res.ok) return [];
+    const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${TOP_CRYPTO_IDS.join(',')}&order=market_cap_desc&sparkline=false`;
+    const res = await fetch(url, { next: { revalidate: 10 } });
+    if (!res.ok) {
+      console.error('[ticker/coingecko] status', res.status);
+      return [];
+    }
+    const data: Array<{
+      id: string;
+      name: string;
+      current_price: number;
+      price_change_percentage_24h: number;
+    }> = await res.json();
 
-    const data = await res.json();
-    return data.map((d: any) => ({
-      symbol: `BINANCE:${d.symbol}`,
-      price: parseFloat(d.lastPrice),
-      changePercent: parseFloat(d.priceChangePercent),
-      name: d.symbol.replace('USDT', ''),
+    return data.map(coin => ({
+      symbol: `BINANCE:${CG_ID_TO_SYMBOL[coin.id] ?? coin.id.toUpperCase() + 'USDT'}`,
+      price: coin.current_price,
+      changePercent: coin.price_change_percentage_24h ?? 0,
+      name: (CG_ID_TO_SYMBOL[coin.id] ?? '').replace('USDT', '') || coin.name,
       type: 'crypto' as const,
     }));
   } catch (e) {
-    console.error('[ticker/binance]', e);
+    console.error('[ticker/coingecko]', e);
     return [];
   }
 }
@@ -70,7 +90,7 @@ async function fetchFinnhubTicker(symbols: string[]): Promise<TickerItem[]> {
       symbols.map(async (sym) => {
         const res = await fetch(
           `https://finnhub.io/api/v1/quote?symbol=${sym}&token=${apiKey}`,
-          { next: { revalidate: 5 } }
+          { next: { revalidate: 10 } }
         );
         if (!res.ok) return null;
         const q = await res.json();
@@ -94,7 +114,7 @@ async function fetchFinnhubTicker(symbols: string[]): Promise<TickerItem[]> {
 export async function GET(request: NextRequest) {
   try {
     const [cryptos, stocks, indices] = await Promise.all([
-      fetchBinanceTicker(),
+      fetchCoinGeckoTicker(),
       fetchFinnhubTicker(MAG7).then(items =>
         items.map(item => ({ ...item, type: 'stock' as const }))
       ),
@@ -114,7 +134,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       { tickers, count: tickers.length, timestamp: Date.now() },
-      { headers: { 'Cache-Control': 's-maxage=8, stale-while-revalidate=16' } }
+      { headers: { 'Cache-Control': 's-maxage=10, stale-while-revalidate=20' } }
     );
   } catch (e) {
     console.error('[ticker]', e);
