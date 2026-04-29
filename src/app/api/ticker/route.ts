@@ -112,11 +112,10 @@ export async function GET(request: NextRequest) {
       ...stocks,
     ];
 
-    return NextResponse.json({
-      tickers,
-      count: tickers.length,
-      timestamp: Date.now(),
-    });
+    return NextResponse.json(
+      { tickers, count: tickers.length, timestamp: Date.now() },
+      { headers: { 'Cache-Control': 's-maxage=8, stale-while-revalidate=16' } }
+    );
   } catch (e) {
     console.error('[ticker]', e);
     return NextResponse.json({ error: 'Failed to fetch tickers', tickers: [] }, { status: 500 });

@@ -105,14 +105,21 @@ export async function GET(request: NextRequest) {
       ? allNews.filter((n: any) => n.category === categoryFilter).slice(0, requestedLimit)
       : allNews.slice(0, requestedLimit);
 
-    return NextResponse.json({
-      count: filtered.length,
-      totalFetched: allNews.length,
-      category: categoryFilter,
-      sources: {},
-      news: filtered,
-      fetchedAt: Date.now(),
-    });
+    return NextResponse.json(
+      {
+        count: filtered.length,
+        totalFetched: allNews.length,
+        category: categoryFilter,
+        sources: {},
+        news: filtered,
+        fetchedAt: Date.now(),
+      },
+      {
+        headers: {
+          'Cache-Control': 's-maxage=20, stale-while-revalidate=40',
+        },
+      }
+    );
   } catch (error) {
     console.error('News proxy error:', error);
     return NextResponse.json(

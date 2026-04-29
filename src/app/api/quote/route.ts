@@ -142,7 +142,10 @@ export async function GET(request: NextRequest) {
 
     const quotes = [...binanceQuotes, ...stockQuotes];
 
-    return NextResponse.json({ quotes, count: quotes.length });
+    return NextResponse.json(
+      { quotes, count: quotes.length },
+      { headers: { 'Cache-Control': 's-maxage=10, stale-while-revalidate=20' } }
+    );
   } catch (e) {
     console.error('[quote]', e);
     return NextResponse.json({ error: 'Failed to fetch quotes', quotes: [] }, { status: 500 });
