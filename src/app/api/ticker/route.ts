@@ -81,34 +81,31 @@ async function fetchCoinGeckoTicker(): Promise<TickerItem[]> {
   }
 }
 
-// Yahoo Finance bulk — tek istekte tüm semboller
+// FMP bulk — tek istekte tüm semboller
 async function fetchStocksTicker(symbols: string[]): Promise<TickerItem[]> {
   if (symbols.length === 0) return [];
 
-  try {
-    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(',')}`;
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      cache: 'no-store',
-      signal: AbortSignal.timeout(6000),
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      const results: any[] = data.quoteResponse?.result ?? [];
-      const items = results
-        .filter(item => item.regularMarketPrice > 0)
-        .map(item => ({
-          symbol: item.symbol,
-          price: item.regularMarketPrice,
-          changePercent: item.regularMarketChangePercent ?? 0,
-          name: item.symbol,
-          type: null as any,
-        }));
-      if (items.length > 0) return items;
+  const fmpKey = process.env.FMP_API_KEY;
+  if (fmpKey) {
+    try {
+      const url = `https://financialmodelingprep.com/stable/quote?symbol=${symbols.join(',')}&apikey=${fmpKey}`;
+      const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(6000) });
+      if (res.ok) {
+        const data: Array<{ symbol: string; price: number; changesPercentage: number }> = await res.json();
+        const items = data
+          .filter(item => item.price > 0)
+          .map(item => ({
+            symbol: item.symbol,
+            price: item.price,
+            changePercent: item.changesPercentage ?? 0,
+            name: item.symbol,
+            type: null as any,
+          }));
+        if (items.length > 0) return items;
+      }
+    } catch (e) {
+      console.error('[ticker/fmp]', e);
     }
-  } catch (e) {
-    console.error('[ticker/yahoo]', e);
   }
 
   // Fallback: Finnhub tek tek

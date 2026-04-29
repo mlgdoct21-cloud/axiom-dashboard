@@ -120,55 +120,64 @@ async function fetchCoinGeckoQuotes(symbols: string[]): Promise<Quote[]> {
   }
 }
 
-// Yahoo Finance bulk — tüm hisseler tek istekte
+// FMP bulk — tek istekte tüm semboller
 async function fetchStockQuotes(symbols: string[]): Promise<Quote[]> {
   if (symbols.length === 0) return [];
 
-  const yahooSymbols = symbols.map(s =>
+  const fmpSymbols = symbols.map(s =>
     s.startsWith('BIST:') ? s.replace('BIST:', '') + '.IS' : s
   );
 
-  try {
-    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${yahooSymbols.join(',')}`;
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      cache: 'no-store',
-      signal: AbortSignal.timeout(6000),
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      const results: any[] = data.quoteResponse?.result ?? [];
-      const quotes = results
-        .map((item, i) => ({
-          symbol: symbols[i] ?? item.symbol,
-          price: item.regularMarketPrice ?? 0,
-          change: item.regularMarketChange ?? 0,
-          changePercent: item.regularMarketChangePercent ?? 0,
-          high24h: item.regularMarketDayHigh,
-          low24h: item.regularMarketDayLow,
-          volume: item.regularMarketVolume,
-          timestamp: Date.now(),
-          source: 'yahoo' as const,
-        }))
-        .filter(q => q.price > 0);
-
-      if (quotes.length > 0) return quotes;
+  const fmpKey = process.env.FMP_API_KEY;
+  if (fmpKey) {
+    try {
+      const url = `https://financialmodelingprep.com/stable/quote?symbol=${fmpSymbols.join(',')}&apikey=${fmpKey}`;
+      const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(6000) });
+      if (res.ok) {
+        const data: Array<{
+          symbol: string;
+          price: number;
+          changesPercentage: number;
+          change: number;
+          dayLow: number;
+          dayHigh: number;
+          volume: number;
+        }> = await res.json();
+        const quotes = data
+          .filter(item => item.price > 0)
+          .map(item => {
+            const origSym = symbols.find(s =>
+              (s.startsWith('BIST:') ? s.replace('BIST:', '') + '.IS' : s) === item.symbol
+            ) ?? item.symbol;
+            return {
+              symbol: origSym,
+              price: item.price,
+              change: item.change ?? 0,
+              changePercent: item.changesPercentage ?? 0,
+              high24h: item.dayHigh,
+              low24h: item.dayLow,
+              volume: item.volume,
+              timestamp: Date.now(),
+              source: 'yahoo' as const,
+            };
+          });
+        if (quotes.length > 0) return quotes;
+      }
+    } catch (e) {
+      console.error('[quote/fmp]', e);
     }
-  } catch (e) {
-    console.error('[quote/yahoo]', e);
   }
 
   // Fallback: Finnhub tek tek
-  const apiKey = process.env.FINNHUB_API_KEY || process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
-  if (!apiKey) return [];
+  const finnhubKey = process.env.FINNHUB_API_KEY || process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
+  if (!finnhubKey) return [];
 
   const results = await Promise.all(
     symbols.map(async s => {
       const sym = s.startsWith('BIST:') ? s.replace('BIST:', '') + '.IS' : s;
       try {
         const res = await fetch(
-          `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${apiKey}`,
+          `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${finnhubKey}`,
           { cache: 'no-store', signal: AbortSignal.timeout(4000) }
         );
         if (!res.ok) return null;
