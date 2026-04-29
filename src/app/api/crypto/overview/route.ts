@@ -3,7 +3,6 @@ import { getCoinGeckoData } from '@/lib/crypto-coingecko';
 import { getCachedCryptoReport, setCachedCryptoReport } from '@/lib/crypto-cache';
 import { getOnChainHolders } from '@/lib/crypto-whales';
 import { getGitHubReleases } from '@/lib/crypto-roadmap';
-import { fetchWhitepaperContent } from '@/lib/crypto-whitepaper';
 
 const GEMINI_URL =
   'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
@@ -42,15 +41,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: `${symbol} için veri bulunamadı` }, { status: 404 });
   }
 
-  // Whitepaper content — fetched after coin resolves (needs whitepaper_url)
-  const whitepaperText = await fetchWhitepaperContent(symbol, coin.whitepaper_url);
-
   const circulatingPct = coin.total_supply
     ? Math.round((coin.circulating_supply / coin.total_supply) * 100)
     : 100;
 
   // ── Gemini prompt ──────────────────────────────────────────────────────────
-  const prompt = buildPrompt(symbol, coin, circulatingPct, onChainHolders, releases, whitepaperText);
+  // Whitepaper section: Gemini uses its own training knowledge + CoinGecko description
+  const prompt = buildPrompt(symbol, coin, circulatingPct, onChainHolders, releases, null);
 
   const geminiRes = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
     method: 'POST',
@@ -60,7 +57,7 @@ export async function GET(request: NextRequest) {
       generationConfig: {
         temperature: 0.2,
         responseMimeType: 'application/json',
-        maxOutputTokens: 8192,
+        maxOutputTokens: 4096,
         thinkingConfig: { thinkingBudget: 0 },
       },
     }),
