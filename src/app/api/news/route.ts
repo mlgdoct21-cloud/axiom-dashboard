@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Axiom backend base — server-only env var (NEXT_PUBLIC_ bake'lenir, runtime'da okunmaz)
-const BACKEND_URL =
-  process.env.BACKEND_API_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  'http://localhost:8000/api/v1';
+const RAILWAY_URL = 'https://vivacious-growth-production-4875.up.railway.app/api/v1';
 
 type NewsCategory = 'crypto' | 'stocks' | 'forex' | 'economy' | 'general';
 
@@ -69,9 +65,10 @@ export async function GET(request: NextRequest) {
   const beforeId = params.get('before_id'); // infinite scroll cursor
 
   // /news/feed = analizi tamamlanmış (analyzed=True) haberler, id DESC.
+  const backendUrl = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || RAILWAY_URL;
   const q = new URLSearchParams({ limit: String(fetchLimit) });
   if (beforeId) q.set('before_id', beforeId);
-  const targetUrl = `${BACKEND_URL}/news/feed?${q.toString()}`;
+  const targetUrl = `${backendUrl}/news/feed?${q.toString()}`;
 
   try {
     const res = await fetch(targetUrl, { cache: 'no-store' });
@@ -121,10 +118,9 @@ export async function GET(request: NextRequest) {
       { headers: { 'Cache-Control': cacheHeader } }
     );
   } catch (error) {
-    const errMsg = error instanceof Error ? error.message : String(error);
-    console.error('News proxy error:', errMsg, '| URL:', BACKEND_URL);
+    console.error('News proxy error:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch news from backend', detail: errMsg, url: BACKEND_URL.replace(/^https?:\/\//, '***://'), news: [] },
+      { error: 'Failed to fetch news from backend', news: [] },
       { status: 500 }
     );
   }

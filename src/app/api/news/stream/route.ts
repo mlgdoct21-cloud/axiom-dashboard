@@ -13,13 +13,11 @@ import { NextRequest } from 'next/server';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const BACKEND_URL =
-  process.env.BACKEND_API_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  'http://localhost:8000/api/v1';
+const RAILWAY_URL = 'https://vivacious-growth-production-4875.up.railway.app/api/v1';
 
 export async function GET(request: NextRequest) {
-  const upstream = `${BACKEND_URL}/news/stream`;
+  const backendUrl = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || RAILWAY_URL;
+  const upstream = `${backendUrl}/news/stream`;
 
   const controller = new AbortController();
   // Client abort → upstream abort (don't leave dangling socket).
