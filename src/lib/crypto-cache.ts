@@ -1,15 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-let supabase: ReturnType<typeof createClient> | null = null;
-
+// Read inside function — NEXT_PUBLIC_* vars can be empty strings when baked at build time
 function getSupabase() {
-  if (!supabase) {
-    supabase = createClient(supabaseUrl!, supabaseKey!);
-  }
-  return supabase;
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error('Supabase env vars missing');
+  return createClient(url, key);
 }
 
 export async function getCachedCryptoReport(
