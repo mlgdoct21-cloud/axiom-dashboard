@@ -79,7 +79,7 @@ async function fetchCoinGeckoQuotes(symbols: string[]): Promise<Quote[]> {
 
   try {
     const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${coinIds.join(',')}&order=market_cap_desc&sparkline=false`;
-    const res = await fetch(url, { next: { revalidate: 15 } });
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) {
       console.error('[quote/coingecko] status', res.status, await res.text());
       return [];
@@ -131,7 +131,7 @@ async function fetchFinnhubQuote(symbol: string): Promise<Quote | null> {
 
   try {
     const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(finnhubSymbol)}&token=${apiKey}`;
-    const res = await fetch(url, { next: { revalidate: 15 } });
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) return null;
     const q: {
       c?: number;
@@ -191,9 +191,15 @@ export async function GET(request: NextRequest) {
 
     const quotes = [...cryptoQuotes, ...stockQuotes];
 
+    // Don't cache empty/partial responses — avoids poisoning the CDN with bad data
+    const expectedCount = cryptoSymbols.length + stockSymbols.length;
+    const cacheHeader = quotes.length === expectedCount
+      ? 's-maxage=15, stale-while-revalidate=30'
+      : 'no-store, no-cache, must-revalidate';
+
     return NextResponse.json(
       { quotes, count: quotes.length },
-      { headers: { 'Cache-Control': 's-maxage=15, stale-while-revalidate=30' } }
+      { headers: { 'Cache-Control': cacheHeader } }
     );
   } catch (e) {
     console.error('[quote]', e);

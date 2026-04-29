@@ -71,10 +71,7 @@ export async function GET(request: NextRequest) {
   const targetUrl = `${BACKEND_URL}/news/feed?${q.toString()}`;
 
   try {
-    const res = await fetch(targetUrl, {
-      // Kısa cache + stale-while-revalidate efekti için revalidate.
-      next: { revalidate: 30 },
-    });
+    const res = await fetch(targetUrl, { cache: 'no-store' });
 
     if (!res.ok) {
       throw new Error(`Backend returned ${res.status}`);
@@ -105,6 +102,10 @@ export async function GET(request: NextRequest) {
       ? allNews.filter((n: any) => n.category === categoryFilter).slice(0, requestedLimit)
       : allNews.slice(0, requestedLimit);
 
+    const cacheHeader = filtered.length > 0
+      ? 's-maxage=20, stale-while-revalidate=40'
+      : 'no-store, no-cache, must-revalidate';
+
     return NextResponse.json(
       {
         count: filtered.length,
@@ -114,11 +115,7 @@ export async function GET(request: NextRequest) {
         news: filtered,
         fetchedAt: Date.now(),
       },
-      {
-        headers: {
-          'Cache-Control': 's-maxage=20, stale-while-revalidate=40',
-        },
-      }
+      { headers: { 'Cache-Control': cacheHeader } }
     );
   } catch (error) {
     console.error('News proxy error:', error);

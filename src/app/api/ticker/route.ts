@@ -56,7 +56,7 @@ const INDICES = ['^GSPC', '^IXIC'];
 async function fetchCoinGeckoTicker(): Promise<TickerItem[]> {
   try {
     const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${TOP_CRYPTO_IDS.join(',')}&order=market_cap_desc&sparkline=false`;
-    const res = await fetch(url, { next: { revalidate: 10 } });
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) {
       console.error('[ticker/coingecko] status', res.status);
       return [];
@@ -90,7 +90,7 @@ async function fetchFinnhubTicker(symbols: string[]): Promise<TickerItem[]> {
       symbols.map(async (sym) => {
         const res = await fetch(
           `https://finnhub.io/api/v1/quote?symbol=${sym}&token=${apiKey}`,
-          { next: { revalidate: 10 } }
+          { cache: 'no-store' }
         );
         if (!res.ok) return null;
         const q = await res.json();
@@ -132,9 +132,13 @@ export async function GET(request: NextRequest) {
       ...stocks,
     ];
 
+    const cacheHeader = tickers.length > 0
+      ? 's-maxage=10, stale-while-revalidate=20'
+      : 'no-store, no-cache, must-revalidate';
+
     return NextResponse.json(
       { tickers, count: tickers.length, timestamp: Date.now() },
-      { headers: { 'Cache-Control': 's-maxage=10, stale-while-revalidate=20' } }
+      { headers: { 'Cache-Control': cacheHeader } }
     );
   } catch (e) {
     console.error('[ticker]', e);
