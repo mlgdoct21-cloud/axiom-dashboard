@@ -8,51 +8,35 @@ function getSupabase() {
   return createClient(url, key);
 }
 
-export async function getCachedCryptoReport(
-  reportType: string,
-  symbol: string
-) {
-  let db: ReturnType<typeof createClient>;
-  try { db = getSupabase(); } catch (e) { console.error('[cache] getSupabase failed:', e); return null; }
-
+export async function getCachedCryptoReport(reportType: string, symbol: string) {
   try {
-    const { data, error } = await db
+    const db = getSupabase();
+    const { data, error } = await (db as any)
       .from('crypto_reports_cache')
       .select('report_data')
       .eq('report_type', reportType)
       .eq('symbol', symbol)
       .gt('expires_at', new Date().toISOString())
       .single();
-
-    if (error) { console.error('[cache] read error:', error.message, 'type:', reportType, 'symbol:', symbol); return null; }
-    if (!data) return null;
-    return (data as any).report_data;
-  } catch (error) {
-    console.error('[cache] read exception:', error);
+    if (error) { console.error('[cache] read:', error.message, reportType, symbol); return null; }
+    return data?.report_data ?? null;
+  } catch (e) {
+    console.error('[cache] read exception:', e);
     return null;
   }
 }
 
-export async function setCachedCryptoReport(
-  reportType: string,
-  symbol: string,
-  data: any
-) {
-  let db: ReturnType<typeof createClient>;
-  try { db = getSupabase(); } catch (e) { console.error('[cache] getSupabase failed:', e); return; }
-
+export async function setCachedCryptoReport(reportType: string, symbol: string, data: any) {
   try {
-    const { error } = await (db.from('crypto_reports_cache') as any).upsert(
-      {
-        report_type: reportType,
-        symbol,
-        report_data: data,
-        expires_at: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString()
-      },
-      { onConflict: 'symbol,report_type' }
-    );
-    if (error) console.error('[cache] write error:', error.message, 'type:', reportType, 'symbol:', symbol);
-  } catch (error) {
-    console.error('[cache] write exception:', error);
+    const db = getSupabase();
+    const { error } = await (db as any)
+      .from('crypto_reports_cache')
+      .upsert(
+        { report_type: reportType, symbol, report_data: data, expires_at: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString() },
+        { onConflict: 'symbol,report_type' }
+      );
+    if (error) console.error('[cache] write:', error.message, reportType, symbol);
+  } catch (e) {
+    console.error('[cache] write exception:', e);
   }
 }
