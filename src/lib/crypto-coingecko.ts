@@ -1,48 +1,81 @@
-// CoinGecko tokenomics & metrics
-export async function getCoinGeckoData(symbol: string) {
-  const coingeckoId = await mapSymbolToCoingeckoId(symbol);
-
-  try {
-    const response = await fetch(
-      `https://api.coingecko.com/api/v3/coins/${coingeckoId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=true`,
-      {
-        headers: { 'User-Agent': 'AXIOM/1.0' }
-      }
-    );
-
-    const data = await response.json();
-
-    return {
-      symbol: data.symbol.toUpperCase(),
-      current_price: data.market_data.current_price.usd,
-      market_cap: data.market_data.market_cap.usd,
-      total_volume: data.market_data.total_volume.usd,
-
-      // Tokenomics
-      circulating_supply: data.market_data.circulating_supply,
-      total_supply: data.market_data.total_supply,
-      max_supply: data.market_data.max_supply,
-
-      // Developer activity
-      commit_count_4_weeks: data.developer_data?.commit_count_4_weeks,
-
-      timestamp: new Date().toISOString()
-    };
-  } catch (error) {
-    console.error(`CoinGecko fetch failed for ${symbol}:`, error);
-    return null;
-  }
+export interface CoinGeckoData {
+  symbol: string;
+  name: string;
+  current_price: number;
+  price_change_24h: number;
+  price_change_7d: number;
+  market_cap: number;
+  market_cap_rank: number;
+  total_volume: number;
+  circulating_supply: number;
+  total_supply: number | null;
+  max_supply: number | null;
+  ath: number;
+  ath_change_percentage: number;
+  description: string;
+  categories: string[];
+  homepage: string | null;
+  whitepaper_url: string | null;
 }
 
-async function mapSymbolToCoingeckoId(symbol: string): Promise<string> {
-  const map: Record<string, string> = {
-    SOL: 'solana',
-    ARB: 'arbitrum',
-    ETH: 'ethereum',
-    BTC: 'bitcoin',
-    MATIC: 'matic-network',
-    // Add more...
-  };
+const ID_MAP: Record<string, string> = {
+  BTC:  'bitcoin',
+  ETH:  'ethereum',
+  SOL:  'solana',
+  ARB:  'arbitrum',
+  AVAX: 'avalanche-2',
+  ADA:  'cardano',
+  DOT:  'polkadot',
+  LINK: 'chainlink',
+  UNI:  'uniswap',
+  MATIC:'matic-network',
+  NEAR: 'near',
+  APT:  'aptos',
+  SUI:  'sui',
+  INJ:  'injective-protocol',
+};
 
-  return map[symbol.toUpperCase()] || symbol.toLowerCase();
+export function symbolToId(symbol: string): string {
+  return ID_MAP[symbol.toUpperCase()] ?? symbol.toLowerCase();
+}
+
+export async function getCoinGeckoData(symbol: string): Promise<CoinGeckoData | null> {
+  const id = symbolToId(symbol);
+
+  try {
+    const res = await fetch(
+      `https://api.coingecko.com/api/v3/coins/${id}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false`,
+      { headers: { 'User-Agent': 'AXIOM/1.0' }, next: { revalidate: 300 } }
+    );
+    if (!res.ok) return null;
+
+    const d = await res.json();
+    const md = d.market_data;
+
+    const rawDesc: string = d.description?.en ?? '';
+    const description = rawDesc.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 2000);
+
+    return {
+      symbol:                 symbol.toUpperCase(),
+      name:                   d.name ?? symbol,
+      current_price:          md.current_price?.usd ?? 0,
+      price_change_24h:       md.price_change_percentage_24h ?? 0,
+      price_change_7d:        md.price_change_percentage_7d ?? 0,
+      market_cap:             md.market_cap?.usd ?? 0,
+      market_cap_rank:        d.market_cap_rank ?? 0,
+      total_volume:           md.total_volume?.usd ?? 0,
+      circulating_supply:     md.circulating_supply ?? 0,
+      total_supply:           md.total_supply ?? null,
+      max_supply:             md.max_supply ?? null,
+      ath:                    md.ath?.usd ?? 0,
+      ath_change_percentage:  md.ath_change_percentage?.usd ?? 0,
+      description,
+      categories:             d.categories ?? [],
+      homepage:               d.links?.homepage?.[0] ?? null,
+      whitepaper_url:         d.links?.whitepaper ?? null,
+    };
+  } catch (err) {
+    console.error('[crypto-coingecko] fetch failed:', err);
+    return null;
+  }
 }

@@ -37,7 +37,8 @@ async function fetchSymbolPrices(symbols: string[]): Promise<PriceContext[]> {
 
   try {
     const params = new URLSearchParams({ symbols: symbols.join(',') });
-    const res = await fetch(`http://localhost:3000/api/quote?${params}`, {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+    const res = await fetch(`${baseUrl}/api/quote?${params}`, {
       next: { revalidate: 10 },
     });
     if (!res.ok) return [];
