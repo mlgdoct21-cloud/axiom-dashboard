@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Axiom backend base. Örn: https://vivacious-growth-production-4875.up.railway.app/api/v1
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+// Axiom backend base — server-only env var (NEXT_PUBLIC_ bake'lenir, runtime'da okunmaz)
+const BACKEND_URL =
+  process.env.BACKEND_API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://localhost:8000/api/v1';
 
 type NewsCategory = 'crypto' | 'stocks' | 'forex' | 'economy' | 'general';
 
