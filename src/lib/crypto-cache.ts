@@ -12,7 +12,8 @@ export async function getCachedCryptoReport(
   reportType: string,
   symbol: string
 ) {
-  const db = getSupabase();
+  let db: ReturnType<typeof createClient>;
+  try { db = getSupabase(); } catch (e) { console.error('[cache] getSupabase failed:', e); return null; }
 
   try {
     const { data, error } = await db
@@ -23,11 +24,11 @@ export async function getCachedCryptoReport(
       .gt('expires_at', new Date().toISOString())
       .single();
 
-    if (error || !data) return null;
-
+    if (error) { console.error('[cache] read error:', error.message, 'type:', reportType, 'symbol:', symbol); return null; }
+    if (!data) return null;
     return (data as any).report_data;
   } catch (error) {
-    console.error('Cache read error:', error);
+    console.error('[cache] read exception:', error);
     return null;
   }
 }
@@ -37,10 +38,11 @@ export async function setCachedCryptoReport(
   symbol: string,
   data: any
 ) {
-  const db = getSupabase();
+  let db: ReturnType<typeof createClient>;
+  try { db = getSupabase(); } catch (e) { console.error('[cache] getSupabase failed:', e); return; }
 
   try {
-    await (db.from('crypto_reports_cache') as any).upsert(
+    const { error } = await (db.from('crypto_reports_cache') as any).upsert(
       {
         report_type: reportType,
         symbol,
@@ -49,7 +51,8 @@ export async function setCachedCryptoReport(
       },
       { onConflict: 'symbol,report_type' }
     );
+    if (error) console.error('[cache] write error:', error.message, 'type:', reportType, 'symbol:', symbol);
   } catch (error) {
-    console.error('Cache write error:', error);
+    console.error('[cache] write exception:', error);
   }
 }
