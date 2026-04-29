@@ -81,44 +81,61 @@ async function fetchCoinGeckoTicker(): Promise<TickerItem[]> {
   }
 }
 
-async function fetchFinnhubTicker(symbols: string[]): Promise<TickerItem[]> {
-  const apiKey = process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
-  if (!apiKey) return [];
+// Yahoo Finance bulk — tek istekte tüm semboller
+async function fetchStocksTicker(symbols: string[]): Promise<TickerItem[]> {
+  if (symbols.length === 0) return [];
 
   try {
-    const results = await Promise.all(
-      symbols.map(async (sym) => {
-        const res = await fetch(
-          `https://finnhub.io/api/v1/quote?symbol=${sym}&token=${apiKey}`,
-          { cache: 'no-store' }
-        );
+    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(',')}`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(6000),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const results: any[] = data.quoteResponse?.result ?? [];
+      const items = results
+        .filter(item => item.regularMarketPrice > 0)
+        .map(item => ({
+          symbol: item.symbol,
+          price: item.regularMarketPrice,
+          changePercent: item.regularMarketChangePercent ?? 0,
+          name: item.symbol,
+          type: null as any,
+        }));
+      if (items.length > 0) return items;
+    }
+  } catch (e) {
+    console.error('[ticker/yahoo]', e);
+  }
+
+  // Fallback: Finnhub tek tek
+  const apiKey = process.env.FINNHUB_API_KEY || process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
+  if (!apiKey) return [];
+  const results = await Promise.all(
+    symbols.map(async sym => {
+      try {
+        const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${apiKey}`, { cache: 'no-store', signal: AbortSignal.timeout(4000) });
         if (!res.ok) return null;
         const q = await res.json();
         if (!q.c || q.c === 0) return null;
-        return {
-          symbol: sym,
-          price: q.c,
-          changePercent: q.dp ?? 0,
-          name: sym,
-          type: null,
-        };
-      })
-    );
-    return results.filter(Boolean) as any[];
-  } catch (e) {
-    console.error('[ticker/finnhub]', e);
-    return [];
-  }
+        return { symbol: sym, price: q.c, changePercent: q.dp ?? 0, name: sym, type: null };
+      } catch { return null; }
+    })
+  );
+  return results.filter(Boolean) as any[];
 }
 
 export async function GET(request: NextRequest) {
   try {
     const [cryptos, stocks, indices] = await Promise.all([
       fetchCoinGeckoTicker(),
-      fetchFinnhubTicker(MAG7).then(items =>
+      fetchStocksTicker(MAG7).then(items =>
         items.map(item => ({ ...item, type: 'stock' as const }))
       ),
-      fetchFinnhubTicker(INDICES).then(items =>
+      fetchStocksTicker(INDICES).then(items =>
         items.map(item => ({ ...item, type: 'index' as const }))
       ),
     ]);

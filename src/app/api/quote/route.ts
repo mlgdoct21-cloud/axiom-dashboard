@@ -120,48 +120,64 @@ async function fetchCoinGeckoQuotes(symbols: string[]): Promise<Quote[]> {
   }
 }
 
-async function fetchFinnhubQuote(symbol: string): Promise<Quote | null> {
-  const apiKey = process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
-  if (!apiKey) return null;
-
-  let finnhubSymbol = symbol;
-  if (symbol.startsWith('BIST:')) {
-    finnhubSymbol = symbol.replace('BIST:', '') + '.IS';
-  }
-
-  try {
-    const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(finnhubSymbol)}&token=${apiKey}`;
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) return null;
-    const q: {
-      c?: number;
-      d?: number;
-      dp?: number;
-      h?: number;
-      l?: number;
-    } = await res.json();
-
-    if (!q.c || q.c === 0) return null;
-
-    return {
-      symbol,
-      price: q.c,
-      change: q.d ?? 0,
-      changePercent: q.dp ?? 0,
-      high24h: q.h,
-      low24h: q.l,
-      timestamp: Date.now(),
-      source: 'yahoo',
-    };
-  } catch (e) {
-    console.error('[quote/finnhub]', symbol, e);
-    return null;
-  }
-}
-
+// Yahoo Finance bulk — tüm hisseler tek istekte
 async function fetchStockQuotes(symbols: string[]): Promise<Quote[]> {
   if (symbols.length === 0) return [];
-  const results = await Promise.all(symbols.map(s => fetchFinnhubQuote(s)));
+
+  const yahooSymbols = symbols.map(s =>
+    s.startsWith('BIST:') ? s.replace('BIST:', '') + '.IS' : s
+  );
+
+  try {
+    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${yahooSymbols.join(',')}`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(6000),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const results: any[] = data.quoteResponse?.result ?? [];
+      const quotes = results
+        .map((item, i) => ({
+          symbol: symbols[i] ?? item.symbol,
+          price: item.regularMarketPrice ?? 0,
+          change: item.regularMarketChange ?? 0,
+          changePercent: item.regularMarketChangePercent ?? 0,
+          high24h: item.regularMarketDayHigh,
+          low24h: item.regularMarketDayLow,
+          volume: item.regularMarketVolume,
+          timestamp: Date.now(),
+          source: 'yahoo' as const,
+        }))
+        .filter(q => q.price > 0);
+
+      if (quotes.length > 0) return quotes;
+    }
+  } catch (e) {
+    console.error('[quote/yahoo]', e);
+  }
+
+  // Fallback: Finnhub tek tek
+  const apiKey = process.env.FINNHUB_API_KEY || process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
+  if (!apiKey) return [];
+
+  const results = await Promise.all(
+    symbols.map(async s => {
+      const sym = s.startsWith('BIST:') ? s.replace('BIST:', '') + '.IS' : s;
+      try {
+        const res = await fetch(
+          `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${apiKey}`,
+          { cache: 'no-store', signal: AbortSignal.timeout(4000) }
+        );
+        if (!res.ok) return null;
+        const q = await res.json();
+        if (!q.c || q.c === 0) return null;
+        return { symbol: s, price: q.c, change: q.d ?? 0, changePercent: q.dp ?? 0, high24h: q.h, low24h: q.l, timestamp: Date.now(), source: 'yahoo' as const };
+      } catch { return null; }
+    })
+  );
   return results.filter((q): q is Quote => q !== null);
 }
 

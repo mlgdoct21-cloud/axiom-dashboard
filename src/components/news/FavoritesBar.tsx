@@ -124,40 +124,47 @@ export default function FavoritesBar({
   const prevPricesRef = useRef<Record<string, number>>({});
   const searchBoxRef = useRef<HTMLDivElement>(null);
 
-  // Anlik fiyat fetch
-  const loadQuotes = async () => {
-    if (favorites.length === 0) {
-      setQuotes({});
-      return;
-    }
-    try {
-      const symbolsParam = favorites.join(',');
-      const res = await fetch(`/api/quote?symbols=${encodeURIComponent(symbolsParam)}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      const newQuotes: Record<string, Quote> = {};
-      const nowPulse = new Set<string>();
-
-      (data.quotes as Quote[]).forEach(q => {
-        newQuotes[q.symbol] = q;
-        const prev = prevPricesRef.current[q.symbol];
-        if (prev !== undefined && prev !== q.price) {
-          nowPulse.add(q.symbol);
-        }
+  // Gelen quote'ları state'e merge et (crypto önce gelir, hisse sonra)
+  const applyQuotes = (incoming: Quote[]) => {
+    if (incoming.length === 0) return;
+    const nowPulse = new Set<string>();
+    setQuotes(prev => {
+      const next = { ...prev };
+      incoming.forEach(q => {
+        next[q.symbol] = q;
+        const old = prevPricesRef.current[q.symbol];
+        if (old !== undefined && old !== q.price) nowPulse.add(q.symbol);
         prevPricesRef.current[q.symbol] = q.price;
       });
-
-      setQuotes(newQuotes);
+      return next;
+    });
+    setLastUpdate(Date.now());
+    if (nowPulse.size > 0) {
       setPulsing(nowPulse);
-      setLastUpdate(Date.now());
-
-      // Pulse'u 500ms sonra temizle
-      if (nowPulse.size > 0) {
-        setTimeout(() => setPulsing(new Set()), 600);
-      }
-    } catch (e) {
-      console.error('Quote fetch error:', e);
+      setTimeout(() => setPulsing(new Set()), 600);
     }
+  };
+
+  // Anlik fiyat fetch — crypto ve hisse ayrı, crypto önce render olur
+  const loadQuotes = async () => {
+    if (favorites.length === 0) { setQuotes({}); return; }
+
+    const cryptoSyms = favorites.filter(s => s.startsWith('BINANCE:') || s.startsWith('COINBASE:'));
+    const stockSyms  = favorites.filter(s => !s.startsWith('BINANCE:') && !s.startsWith('COINBASE:'));
+
+    const fetchGroup = async (syms: string[]) => {
+      if (syms.length === 0) return;
+      try {
+        const res = await fetch(`/api/quote?symbols=${encodeURIComponent(syms.join(','))}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        applyQuotes(data.quotes as Quote[]);
+      } catch (e) { console.error('Quote fetch error:', e); }
+    };
+
+    // Crypto ve hisse paralel başlar; crypto ~500ms'de gelince anında render olur
+    fetchGroup(cryptoSyms);
+    fetchGroup(stockSyms);
   };
 
   // Sparkline verisi (ilk yuklemede cek, sonra 5dk'da bir)
