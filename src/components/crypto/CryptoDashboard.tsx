@@ -377,6 +377,32 @@ export default function CryptoDashboard({ symbol }: { symbol: string }) {
   const [error, setError]     = useState<string | null>(null);
   const [fetched, setFetched] = useState(false);
 
+  // Whitepaper full modal
+  const [wpOpen, setWpOpen]       = useState(false);
+  const [wpLoading, setWpLoading] = useState(false);
+  const [wpContent, setWpContent] = useState<string | null>(null);
+  const [wpError, setWpError]     = useState<string | null>(null);
+
+  async function loadFullWhitepaper() {
+    if (wpContent) { setWpOpen(true); return; }
+    setWpOpen(true);
+    setWpLoading(true);
+    setWpError(null);
+    try {
+      const res  = await fetch(`/api/crypto/whitepaper-full?symbol=${symbol}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+      setWpContent(json.content);
+    } catch (e: any) {
+      setWpError(e?.message ?? 'Whitepaper verisi alınamadı');
+    } finally {
+      setWpLoading(false);
+    }
+  }
+
+  // Symbol değişince whitepaper state'i sıfırla
+  useEffect(() => { setWpContent(null); setWpError(null); }, [symbol]);
+
   useEffect(() => { setData(null); setError(null); setFetched(false); }, [symbol]);
 
   const load = async (force = false) => {
@@ -584,6 +610,18 @@ export default function CryptoDashboard({ symbol }: { symbol: string }) {
               </ul>
             </div>
           )}
+
+          {/* Full whitepaper button */}
+          <div className="pt-1 flex justify-end">
+            <button
+              onClick={loadFullWhitepaper}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold
+                bg-[#4fc3f7]/8 border border-[#4fc3f7]/30 text-[#4fc3f7]
+                hover:bg-[#4fc3f7]/15 hover:border-[#4fc3f7]/60 transition-all"
+            >
+              📄 Tamamını Türkçe Oku
+            </button>
+          </div>
         </div>
       </Section>
 
@@ -607,6 +645,107 @@ export default function CryptoDashboard({ symbol }: { symbol: string }) {
           <RoadmapTimeline {...data.roadmap} />
         </div>
       </Section>
+
+      {/* ═══════════════════ WHITEPAPER MODAL ═══════════════════ */}
+      {wpOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16
+            bg-black/70 backdrop-blur-sm"
+          onClick={() => setWpOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-2xl max-h-[80vh] flex flex-col
+              bg-[#0d0d1a] border border-[#2a2a3e] rounded-2xl shadow-2xl overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#1e1e38] shrink-0">
+              <div>
+                <div className="text-sm font-bold text-[#e0e0f0]">
+                  📄 {data.name} — Whitepaper Türkçe
+                </div>
+                <div className="text-[10px] text-[#444] mt-0.5">
+                  Orijinal whitepaper Gemini tarafından Türkçeye çevrildi
+                </div>
+              </div>
+              <button
+                onClick={() => setWpOpen(false)}
+                className="text-[#555] hover:text-[#e0e0f0] text-xl transition leading-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal body */}
+            <div className="overflow-y-auto flex-1 px-5 py-4">
+              {wpLoading && (
+                <div className="flex flex-col items-center gap-4 py-12 text-center">
+                  <svg className="w-8 h-8 text-[#4fc3f7] animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <div className="text-sm text-[#666]">
+                    Whitepaper çevriliyor<br />
+                    <span className="text-xs text-[#444]">~10-15 saniye sürebilir</span>
+                  </div>
+                </div>
+              )}
+
+              {wpError && !wpLoading && (
+                <div className="flex flex-col items-center gap-3 py-12 text-center">
+                  <div className="text-2xl">⚠️</div>
+                  <div className="text-sm text-[#ff4757]">{wpError}</div>
+                  <button
+                    onClick={() => { setWpContent(null); loadFullWhitepaper(); }}
+                    className="px-3 py-1.5 rounded text-xs bg-[#ff4757]/10 border border-[#ff4757]/30
+                      text-[#ff4757] hover:bg-[#ff4757]/20 transition"
+                  >
+                    Tekrar Dene
+                  </button>
+                </div>
+              )}
+
+              {wpContent && !wpLoading && (
+                <div className="prose prose-sm prose-invert max-w-none">
+                  {wpContent.split('\n').map((line, i) => {
+                    if (!line.trim()) return <div key={i} className="h-2" />;
+                    if (line.startsWith('## ') || line.startsWith('# ')) {
+                      return (
+                        <h3 key={i} className="text-sm font-bold text-[#4fc3f7] mt-5 mb-2 pb-1
+                          border-b border-[#1e1e38]">
+                          {line.replace(/^#{1,3}\s+/, '')}
+                        </h3>
+                      );
+                    }
+                    if (line.startsWith('⚡')) {
+                      return (
+                        <p key={i} className="text-sm text-[#fbbf24] leading-relaxed my-1.5 pl-2
+                          border-l-2 border-[#fbbf24]/40">
+                          {line}
+                        </p>
+                      );
+                    }
+                    if (line.startsWith('- ') || line.startsWith('* ')) {
+                      return (
+                        <p key={i} className="text-sm text-[#c0c0d0] leading-relaxed my-1 pl-3
+                          before:content-['•'] before:text-[#4fc3f7] before:mr-2">
+                          {line.replace(/^[-*]\s+/, '')}
+                        </p>
+                      );
+                    }
+                    return (
+                      <p key={i} className="text-sm text-[#c0c0d0] leading-relaxed my-1.5">
+                        {line}
+                      </p>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ═══════════════════ BALINALAR ═══════════════════ */}
       <Section icon="🐋" title="Balina Takibi — Büyük Oyuncular"

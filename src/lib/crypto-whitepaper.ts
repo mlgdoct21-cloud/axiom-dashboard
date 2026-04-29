@@ -1,5 +1,5 @@
 const FETCH_TIMEOUT_MS = 8000;
-const MAX_CONTENT_CHARS = 4000;
+const DEFAULT_MAX_CHARS = 4000;
 
 // Prefer GitHub raw markdown for known projects (clean, no HTML noise)
 const GITHUB_WP: Record<string, string> = {
@@ -26,7 +26,7 @@ async function fetchWithTimeout(url: string): Promise<Response> {
   }
 }
 
-function extractFromHtml(html: string): string {
+function extractFromHtml(html: string, maxChars: number): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
@@ -37,10 +37,10 @@ function extractFromHtml(html: string): string {
     .replace(/&[a-z#0-9]+;/gi, ' ')
     .replace(/\s{2,}/g, ' ')
     .trim()
-    .slice(0, MAX_CONTENT_CHARS);
+    .slice(0, maxChars);
 }
 
-function extractFromMarkdown(md: string): string {
+function extractFromMarkdown(md: string, maxChars: number): string {
   return md
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/`[^`]+`/g, ' ')
@@ -50,16 +50,16 @@ function extractFromMarkdown(md: string): string {
     .replace(/[*_~]{1,2}([^*_~]+)[*_~]{1,2}/g, '$1')
     .replace(/\s{2,}/g, ' ')
     .trim()
-    .slice(0, MAX_CONTENT_CHARS);
+    .slice(0, maxChars);
 }
 
 // Rough PDF text extraction — reads visible ASCII runs from raw bytes
-function extractFromPdfBytes(buffer: ArrayBuffer): string {
+function extractFromPdfBytes(buffer: ArrayBuffer, maxChars: number): string {
   const bytes = new Uint8Array(buffer);
   const chunks: string[] = [];
   let current = '';
 
-  for (let i = 0; i < bytes.length && chunks.join(' ').length < MAX_CONTENT_CHARS * 2; i++) {
+  for (let i = 0; i < bytes.length && chunks.join(' ').length < maxChars * 2; i++) {
     const ch = bytes[i];
     if (ch >= 32 && ch <= 126) {
       current += String.fromCharCode(ch);
@@ -78,12 +78,13 @@ function extractFromPdfBytes(buffer: ArrayBuffer): string {
     .trim();
 
   const alphabetic = (words.match(/[a-zA-Z]/g) ?? []).length;
-  return alphabetic > 200 ? words.slice(0, MAX_CONTENT_CHARS) : '';
+  return alphabetic > 200 ? words.slice(0, maxChars) : '';
 }
 
 export async function fetchWhitepaperContent(
   symbol: string,
   coingeckoUrl: string | null,
+  maxChars = DEFAULT_MAX_CHARS,
 ): Promise<string | null> {
   const upper = symbol.toUpperCase();
   const urls: string[] = [];
@@ -101,9 +102,8 @@ export async function fetchWhitepaperContent(
       const ct = res.headers.get('content-type') ?? '';
 
       if (ct.includes('application/pdf') || url.toLowerCase().endsWith('.pdf')) {
-        // For PDF we need ArrayBuffer
         const buf = await res.arrayBuffer();
-        const text = extractFromPdfBytes(buf);
+        const text = extractFromPdfBytes(buf, maxChars);
         if (text.length > 200) return text;
         continue;
       }
@@ -111,13 +111,12 @@ export async function fetchWhitepaperContent(
       const text = await res.text();
 
       if (url.endsWith('.md') || ct.includes('text/plain')) {
-        const extracted = extractFromMarkdown(text);
+        const extracted = extractFromMarkdown(text, maxChars);
         if (extracted.length > 100) return extracted;
         continue;
       }
 
-      // Default: treat as HTML
-      const extracted = extractFromHtml(text);
+      const extracted = extractFromHtml(text, maxChars);
       if (extracted.length > 100) return extracted;
     } catch {
       // Timeout or network error — try next URL
