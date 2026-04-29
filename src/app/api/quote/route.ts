@@ -178,7 +178,7 @@ async function fetchStockQuotes(symbols: string[]): Promise<Quote[]> {
       } catch { return null; }
     })
   );
-  return results.filter((q): q is Quote => q !== null);
+  return results.filter((q): q is NonNullable<typeof q> => q !== null) as Quote[];
 }
 
 export async function GET(request: NextRequest) {
