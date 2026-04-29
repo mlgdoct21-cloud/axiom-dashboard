@@ -121,9 +121,10 @@ export async function GET(request: NextRequest) {
       { headers: { 'Cache-Control': cacheHeader } }
     );
   } catch (error) {
-    console.error('News proxy error:', error);
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error('News proxy error:', errMsg, '| URL:', BACKEND_URL);
     return NextResponse.json(
-      { error: 'Failed to fetch news from backend', news: [] },
+      { error: 'Failed to fetch news from backend', detail: errMsg, url: BACKEND_URL.replace(/^https?:\/\//, '***://'), news: [] },
       { status: 500 }
     );
   }
