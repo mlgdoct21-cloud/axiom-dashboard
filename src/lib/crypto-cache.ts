@@ -1,10 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Read inside function — NEXT_PUBLIC_* vars can be empty strings when baked at build time
+// URL is not a secret — NEXT_PUBLIC_* vars are inlined empty when build-time value was absent
+const SUPABASE_URL_FALLBACK = 'https://enpaxcwxjuripymboahm.supabase.co';
+
 function getSupabase() {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || SUPABASE_URL_FALLBACK;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error('Supabase env vars missing');
+  if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY missing');
   return createClient(url, key);
 }
 
