@@ -120,59 +120,50 @@ async function fetchCoinGeckoQuotes(symbols: string[]): Promise<Quote[]> {
   }
 }
 
-// FMP bulk — tek istekte tüm semboller
+// FMP parallel single-symbol calls (stable API, bulk param unsupported)
 async function fetchStockQuotes(symbols: string[]): Promise<Quote[]> {
   if (symbols.length === 0) return [];
 
-  const fmpSymbols = symbols.map(s =>
-    s.startsWith('BIST:') ? s.replace('BIST:', '') + '.IS' : s
-  );
-
   const fmpKey = process.env.FMP_API_KEY;
   if (fmpKey) {
-    try {
-      const url = `https://financialmodelingprep.com/stable/quote?symbol=${fmpSymbols.join(',')}&apikey=${fmpKey}`;
-      const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(6000) });
-      if (res.ok) {
-        const data: Array<{
-          symbol: string;
-          price: number;
-          changesPercentage: number;
-          change: number;
-          dayLow: number;
-          dayHigh: number;
-          volume: number;
-        }> = await res.json();
-        const quotes = data
-          .filter(item => item.price > 0)
-          .map(item => {
-            const origSym = symbols.find(s =>
-              (s.startsWith('BIST:') ? s.replace('BIST:', '') + '.IS' : s) === item.symbol
-            ) ?? item.symbol;
-            return {
-              symbol: origSym,
-              price: item.price,
-              change: item.change ?? 0,
-              changePercent: item.changesPercentage ?? 0,
-              high24h: item.dayHigh,
-              low24h: item.dayLow,
-              volume: item.volume,
-              timestamp: Date.now(),
-              source: 'yahoo' as const,
-            };
-          });
-        if (quotes.length > 0) return quotes;
-      }
-    } catch (e) {
-      console.error('[quote/fmp]', e);
-    }
+    const results = await Promise.all(
+      symbols.map(async s => {
+        const sym = s.startsWith('BIST:') ? s.replace('BIST:', '') + '.IS' : s;
+        try {
+          const res = await fetch(
+            `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(sym)}&apikey=${fmpKey}`,
+            { cache: 'no-store', signal: AbortSignal.timeout(6000) }
+          );
+          if (!res.ok) return null;
+          const data: Array<{
+            symbol: string; price: number; changePercentage: number;
+            change: number; dayLow: number; dayHigh: number; volume: number;
+          }> = await res.json();
+          const item = data[0];
+          if (!item || item.price <= 0) return null;
+          return {
+            symbol: s,
+            price: item.price,
+            change: item.change ?? 0,
+            changePercent: item.changePercentage ?? 0,
+            high24h: item.dayHigh,
+            low24h: item.dayLow,
+            volume: item.volume,
+            timestamp: Date.now(),
+            source: 'yahoo' as const,
+          };
+        } catch { return null; }
+      })
+    );
+    const fmpQuotes = results.filter((q): q is NonNullable<typeof q> => q !== null) as Quote[];
+    if (fmpQuotes.length > 0) return fmpQuotes;
   }
 
   // Fallback: Finnhub tek tek
   const finnhubKey = process.env.FINNHUB_API_KEY || process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
   if (!finnhubKey) return [];
 
-  const results = await Promise.all(
+  const results2 = await Promise.all(
     symbols.map(async s => {
       const sym = s.startsWith('BIST:') ? s.replace('BIST:', '') + '.IS' : s;
       try {
@@ -187,7 +178,7 @@ async function fetchStockQuotes(symbols: string[]): Promise<Quote[]> {
       } catch { return null; }
     })
   );
-  return results.filter((q): q is NonNullable<typeof q> => q !== null) as Quote[];
+  return results2.filter((q): q is NonNullable<typeof q> => q !== null) as Quote[];
 }
 
 export async function GET(request: NextRequest) {

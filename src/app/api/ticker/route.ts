@@ -81,37 +81,35 @@ async function fetchCoinGeckoTicker(): Promise<TickerItem[]> {
   }
 }
 
-// FMP bulk — tek istekte tüm semboller
+// FMP parallel single-symbol calls (stable API)
 async function fetchStocksTicker(symbols: string[]): Promise<TickerItem[]> {
   if (symbols.length === 0) return [];
 
   const fmpKey = process.env.FMP_API_KEY;
   if (fmpKey) {
-    try {
-      const url = `https://financialmodelingprep.com/stable/quote?symbol=${symbols.join(',')}&apikey=${fmpKey}`;
-      const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(6000) });
-      if (res.ok) {
-        const data: Array<{ symbol: string; price: number; changesPercentage: number }> = await res.json();
-        const items = data
-          .filter(item => item.price > 0)
-          .map(item => ({
-            symbol: item.symbol,
-            price: item.price,
-            changePercent: item.changesPercentage ?? 0,
-            name: item.symbol,
-            type: null as any,
-          }));
-        if (items.length > 0) return items;
-      }
-    } catch (e) {
-      console.error('[ticker/fmp]', e);
-    }
+    const results = await Promise.all(
+      symbols.map(async sym => {
+        try {
+          const res = await fetch(
+            `https://financialmodelingprep.com/stable/quote?symbol=${encodeURIComponent(sym)}&apikey=${fmpKey}`,
+            { cache: 'no-store', signal: AbortSignal.timeout(6000) }
+          );
+          if (!res.ok) return null;
+          const data: Array<{ symbol: string; price: number; changePercentage: number }> = await res.json();
+          const item = data[0];
+          if (!item || item.price <= 0) return null;
+          return { symbol: item.symbol, price: item.price, changePercent: item.changePercentage ?? 0, name: item.symbol, type: null as any };
+        } catch { return null; }
+      })
+    );
+    const fmpItems = results.filter(Boolean) as TickerItem[];
+    if (fmpItems.length > 0) return fmpItems;
   }
 
   // Fallback: Finnhub tek tek
   const apiKey = process.env.FINNHUB_API_KEY || process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
   if (!apiKey) return [];
-  const results = await Promise.all(
+  const fallback = await Promise.all(
     symbols.map(async sym => {
       try {
         const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${apiKey}`, { cache: 'no-store', signal: AbortSignal.timeout(4000) });
@@ -122,7 +120,7 @@ async function fetchStocksTicker(symbols: string[]): Promise<TickerItem[]> {
       } catch { return null; }
     })
   );
-  return results.filter(Boolean) as any[];
+  return fallback.filter(Boolean) as any[];
 }
 
 export async function GET(request: NextRequest) {
