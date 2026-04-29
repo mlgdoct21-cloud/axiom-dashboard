@@ -3,8 +3,9 @@
   "configurations": [
     {
       "name": "axiom-dashboard",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["/Users/mehmetgulec/Documents/AXIOM/axiom-dashboard/node_modules/.bin/next", "dev"],
+      "cwd": "/Users/mehmetgulec/Documents/AXIOM/axiom-dashboard",
       "port": 3000
     }
   ]
