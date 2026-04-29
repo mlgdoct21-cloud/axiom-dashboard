@@ -15,6 +15,15 @@ function fmtNum(n: number): string {
 }
 
 export async function GET(request: NextRequest) {
+  try {
+    return await handleOverview(request);
+  } catch (e: any) {
+    console.error('[crypto/overview] unhandled:', e?.message ?? e);
+    return NextResponse.json({ error: 'Sunucu hatası: ' + (e?.message ?? 'bilinmiyor') }, { status: 500 });
+  }
+}
+
+async function handleOverview(request: NextRequest) {
   const symbol = request.nextUrl.searchParams.get('symbol')?.toUpperCase();
   const force  = request.nextUrl.searchParams.get('force') === '1';
 
@@ -22,9 +31,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'symbol gerekli' }, { status: 400 });
   }
 
+  // Cache read inside try/catch — Supabase failures should not crash the route
   if (!force) {
-    const cached = await getCachedCryptoReport('overview_v3', symbol);
-    if (cached) return NextResponse.json({ ...cached, cached: true });
+    try {
+      const cached = await getCachedCryptoReport('overview_v3', symbol);
+      if (cached) return NextResponse.json({ ...cached, cached: true });
+    } catch (e) {
+      console.error('[crypto/overview] cache read failed:', e);
+      // continue without cache
+    }
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
@@ -57,7 +72,7 @@ export async function GET(request: NextRequest) {
       generationConfig: {
         temperature: 0.2,
         responseMimeType: 'application/json',
-        maxOutputTokens: 4096,
+        maxOutputTokens: 6144,
         thinkingConfig: { thinkingBudget: 0 },
       },
     }),
@@ -117,7 +132,11 @@ export async function GET(request: NextRequest) {
     cached: false,
   };
 
-  await setCachedCryptoReport('overview_v3', symbol, result);
+  try {
+    await setCachedCryptoReport('overview_v3', symbol, result);
+  } catch (e) {
+    console.error('[crypto/overview] cache write failed:', e);
+  }
   return NextResponse.json(result);
 }
 
