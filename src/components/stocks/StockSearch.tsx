@@ -8,6 +8,7 @@ interface SearchResult {
   name: string;
   type: string;
   displaySymbol: string;
+  market?: 'US' | 'TR';
 }
 
 interface StockSearchProps {
@@ -81,7 +82,7 @@ export default function StockSearch({ locale, onSelect }: StockSearchProps) {
       <div className="relative">
         <input
           type="text"
-          placeholder={locale === 'tr' ? 'Hisse ara (ör: AAPL)' : 'Search stocks (e.g., AAPL)'}
+          placeholder={locale === 'tr' ? 'Hisse ara (ör: AAPL, GARAN)' : 'Search stocks (e.g., AAPL, GARAN)'}
           value={query}
           onChange={e => setQuery(e.target.value.toUpperCase())}
           onFocus={() => query && setShowDropdown(true)}
@@ -97,21 +98,35 @@ export default function StockSearch({ locale, onSelect }: StockSearchProps) {
       {/* Dropdown Results */}
       {showDropdown && results.length > 0 && (
         <div className="absolute top-full left-0 right-0 mt-2 bg-[#1a1a2e] border border-[#2a2a3e] rounded-lg shadow-xl z-50 overflow-hidden">
-          {results.map(result => (
-            <button
-              key={result.symbol}
-              onClick={() => handleSelect(result.symbol)}
-              className="w-full px-4 py-2.5 text-left hover:bg-[#2a2a3e] transition border-b border-[#2a2a3e] last:border-b-0 flex items-center justify-between"
-            >
-              <div className="min-w-0">
-                <div className="font-semibold text-[#4fc3f7]">{result.symbol}</div>
-                <div className="text-xs text-[#8888a0] truncate">{result.name}</div>
-              </div>
-              <span className="ml-2 text-[10px] text-[#666680] whitespace-nowrap">
-                {result.type}
-              </span>
-            </button>
-          ))}
+          {results.map(result => {
+            const isTR = result.market === 'TR' || result.type === 'BIST';
+            return (
+              <button
+                key={`${result.market || 'US'}-${result.symbol}`}
+                onClick={() => handleSelect(result.symbol)}
+                className="w-full px-4 py-2.5 text-left hover:bg-[#2a2a3e] transition border-b border-[#2a2a3e] last:border-b-0 flex items-center justify-between"
+              >
+                <div className="min-w-0">
+                  <div className="font-semibold text-[#4fc3f7] flex items-center gap-2">
+                    {result.symbol}
+                    <span
+                      className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${
+                        isTR
+                          ? 'bg-[#e30a17]/20 text-[#ff6b6b] border border-[#e30a17]/40'
+                          : 'bg-[#1f4e79]/20 text-[#4fc3f7] border border-[#1f4e79]/40'
+                      }`}
+                    >
+                      {isTR ? 'BIST' : 'US'}
+                    </span>
+                  </div>
+                  <div className="text-xs text-[#8888a0] truncate">{result.name}</div>
+                </div>
+                <span className="ml-2 text-[10px] text-[#666680] whitespace-nowrap">
+                  {result.type}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
 

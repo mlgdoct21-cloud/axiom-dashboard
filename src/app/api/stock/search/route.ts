@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { searchBISTSymbols } from '@/lib/bist-symbols';
+import { searchBISTYahoo } from '@/lib/bist-detect-server';
 
 /**
  * Stock Symbol Search
- * GET /api/stock/search?q=AAPL
- *
- * Uses Finnhub /stock/symbol endpoint for US & TR symbols
+ * GET /api/stock/search?q=AAPL  → Finnhub (US)
+ * GET /api/stock/search?q=GAR   → BIST (local list) + Finnhub
  */
 
 interface FinnhubSymbol {
@@ -45,6 +46,7 @@ async function searchFinnhub(query: string): Promise<any[]> {
         name: r.description,
         displaySymbol: r.displaySymbol,
         type: r.type,
+        market: 'US' as const,
       }));
   } catch (e) {
     console.error('[stock/search]', e);
@@ -60,7 +62,25 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const results = await searchFinnhub(query);
+    // 1) Instant BIST hits from our local popular list (no network)
+    const localBist = searchBISTSymbols(query, 5);
+    // 2) Live Yahoo search (full BIST coverage) + Finnhub (US) in parallel
+    const [yahooBist, usResults] = await Promise.all([
+      searchBISTYahoo(query, 8),
+      searchFinnhub(query),
+    ]);
+
+    // Merge BIST sources, dedupe by symbol — local first (faster, branded names)
+    const seen = new Set<string>();
+    const bistMerged: typeof localBist = [];
+    for (const r of [...localBist, ...yahooBist]) {
+      if (seen.has(r.symbol)) continue;
+      seen.add(r.symbol);
+      bistMerged.push(r);
+    }
+
+    // Final: BIST first (more relevant for Turkish users), then US
+    const results = [...bistMerged, ...usResults].slice(0, 14);
 
     return NextResponse.json({
       results,

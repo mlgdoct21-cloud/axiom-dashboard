@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import NewsModal from './NewsModal';
-import PriceChart from '@/components/charts/PriceChart';
 import AxiomDigestEmptyState from './AxiomDigestEmptyState';
 import type { NewsItem } from '@/components/tabs/NewsTab';
 import type { NewsVote } from '@/lib/news-storage';
@@ -61,7 +60,6 @@ export default function NewsDetail({
 }: NewsDetailProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [priceSnapshots, setPriceSnapshots] = useState<Record<string, PriceSnapshot>>({});
-  const [activeChartSymbol, setActiveChartSymbol] = useState<string | null>(null);
 
   // On-demand fallback state (used when backend SSE is slow / dropped)
   const [localSummary, setLocalSummary] = useState('');
@@ -123,15 +121,6 @@ export default function NewsDetail({
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item?.id, item?.analyzed]);
-
-  // Secili haber degisince aktif chart'i otomatik ilk sembole al
-  useEffect(() => {
-    if (item?.symbols && item.symbols.length > 0) {
-      setActiveChartSymbol(item.symbols[0]);
-    } else {
-      setActiveChartSymbol(null);
-    }
-  }, [item?.id, item?.symbols]);
 
 
   // Price snapshots for mentioned symbols — /api/quote (anlik + 24h %)
@@ -217,17 +206,10 @@ export default function NewsDetail({
                 {item.symbols.slice(0, 5).map(sym => {
                   const snapshot = priceSnapshots[sym];
                   const isFav = favorites.includes(sym);
-                  const isActive = activeChartSymbol === sym;
                   return (
-                    <button
+                    <div
                       key={sym}
-                      onClick={() => setActiveChartSymbol(sym)}
-                      className={`flex items-center gap-2 px-2.5 py-1.5 rounded transition group ${
-                        isActive
-                          ? 'bg-[#1e2a4a] border border-[#4fc3f7] shadow-[0_0_0_1px_#4fc3f7]'
-                          : 'bg-[#1a1a2e] border border-[#2a2a3e] hover:border-[#4fc3f7]'
-                      }`}
-                      title={locale === 'tr' ? 'Grafigi goster' : 'Show chart'}
+                      className="flex items-center gap-2 px-2.5 py-1.5 rounded transition group bg-[#1a1a2e] border border-[#2a2a3e]"
                     >
                       <span className="font-mono text-[11px] text-[#ff9800] font-semibold">
                         {displaySymbol(sym)}
@@ -267,29 +249,11 @@ export default function NewsDetail({
                         </span>
                       )}
                       {isFav && <span className="text-[10px] text-[#ff9800]">⭐</span>}
-                    </button>
+                    </div>
                   );
                 })}
               </div>
             </div>
-
-            {/* Live Mini Chart — anlık mum grafigi */}
-            {activeChartSymbol && (
-              <div className="px-4 py-3 border-t border-[#2a2a3e]">
-                <div className="text-[10px] text-[#555570] uppercase mb-2 tracking-wider">
-                  {locale === 'tr' ? 'Anlık Grafik' : 'Live Chart'} — {displaySymbol(activeChartSymbol)}
-                </div>
-                <div className="h-48 rounded bg-[#141425] border border-[#2a2a3e]">
-                  <PriceChart
-                    embedded
-                    symbol={activeChartSymbol}
-                    resolution="60"
-                    locale={locale}
-                    height={192}
-                  />
-                </div>
-              </div>
-            )}
           </div>
         )}
 

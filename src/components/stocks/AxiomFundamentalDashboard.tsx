@@ -98,6 +98,7 @@ export interface AxiomAnalysis {
 interface Props {
   symbol: string;
   currentPrice: number;
+  currencySymbol?: string; // '$' (US, default) or '₺' (BIST)
   analysis?: AxiomAnalysis;
   corporate?: CorporateIntelligence;
   isLoading?: boolean;
@@ -238,11 +239,13 @@ function Section({ title, subtitle, children, defaultOpen = true }: {
 export default function AxiomFundamentalDashboard({
   symbol,
   currentPrice,
+  currencySymbol = '$',
   analysis,
   corporate,
   isLoading,
   error,
 }: Props) {
+  const cur = currencySymbol; // local alias for template literals
 
   if (isLoading) {
     return (
@@ -280,8 +283,14 @@ export default function AxiomFundamentalDashboard({
   const { fundamental: wF, macro: wM, technical: wT } = analysis.weights;
   const formula = `${analysis.weightedScore.toFixed(1)} = ${wF.toFixed(2)}×${analysis.fundamentalScore} + ${wM.toFixed(2)}×${analysis.macroScore} + ${wT.toFixed(2)}×${analysis.technicalScore}`;
 
-  const targetUpPct = ((analysis.targetPrice - currentPrice) / currentPrice) * 100;
-  const stopDownPct = ((analysis.stopLoss - currentPrice) / currentPrice) * 100;
+  // All % changes and R/R reference the entry zone midpoint (where user actually enters),
+  // not the live price. This keeps stop%, target%, and R/R internally consistent.
+  const entryMid = (analysis.entryZone.lower + analysis.entryZone.upper) / 2;
+  const targetUpPct = ((analysis.targetPrice - entryMid) / entryMid) * 100;
+  const stopDownPct = ((analysis.stopLoss - entryMid) / entryMid) * 100;
+  const liveRR = entryMid > analysis.stopLoss
+    ? (analysis.targetPrice - entryMid) / (entryMid - analysis.stopLoss)
+    : 0;
 
   return (
     <div className="space-y-5">
@@ -291,7 +300,7 @@ export default function AxiomFundamentalDashboard({
           <div>
             <div className="flex items-baseline gap-3">
               <h1 className="text-3xl font-bold text-white">{symbol}</h1>
-              <span className="text-2xl font-mono text-gray-200">${currentPrice.toFixed(2)}</span>
+              <span className="text-2xl font-mono text-gray-200">{cur}{currentPrice.toFixed(2)}</span>
             </div>
             <p className="text-sm text-gray-400 mt-1">
               AXIOM v3.0 · FMP Institutional Data · 5-Ajan Çoklu-Faktör Analizi
@@ -497,7 +506,7 @@ export default function AxiomFundamentalDashboard({
               </div>
               <div className="bg-black/30 rounded p-2">
                 <div className="text-gray-500 text-[10px] uppercase">Max Gün. Kayıp</div>
-                <div className="text-red-300 font-mono">${analysis.positionSize.maxDailyLoss.toFixed(0)}</div>
+                <div className="text-red-300 font-mono">{cur}{analysis.positionSize.maxDailyLoss.toFixed(0)}</div>
               </div>
             </div>
 
@@ -556,7 +565,7 @@ export default function AxiomFundamentalDashboard({
                     <div className="text-xs text-gray-400 mt-0.5">
                       {corporate.profile.sector} · {corporate.profile.country}
                       {corporate.profile.ipo && corporate.profile.ipo !== '?' && ` · IPO ${corporate.profile.ipo.slice(0, 4)}`}
-                      {corporate.profile.marketCap > 0 && ` · $${(corporate.profile.marketCap / 1000).toFixed(1)}B pazar değeri`}
+                      {corporate.profile.marketCap > 0 && ` · ${cur}${(corporate.profile.marketCap / 1e9).toFixed(1)}B pazar değeri`}
                     </div>
                     {corporate.companySnapshot && (
                       <p className="text-xs text-gray-300 mt-2 leading-relaxed">{corporate.companySnapshot}</p>
@@ -716,24 +725,24 @@ export default function AxiomFundamentalDashboard({
           <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
             <div className="text-[11px] text-gray-400 uppercase tracking-wider mb-1">Giriş Bölgesi</div>
             <div className="text-lg font-bold text-blue-200 font-mono">
-              ${analysis.entryZone.lower.toFixed(2)} – ${analysis.entryZone.upper.toFixed(2)}
+              {cur}{analysis.entryZone.lower.toFixed(2)} – {cur}{analysis.entryZone.upper.toFixed(2)}
             </div>
             <div className="text-[11px] text-gray-500 mt-2">Spot fiyat ve teknik skordan türetildi</div>
           </div>
 
           <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4">
             <div className="text-[11px] text-gray-400 uppercase tracking-wider mb-1">Hedef Fiyat</div>
-            <div className="text-lg font-bold text-emerald-200 font-mono">${analysis.targetPrice.toFixed(2)}</div>
+            <div className="text-lg font-bold text-emerald-200 font-mono">{cur}{analysis.targetPrice.toFixed(2)}</div>
             <div className={`text-[11px] mt-2 ${targetUpPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {targetUpPct >= 0 ? '▲' : '▼'} {Math.abs(targetUpPct).toFixed(1)}% spot'tan
+              {targetUpPct >= 0 ? '▲' : '▼'} {Math.abs(targetUpPct).toFixed(1)}% giriş fiyatından
             </div>
           </div>
 
           <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
             <div className="text-[11px] text-gray-400 uppercase tracking-wider mb-1">Stop-Loss</div>
-            <div className="text-lg font-bold text-red-200 font-mono">${analysis.stopLoss.toFixed(2)}</div>
+            <div className="text-lg font-bold text-red-200 font-mono">{cur}{analysis.stopLoss.toFixed(2)}</div>
             <div className="text-[11px] text-gray-500 mt-2">
-              {stopDownPct.toFixed(1)}% aşağı · R:R = <span className="text-gray-300 font-mono">{analysis.riskRewardRatio.toFixed(2)}</span>
+              {Math.abs(stopDownPct).toFixed(1)}% giriş altı · R:R = <span className="text-gray-300 font-mono">{liveRR.toFixed(2)}</span>
             </div>
           </div>
         </div>

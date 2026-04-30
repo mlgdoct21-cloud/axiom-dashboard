@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
+import YahooFinance from 'yahoo-finance2';
+import { toYahooSymbol } from '@/lib/bist-symbols';
+import { isBISTAsync } from '@/lib/bist-detect-server';
+
+const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 
 /**
  * Bulk Quote API — canli fiyat + 24h % degisim
  *
- * GET /api/quote?symbols=BINANCE:BTCUSDT,AAPL,OANDA:EUR_USD
+ * GET /api/quote?symbols=BINANCE:BTCUSDT,AAPL,GARAN
  *
  * Kaynaklar:
- *  - CoinGecko: /coins/markets (crypto, ucretsiz, Vercel IP'lerinden erisilebilir)
- *  - Finnhub: /quote (stocks/forex/BIST)
+ *  - CoinGecko: /coins/markets (crypto)
+ *  - yahoo-finance2: BIST hisseleri (.IS suffix, ~15dk delay)
+ *  - FMP / Finnhub: US stocks
  */
 
 interface Quote {
@@ -120,6 +126,40 @@ async function fetchCoinGeckoQuotes(symbols: string[]): Promise<Quote[]> {
   }
 }
 
+async function fetchBISTQuotes(symbols: string[]): Promise<Quote[]> {
+  if (symbols.length === 0) return [];
+  const results = await Promise.all(
+    symbols.map(async (s): Promise<Quote | null> => {
+      try {
+        const yfSym = toYahooSymbol(s);
+        const q = await yahooFinance.quote(yfSym);
+        const single = Array.isArray(q) ? q[0] : q;
+        if (!single) return null;
+        const price = Number(single.regularMarketPrice ?? 0);
+        const prev = Number(single.regularMarketPreviousClose ?? price);
+        const change = price - prev;
+        const changePct = prev ? (change / prev) * 100 : 0;
+        if (price <= 0) return null;
+        return {
+          symbol: s,
+          price,
+          change,
+          changePercent: changePct,
+          high24h: Number(single.regularMarketDayHigh ?? 0) || undefined,
+          low24h: Number(single.regularMarketDayLow ?? 0) || undefined,
+          volume: Number(single.regularMarketVolume ?? 0) || undefined,
+          timestamp: Date.now(),
+          source: 'yahoo' as const,
+        };
+      } catch (e) {
+        console.error('[quote/bist]', s, (e as Error).message);
+        return null;
+      }
+    })
+  );
+  return results.filter((q): q is Quote => q !== null);
+}
+
 // FMP parallel single-symbol calls (stable API, bulk param unsupported)
 async function fetchStockQuotes(symbols: string[]): Promise<Quote[]> {
   if (symbols.length === 0) return [];
@@ -197,18 +237,29 @@ export async function GET(request: NextRequest) {
   }
 
   const cryptoSymbols = symbols.filter(s => s.startsWith('BINANCE:') || s.startsWith('COINBASE:'));
-  const stockSymbols = symbols.filter(s => !cryptoSymbols.includes(s));
+
+  // Async-classify each non-crypto symbol as TR (BIST) or US
+  const nonCrypto = symbols.filter(s => !cryptoSymbols.includes(s));
+  const classified = await Promise.all(
+    nonCrypto.map(async s => ({
+      sym: s,
+      isTR: s.startsWith('BIST:') || (await isBISTAsync(s.replace(/^BIST:/, ''))),
+    }))
+  );
+  const bistSymbols = classified.filter(c => c.isTR).map(c => c.sym);
+  const stockSymbols = classified.filter(c => !c.isTR).map(c => c.sym);
 
   try {
-    const [cryptoQuotes, stockQuotes] = await Promise.all([
+    const [cryptoQuotes, bistQuotes, stockQuotes] = await Promise.all([
       fetchCoinGeckoQuotes(cryptoSymbols),
+      fetchBISTQuotes(bistSymbols.map(s => s.replace(/^BIST:/, ''))),
       fetchStockQuotes(stockSymbols),
     ]);
 
-    const quotes = [...cryptoQuotes, ...stockQuotes];
+    const quotes = [...cryptoQuotes, ...bistQuotes, ...stockQuotes];
 
     // Don't cache empty/partial responses — avoids poisoning the CDN with bad data
-    const expectedCount = cryptoSymbols.length + stockSymbols.length;
+    const expectedCount = cryptoSymbols.length + bistSymbols.length + stockSymbols.length;
     const cacheHeader = quotes.length === expectedCount
       ? 's-maxage=15, stale-while-revalidate=30'
       : 'no-store, no-cache, must-revalidate';

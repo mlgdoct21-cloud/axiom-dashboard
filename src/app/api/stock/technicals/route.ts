@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import YahooFinance from 'yahoo-finance2';
+import { toYahooSymbol } from '@/lib/bist-symbols';
+import { isBISTAsync } from '@/lib/bist-detect-server';
+
+const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 
 /**
  * Technical Indicators
  * GET /api/stock/technicals?symbol=AAPL&resolution=D
+ * GET /api/stock/technicals?symbol=GARAN  (BIST → yahoo-finance2)
  *
  * Returns:
  * - RSI (Relative Strength Index)
@@ -140,6 +146,26 @@ function calculateBollingerBands(
   };
 }
 
+async function fetchBISTCloses(symbol: string): Promise<number[] | null> {
+  try {
+    const yfSymbol = toYahooSymbol(symbol);
+    const period2 = new Date();
+    const period1 = new Date(period2.getTime() - 220 * 24 * 60 * 60 * 1000); // 220 days back
+    const result = await yahooFinance.chart(yfSymbol, {
+      period1,
+      period2,
+      interval: '1d',
+    });
+    const closes = (result?.quotes || [])
+      .map(q => q.close)
+      .filter((c): c is number => typeof c === 'number' && !isNaN(c));
+    return closes.length ? closes : null;
+  } catch (e) {
+    console.error('[BIST candles]', symbol, e);
+    return null;
+  }
+}
+
 export async function GET(request: NextRequest) {
   const symbol = request.nextUrl.searchParams.get('symbol')?.toUpperCase().trim();
   const resolution = request.nextUrl.searchParams.get('resolution') || 'D';
@@ -148,39 +174,57 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Symbol required' }, { status: 400 });
   }
 
-  const apiKey = process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: 'API key missing' }, { status: 500 });
+  // BIST: yahoo-finance2 (free, ~15min delay)
+  let closes: number[] | null = null;
+
+  if (await isBISTAsync(symbol)) {
+    closes = await fetchBISTCloses(symbol);
+    if (!closes || closes.length < 20) {
+      return NextResponse.json({ error: 'No BIST candle data available' }, { status: 404 });
+    }
+  } else {
+    const apiKey = process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json({ error: 'API key missing' }, { status: 500 });
+    }
+
+    try {
+      // Fetch OHLC candle data from Finnhub
+      const now = Math.floor(Date.now() / 1000);
+      const from = now - 100 * 86400; // 100 days
+
+      const res = await fetch(
+        `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${now}&token=${apiKey}`,
+        { next: { revalidate: 300 } } // 5m cache
+      );
+
+      if (!res.ok) {
+        return NextResponse.json(
+          { error: 'Failed to fetch candle data' },
+          { status: 502 }
+        );
+      }
+
+      const candles = await res.json();
+
+      if (!candles.c || candles.c.length === 0) {
+        return NextResponse.json(
+          { error: 'No candle data available' },
+          { status: 404 }
+        );
+      }
+
+      closes = candles.c as number[];
+    } catch (e) {
+      console.error('[technicals]', e);
+      return NextResponse.json(
+        { error: 'Failed to fetch candle data' },
+        { status: 500 }
+      );
+    }
   }
 
   try {
-    // Fetch OHLC candle data from Finnhub
-    const now = Math.floor(Date.now() / 1000);
-    // For demo, fetch last 100 candles
-    const from = now - 100 * 86400; // 100 days
-
-    const res = await fetch(
-      `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${now}&token=${apiKey}`,
-      { next: { revalidate: 300 } } // 5m cache
-    );
-
-    if (!res.ok) {
-      return NextResponse.json(
-        { error: 'Failed to fetch candle data' },
-        { status: 502 }
-      );
-    }
-
-    const candles = await res.json();
-
-    if (!candles.c || candles.c.length === 0) {
-      return NextResponse.json(
-        { error: 'No candle data available' },
-        { status: 404 }
-      );
-    }
-
-    const closes = candles.c as number[];
     const currentPrice = closes[closes.length - 1];
 
     // Calculate indicators

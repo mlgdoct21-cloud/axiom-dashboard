@@ -713,27 +713,47 @@ export async function POST(request: NextRequest) {
     const atr = calculateATR(ohlcv);
     const volatilityAdj = calculateVolatilityAdjustment(atr, currentPrice);
 
-    // Target price (20-30% above for AL, below for SAT)
-    const targetPrice = weightedScore > 60
-      ? currentPrice * (1 + (weightedScore / 100) * 0.3)
-      : currentPrice * (1 - ((100 - weightedScore) / 100) * 0.2);
+    const isBullish = weightedScore > 60;
 
-    // Stop loss (5-15% below entry)
-    const stopLoss = currentPrice * (1 - Math.max(0.05, Math.min(0.15, 1 - weightedScore / 100)));
-
-    const riskRewardRatio = (targetPrice - currentPrice) / (currentPrice - stopLoss);
-
-    // Entry zone
+    // Entry zone first — midpoint becomes the reference for all trade levels.
+    // All stop/target calculations use entryMid, NOT currentPrice, so that
+    // % changes and R/R are consistent with where the user will actually enter.
     const entryZoneRaw = calculateEntryZone({
       currentPrice,
       technicalScore: technical.score,
       regimeName: technical.trendType,
     });
-    
     const entryZone = {
       lower: entryZoneRaw.lowerBound,
-      upper: entryZoneRaw.upperBound
+      upper: entryZoneRaw.upperBound,
     };
+    const entryMid = (entryZone.lower + entryZone.upper) / 2;
+
+    // ATR-based stop from entryMid — scaled by time horizon.
+    // SHORT_TERM: 1.5×ATR (active trade), MEDIUM: 3×ATR, LONG: 5×ATR.
+    const atrPct = atr > 0 ? atr / currentPrice : 0;
+    const stopMultiplier =
+      timeHorizon === 'SHORT_TERM' ? 1.5 :
+      timeHorizon === 'LONG_TERM'  ? 5.0 : 3.0;
+    const rawStopPct = atrPct > 0
+      ? stopMultiplier * atrPct
+      : Math.max(0.05, Math.min(0.15, 1 - weightedScore / 100));
+    const stopPct = Math.max(0.02, Math.min(0.25, rawStopPct));
+
+    const stopLoss = isBullish
+      ? entryMid * (1 - stopPct)
+      : entryMid * (1 + stopPct);
+
+    // Target = entryMid + rrTarget × stop distance.
+    // This guarantees R/R is exactly rrTarget regardless of live price movement.
+    const rrTarget = weightedScore > 80 ? 3.5 : weightedScore > 70 ? 3.0 : 2.5;
+    const stopDistance = Math.abs(entryMid - stopLoss);
+
+    const targetPrice = isBullish
+      ? entryMid + rrTarget * stopDistance
+      : entryMid - rrTarget * stopDistance;
+
+    const riskRewardRatio = rrTarget;
 
     // ========================================
     // SUPPORT & RESISTANCE

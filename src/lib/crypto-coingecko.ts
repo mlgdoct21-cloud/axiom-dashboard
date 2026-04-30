@@ -18,6 +18,7 @@ export interface CoinGeckoData {
   whitepaper_url: string | null;
 }
 
+// Hot-path map for top coins — instant resolution, no extra request.
 const ID_MAP: Record<string, string> = {
   BTC:  'bitcoin',
   ETH:  'ethereum',
@@ -33,21 +34,80 @@ const ID_MAP: Record<string, string> = {
   APT:  'aptos',
   SUI:  'sui',
   INJ:  'injective-protocol',
+  BNB:  'binancecoin',
+  XRP:  'ripple',
+  DOGE: 'dogecoin',
+  TON:  'the-open-network',
+  TRX:  'tron',
+  LTC:  'litecoin',
+  ATOM: 'cosmos',
+  ETC:  'ethereum-classic',
+  FIL:  'filecoin',
+  HBAR: 'hedera-hashgraph',
+  AAVE: 'aave',
+  GRT:  'the-graph',
+  ALGO: 'algorand',
+  RNDR: 'render-token',
+  TIA:  'celestia',
+  SEI:  'sei-network',
+  STRK: 'starknet',
+  ZK:   'zksync',
+  MINA: 'mina-protocol',
+  OP:   'optimism',
+  PEPE: 'pepe',
+  SHIB: 'shiba-inu',
 };
 
-export function symbolToId(symbol: string): string {
-  return ID_MAP[symbol.toUpperCase()] ?? symbol.toLowerCase();
+const runtimeCache = new Map<string, string>();
+
+// Resolve a ticker like "MINA" → CoinGecko id "mina-protocol".
+// Falls back to /search when the symbol is unknown locally, then memoizes.
+export async function resolveCoinId(symbol: string): Promise<string | null> {
+  const upper = symbol.toUpperCase();
+  if (ID_MAP[upper]) return ID_MAP[upper];
+  if (runtimeCache.has(upper)) return runtimeCache.get(upper)!;
+
+  try {
+    const res = await fetch(
+      `https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(upper)}`,
+      { headers: { 'User-Agent': 'AXIOM/1.0' }, next: { revalidate: 86400 } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const matches: Array<{ id: string; symbol: string; market_cap_rank: number | null }> =
+      (data.coins ?? []).filter((c: any) => c.symbol?.toUpperCase() === upper);
+    if (matches.length === 0) return null;
+
+    // Prefer the listed coin with the best (lowest) market cap rank.
+    matches.sort((a, b) =>
+      (a.market_cap_rank ?? Number.MAX_SAFE_INTEGER) -
+      (b.market_cap_rank ?? Number.MAX_SAFE_INTEGER)
+    );
+    const id = matches[0].id;
+    runtimeCache.set(upper, id);
+    return id;
+  } catch (err) {
+    console.error('[crypto-coingecko] resolveCoinId failed:', err);
+    return null;
+  }
 }
 
 export async function getCoinGeckoData(symbol: string): Promise<CoinGeckoData | null> {
-  const id = symbolToId(symbol);
+  const id = await resolveCoinId(symbol);
+  if (!id) {
+    console.error('[crypto-coingecko] cannot resolve symbol:', symbol);
+    return null;
+  }
 
   try {
     const res = await fetch(
       `https://api.coingecko.com/api/v3/coins/${id}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false`,
       { headers: { 'User-Agent': 'AXIOM/1.0' }, next: { revalidate: 300 } }
     );
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error('[crypto-coingecko] coins endpoint status', res.status, 'for', id);
+      return null;
+    }
 
     const d = await res.json();
     const md = d.market_data;

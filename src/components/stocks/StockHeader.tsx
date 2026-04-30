@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { isBIST } from '@/lib/bist-symbols';
 
 interface StockHeaderProps {
   symbol: string;
@@ -17,6 +18,10 @@ interface StockInfo {
   priceChange?: number;
   priceChangePercent?: number;
   marketCap?: number;
+  currency?: string;
+  market?: 'US' | 'TR';
+  delayed?: boolean;
+  delayedMinutes?: number;
 }
 
 export default function StockHeader({ symbol, locale }: StockHeaderProps) {
@@ -64,12 +69,18 @@ export default function StockHeader({ symbol, locale }: StockHeaderProps) {
   const changeColor = isPositive ? '#4fc3f7' : '#ff4757';
   const changeArrow = isPositive ? '↑' : '↓';
 
+  const market: 'US' | 'TR' = info.market || (isBIST(symbol) ? 'TR' : 'US');
+  const isTR = market === 'TR';
+  const currencySymbol = isTR ? '₺' : '$';
+  const currencyCode = info.currency || (isTR ? 'TRY' : 'USD');
+
   const formatMarketCap = (cap?: number) => {
     if (!cap) return 'N/A';
-    if (cap >= 1e12) return `$${(cap / 1e12).toFixed(1)}T`;
-    if (cap >= 1e9) return `$${(cap / 1e9).toFixed(1)}B`;
-    if (cap >= 1e6) return `$${(cap / 1e6).toFixed(1)}M`;
-    return `$${cap}`;
+    const c = currencySymbol;
+    if (cap >= 1e12) return `${c}${(cap / 1e12).toFixed(1)}T`;
+    if (cap >= 1e9) return `${c}${(cap / 1e9).toFixed(1)}B`;
+    if (cap >= 1e6) return `${c}${(cap / 1e6).toFixed(1)}M`;
+    return `${c}${cap}`;
   };
 
   return (
@@ -77,16 +88,38 @@ export default function StockHeader({ symbol, locale }: StockHeaderProps) {
       {/* Title + Price */}
       <div className="flex items-end justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-[#e0e0e0]">{symbol}</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-2xl font-bold text-[#e0e0e0]">{symbol}</h2>
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded font-mono ${
+                isTR
+                  ? 'bg-[#e30a17]/20 text-[#ff6b6b] border border-[#e30a17]/40'
+                  : 'bg-[#1f4e79]/20 text-[#4fc3f7] border border-[#1f4e79]/40'
+              }`}
+            >
+              {isTR ? '🇹🇷 BIST' : '🇺🇸 US'}
+            </span>
+            {info.delayed && (
+              <span
+                className="text-[9px] px-1.5 py-0.5 rounded bg-[#3a3a4e] text-[#a0a0b0] border border-[#4a4a5e]"
+                title={locale === 'tr' ? 'Veri ~15 dakika gecikmeli' : 'Data delayed by ~15 minutes'}
+              >
+                {locale === 'tr' ? '15dk' : '15m'} delay
+              </span>
+            )}
+          </div>
           <p className="text-sm text-[#8888a0]">{info.name}</p>
         </div>
         <div className="text-right">
           <div className="text-3xl font-bold text-[#e0e0e0]">
-            ${info.price.toFixed(2)}
+            {currencySymbol}{info.price.toFixed(2)}
           </div>
           <div style={{ color: changeColor }} className="text-lg font-semibold">
             {changeArrow} {Math.abs(changePercent).toFixed(2)}%
           </div>
+          {isTR && (
+            <div className="text-[10px] text-[#666680] mt-0.5">{currencyCode}</div>
+          )}
         </div>
       </div>
 

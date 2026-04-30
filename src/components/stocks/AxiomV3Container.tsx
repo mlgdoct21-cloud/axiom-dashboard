@@ -27,6 +27,7 @@ export default function AxiomV3Container({ symbol, locale = 'tr' }: AxiomV3Conta
   const [analysis, setAnalysis] = useState<AxiomAnalysis | null>(null);
   const [corporate, setCorporate] = useState<CorporateIntelligence | null>(null);
   const [currentPrice, setCurrentPrice] = useState<number>(0);
+  const [currencySymbol, setCurrencySymbol] = useState<string>('$');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
 
@@ -61,6 +62,12 @@ export default function AxiomV3Container({ symbol, locale = 'tr' }: AxiomV3Conta
         let fundamentals: Record<string, number> = {};
         if (fundRes.status === 'fulfilled' && fundRes.value.ok) {
           const fundData = await fundRes.value.json();
+          // Set currency from market hint (TR → ₺, otherwise $)
+          if (fundData.market === 'TR' || fundData.currency === 'TRY') {
+            setCurrencySymbol('₺');
+          } else {
+            setCurrencySymbol('$');
+          }
           // Map FMP fields and normalize (FMP returns % as whole numbers)
           fundamentals = {
             pe: fundData.pe || fundData.peRatio || 15,
@@ -187,6 +194,7 @@ export default function AxiomV3Container({ symbol, locale = 'tr' }: AxiomV3Conta
     <AxiomFundamentalDashboard
       symbol={symbol}
       currentPrice={currentPrice}
+      currencySymbol={currencySymbol}
       analysis={analysis || undefined}
       corporate={corporate || undefined}
       isLoading={isLoading}

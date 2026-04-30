@@ -97,8 +97,197 @@ async function callGemini(prompt: string): Promise<any> {
   return null;
 }
 
+// ─── BIST data fetch (yahoo-finance2 only — FMP doesn't cover BIST) ──
+async function fetchBISTStockData(symbol: string) {
+  const { toYahooSymbol } = await import('@/lib/bist-symbols');
+  const { isBISTAsync } = await import('@/lib/bist-detect-server');
+  if (!(await isBISTAsync(symbol))) return null;
+
+  const yfSym = toYahooSymbol(symbol);
+  const period1 = new Date(Date.now() - 365 * 5 * 24 * 60 * 60 * 1000); // 5 years for time series
+  let summary: any = null;
+  let chart: any = null;
+  let financials: any[] = [];
+  let cashflowSeries: any[] = [];
+  try {
+    [summary, chart, financials, cashflowSeries] = await Promise.all([
+      yahooFinance.quoteSummary(yfSym, {
+        modules: [
+          'summaryProfile',
+          'price',
+          'summaryDetail',
+          'defaultKeyStatistics',
+          'financialData',
+        ],
+      }).catch(() => null),
+      yahooFinance.chart(yfSym, {
+        period1: new Date(Date.now() - 365 * 2 * 24 * 60 * 60 * 1000),
+        period2: new Date(),
+        interval: '1d',
+      }).catch(() => null),
+      // Yahoo deprecated quoteSummary statements in Nov 2024; use fundamentalsTimeSeries instead
+      yahooFinance.fundamentalsTimeSeries(yfSym, {
+        period1, type: 'annual', module: 'financials',
+      }).catch(() => []),
+      yahooFinance.fundamentalsTimeSeries(yfSym, {
+        period1, type: 'annual', module: 'cash-flow',
+      }).catch(() => []),
+    ]);
+  } catch (e) {
+    console.warn('[BIST Yahoo Failed]', e);
+  }
+  if (!summary) return null;
+
+  const yfFin = summary.financialData || {};
+  const yfStats = summary.defaultKeyStatistics || {};
+  const yfDetail = summary.summaryDetail || {};
+  const yfPrice = summary.price || {};
+  const yfProfile = summary.summaryProfile || {};
+
+  const num = (v: any) => (v && typeof v === 'object' && 'raw' in v ? Number(v.raw) : Number(v ?? 0));
+  const pickRevenue = (s: any) =>
+    num(s.totalRevenue) || num(s.operatingRevenue) || num(s.interestIncome) || 0;
+  const pickNetIncome = (s: any) =>
+    num(s.netIncome) ||
+    num(s.netIncomeCommonStockholders) ||
+    num(s.netIncomeFromContinuingOperationNetMinorityInterest) ||
+    num(s.netIncomeIncludingNoncontrollingInterests) ||
+    0;
+  const yearOf = (s: any) =>
+    (s.date instanceof Date)
+      ? s.date.getFullYear().toString()
+      : (typeof s.date === 'string' ? s.date.slice(0, 4) : '—');
+
+  const revenueTrend = (financials || []).slice(-4).map((s: any) => {
+    const rev = pickRevenue(s);
+    const ni = pickNetIncome(s);
+    const gp = num(s.grossProfit);
+    const opInc = num(s.operatingIncome) || num(s.totalOperatingIncomeAsReported);
+    return {
+      date: yearOf(s),
+      revenue: rev,
+      netIncome: ni,
+      grossProfit: gp,
+      ebit: opInc || num(s.ebit),
+      operatingMargin: rev ? +((opInc / rev) * 100).toFixed(1) : 0,
+    };
+  });
+
+  const cashflowData = (cashflowSeries || []).slice(-4).map((s: any) => {
+    const ocf = num(s.operatingCashFlow) || num(s.cashFlowFromContinuingOperatingActivities);
+    const cx = num(s.capitalExpenditure);
+    const fcf = num(s.freeCashFlow) || (ocf + cx); // capex is negative
+    return {
+      date: yearOf(s),
+      operatingCF: ocf,
+      capex: cx,
+      fcf,
+    };
+  });
+
+  const quotes = (chart?.quotes || []) as any[];
+  const ohlc = quotes
+    .filter(q => typeof q.close === 'number')
+    .map((q: any) => ({
+      timestamp: Math.floor(new Date(q.date).getTime() / 1000),
+      open: q.open, high: q.high, low: q.low, close: q.close, volume: q.volume || 0,
+    }));
+
+  const closes = ohlc.map((o: any) => o.close);
+  const currentPrice = Number(yfPrice.regularMarketPrice ?? closes[closes.length - 1] ?? 0);
+
+  const calcSMA = (arr: number[], period: number): number | null => {
+    if (arr.length < period) return null;
+    const slice = arr.slice(-period);
+    return +(slice.reduce((a, b) => a + b, 0) / period).toFixed(2);
+  };
+  const calcRSI = (arr: number[], period = 14): number | null => {
+    if (arr.length < period + 1) return null;
+    let gains = 0, losses = 0;
+    for (let i = arr.length - period; i < arr.length; i++) {
+      const d = arr[i] - arr[i - 1];
+      if (d > 0) gains += d; else losses -= d;
+    }
+    const avgG = gains / period, avgL = losses / period;
+    if (avgL === 0) return 100;
+    return +(100 - 100 / (1 + avgG / avgL)).toFixed(1);
+  };
+
+  const sma50 = calcSMA(closes, 50) ?? +(currentPrice * 1.02).toFixed(2);
+  const sma200 = calcSMA(closes, 200) ?? +(currentPrice * 0.95).toFixed(2);
+  const rsi = calcRSI(closes, 14) ?? 55;
+
+  const highs = ohlc.map((o: any) => o.high);
+  const lows = ohlc.map((o: any) => o.low);
+  const priceHigh = highs.length ? Math.max(...highs) : currentPrice * 1.05;
+  const priceLow = lows.length ? Math.min(...lows) : currentPrice * 0.95;
+  const range = priceHigh - priceLow;
+  const fibonacci = {
+    high: +priceHigh.toFixed(2), low: +priceLow.toFixed(2),
+    lvl236: +(priceHigh - range * 0.236).toFixed(2),
+    lvl382: +(priceHigh - range * 0.382).toFixed(2),
+    lvl500: +(priceHigh - range * 0.500).toFixed(2),
+    lvl618: +(priceHigh - range * 0.618).toFixed(2),
+    lvl786: +(priceHigh - range * 0.786).toFixed(2),
+    ext1618: +(priceLow + range * 1.618).toFixed(2),
+    ext2618: +(priceLow + range * 2.618).toFixed(2),
+  };
+
+  const lastIncome = (financials && financials.length) ? financials[financials.length - 1] : {};
+  const lastCashflow = (cashflowSeries && cashflowSeries.length) ? cashflowSeries[cashflowSeries.length - 1] : {};
+
+  return {
+    symbol,
+    name: yfPrice.longName || yfPrice.shortName || symbol,
+    sector: yfProfile.sector || 'Financial Services',
+    industry: yfProfile.industry || 'N/A',
+    country: yfProfile.country || 'Turkey',
+    currentPrice,
+    change24hPct: yfDetail?.regularMarketChangePercent != null
+      ? Number(yfDetail.regularMarketChangePercent) * (Math.abs(Number(yfDetail.regularMarketChangePercent)) < 1 ? 100 : 1)
+      : 0,
+    pe: Number(yfDetail.trailingPE ?? yfStats.trailingPE ?? 0) || null,
+    forwardPE: Number(yfDetail.forwardPE ?? yfStats.forwardPE ?? 0) || null,
+    pb: Number(yfStats.priceToBook ?? 0) || null,
+    peg: Number(yfStats.pegRatio ?? 0) || null,
+    evEbitda: Number(yfStats.enterpriseToEbitda ?? 0) || null,
+    marketCap: Number(yfPrice.marketCap ?? yfDetail.marketCap ?? 0),
+    roe: Number(yfFin.returnOnEquity ?? 0) || null,
+    roa: Number(yfFin.returnOnAssets ?? 0) || null,
+    grossMargin: Number(yfFin.grossMargins ?? 0) || null,
+    operatingMargin: Number(yfFin.operatingMargins ?? 0) || null,
+    netMargin: Number(yfFin.profitMargins ?? 0) || null,
+    debtToEquity: Number(yfFin.debtToEquity ?? 0) || null,
+    currentRatio: Number(yfFin.currentRatio ?? 0) || null,
+    quickRatio: Number(yfFin.quickRatio ?? 0) || null,
+    fcf: Number(yfFin.freeCashflow ?? 0) || null,
+    operatingCF: Number(yfFin.operatingCashflow ?? num((lastCashflow as any).operatingCashFlow) ?? 0),
+    ebitda: Number(yfFin.ebitda ?? 0) || null,
+    netDebtEbitda: null,
+    interestCoverage: null,
+    revenueGrowth: Number(yfFin.revenueGrowth ?? 0) || null,
+    earningsGrowth: Number(yfFin.earningsGrowth ?? 0) || null,
+    beta: Number(yfStats.beta ?? 1.0) || 1.0,
+    shortRatio: Number(yfStats.shortRatio ?? 0) || 0,
+    dividendYield: Number(yfDetail.dividendYield ?? 0) || 0,
+    revenueTrend,
+    cashflowData,
+    ohlc, fibonacci, sma50, sma200, rsi,
+    analystRec: null,
+    analystBuyPct: 65,
+    insiderBuys: 0,
+    insiderSells: 0,
+    lastNetIncome: pickNetIncome(lastIncome) || Number(yfFin.netIncomeToCommon ?? 0),
+    lastOperatingCF: Number(yfFin.operatingCashflow ?? num((lastCashflow as any).operatingCashFlow) ?? 0),
+  };
+}
+
 // ─── FMP data fetch ─────────────────────────────────────────────────
 async function fetchStockData(symbol: string) {
+  // Route BIST symbols to yahoo-finance2 (FMP free tier doesn't cover BIST)
+  const bistData = await fetchBISTStockData(symbol);
+  if (bistData) return bistData;
+
   const apiKey = process.env.FMP_API_KEY;
 
 

@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import YahooFinance from 'yahoo-finance2';
+import { toYahooSymbol, BIST_COMPANY_NAMES } from '@/lib/bist-symbols';
+import { isBISTAsync } from '@/lib/bist-detect-server';
+
+const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 
 /**
- * AGENT 5: Corporate Intelligence (Hybrid FMP-First)
+ * AGENT 5: Corporate Intelligence (Hybrid FMP-First, BIST via yahoo-finance2)
  * GET /api/stock/analysis/v3/corporate?symbol=AAPL
+ * GET /api/stock/analysis/v3/corporate?symbol=GARAN  (BIST)
  */
 
 const FMP_KEY = process.env.FMP_API_KEY;
@@ -78,6 +84,37 @@ async function fetchFMPData(symbol: string) {
   }
 }
 
+async function fetchBISTProfile(symbol: string) {
+  try {
+    const yfSym = toYahooSymbol(symbol);
+    const [quote, summary] = await Promise.all([
+      yahooFinance.quote(yfSym),
+      yahooFinance.quoteSummary(yfSym, {
+        modules: ['summaryProfile', 'price', 'assetProfile'],
+      }).catch(() => null),
+    ]);
+    const single: any = Array.isArray(quote) ? quote[0] : quote;
+    if (!single) return null;
+    const profile = summary?.summaryProfile || (summary as any)?.assetProfile;
+    return {
+      companyName: single.longName || single.shortName || BIST_COMPANY_NAMES[symbol] || symbol,
+      sector: profile?.sector || 'N/A',
+      industry: profile?.industry || 'N/A',
+      country: profile?.country || 'Turkey',
+      marketCap: Number(single.marketCap ?? 0),
+      employees: profile?.fullTimeEmployees ?? null,
+      website: profile?.website ?? null,
+      logo: null,
+      ipoDate: 'N/A',
+      ceo: profile?.companyOfficers?.[0]?.name || 'N/A',
+      description: profile?.longBusinessSummary || '',
+    };
+  } catch (e) {
+    console.error('[corporate/bist]', symbol, (e as Error).message);
+    return null;
+  }
+}
+
 async function fetchFinnhubFallback(symbol: string) {
   if (!FINNHUB_KEY) return null;
   try {
@@ -123,24 +160,33 @@ export async function GET(req: NextRequest) {
   const symbol = req.nextUrl.searchParams.get('symbol')?.toUpperCase();
   if (!symbol) return NextResponse.json({ error: 'symbol required' }, { status: 400 });
 
-  const fmp = await fetchFMPData(symbol);
-  const finn = !fmp?.profile ? await fetchFinnhubFallback(symbol) : null;
+  // Route BIST symbols to yahoo-finance2 (FMP/Finnhub free tiers don't cover BIST well)
+  const bistProfile = (await isBISTAsync(symbol)) ? await fetchBISTProfile(symbol) : null;
 
-  if (!fmp?.profile && !finn) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  // For US: try FMP, then Finnhub
+  const fmp = !bistProfile ? await fetchFMPData(symbol) : null;
+  const finn = !bistProfile && !fmp?.profile ? await fetchFinnhubFallback(symbol) : null;
+
+  if (!bistProfile && !fmp?.profile && !finn) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
 
   const profile = {
-    name: fmp?.profile?.companyName || finn?.name || symbol,
-    sector: fmp?.profile?.sector || finn?.finnhubIndustry || 'N/A',
-    country: fmp?.profile?.country || finn?.country || 'N/A',
-    ipo: fmp?.profile?.ipoDate || finn?.ipo || 'N/A',
-    marketCap: fmp?.profile?.marketCap || finn?.marketCapitalization || 0,
-    employees: fmp?.profile?.fullTimeEmployees || null,
-    logo: fmp?.profile?.image || finn?.logo || null,
-    website: fmp?.profile?.website || finn?.weburl || null,
-    ceo: fmp?.profile?.ceo || 'N/A'
+    name: bistProfile?.companyName || fmp?.profile?.companyName || finn?.name || symbol,
+    sector: bistProfile?.sector || fmp?.profile?.sector || finn?.finnhubIndustry || 'N/A',
+    country: bistProfile?.country || fmp?.profile?.country || finn?.country || 'N/A',
+    ipo: bistProfile?.ipoDate || fmp?.profile?.ipoDate || finn?.ipo || 'N/A',
+    marketCap: bistProfile?.marketCap || fmp?.profile?.marketCap || finn?.marketCapitalization || 0,
+    employees: bistProfile?.employees || fmp?.profile?.fullTimeEmployees || null,
+    logo: bistProfile?.logo || fmp?.profile?.image || finn?.logo || null,
+    website: bistProfile?.website || fmp?.profile?.website || finn?.weburl || null,
+    ceo: bistProfile?.ceo || fmp?.profile?.ceo || 'N/A',
   };
 
-  const llm = await synthesizeWithGemini({ symbol, name: profile.name, profile: fmp?.profile || finn, news: fmp?.news, peers: fmp?.peers, rec: fmp?.rec });
+  const llmContext = bistProfile
+    ? { symbol, name: profile.name, profile: bistProfile, news: [], peers: [], rec: null }
+    : { symbol, name: profile.name, profile: fmp?.profile || finn, news: fmp?.news, peers: fmp?.peers, rec: fmp?.rec };
+  const llm = await synthesizeWithGemini(llmContext);
 
   const response: CorporateIntelligence = {
     symbol,

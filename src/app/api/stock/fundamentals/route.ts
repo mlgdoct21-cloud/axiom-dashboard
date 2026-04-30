@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import YahooFinance from 'yahoo-finance2';
+import { toYahooSymbol, BIST_COMPANY_NAMES } from '@/lib/bist-symbols';
+import { isBISTAsync } from '@/lib/bist-detect-server';
+
+const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 
 /**
- * Stock Fundamentals Analysis (Hybrid FMP-First)
+ * Stock Fundamentals Analysis (Hybrid FMP-First, BIST via yahoo-finance2)
  * GET /api/stock/fundamentals?symbol=AAPL
+ * GET /api/stock/fundamentals?symbol=GARAN  (BIST → yahoo-finance2)
  */
 
 interface FundamentalsResponse {
@@ -29,6 +35,12 @@ interface FundamentalsResponse {
   dividendYield?: number;
   epsgrowth?: number;
   revenueGrowth?: number;
+  // BIST-specific (set when market === 'TR')
+  market?: 'US' | 'TR';
+  priceChangePercent?: number;
+  delayed?: boolean;
+  delayedMinutes?: number;
+  source?: string;
   timestamp: number;
 }
 
@@ -54,6 +66,81 @@ async function fetchFMPSnapshot(symbol: string) {
   }
 }
 
+async function fetchBISTFundamentals(symbol: string): Promise<FundamentalsResponse | null> {
+  try {
+    const yfSymbol = toYahooSymbol(symbol);
+    const [quote, summary] = await Promise.all([
+      yahooFinance.quote(yfSymbol),
+      yahooFinance.quoteSummary(yfSymbol, {
+        modules: [
+          'summaryProfile',
+          'price',
+          'defaultKeyStatistics',
+          'financialData',
+          'summaryDetail',
+        ],
+      }).catch(() => null),
+    ]);
+
+    if (!quote) return null;
+
+    const profile = summary?.summaryProfile;
+    const keyStats = summary?.defaultKeyStatistics;
+    const financial = summary?.financialData;
+    const summaryDetail = summary?.summaryDetail;
+
+    const price = quote.regularMarketPrice ?? 0;
+    const prevClose = quote.regularMarketPreviousClose ?? price;
+    const changePct = prevClose ? ((price - prevClose) / prevClose) * 100 : 0;
+
+    return {
+      symbol,
+      name: quote.longName || quote.shortName || BIST_COMPANY_NAMES[symbol] || symbol,
+      sector: profile?.sector || 'N/A',
+      industry: profile?.industry || 'N/A',
+      country: profile?.country || 'Turkey',
+      price,
+      currency: quote.currency || 'TRY',
+
+      // Valuation
+      pe: keyStats?.trailingPE?.valueOf() ?? quote.trailingPE,
+      eps: keyStats?.trailingEps?.valueOf() ?? quote.epsTrailingTwelveMonths,
+      marketCap: quote.marketCap,
+      pb: keyStats?.priceToBook?.valueOf(),
+
+      // Profitability (Yahoo returns ratios as decimals: 0.15 = 15%)
+      roe: financial?.returnOnEquity ? Number(financial.returnOnEquity) * 100 : undefined,
+      roa: financial?.returnOnAssets ? Number(financial.returnOnAssets) * 100 : undefined,
+      grossMargin: financial?.grossMargins ? Number(financial.grossMargins) * 100 : undefined,
+      operatingMargin: financial?.operatingMargins ? Number(financial.operatingMargins) * 100 : undefined,
+      netMargin: financial?.profitMargins ? Number(financial.profitMargins) * 100 : undefined,
+
+      // Leverage
+      debtToEquity: financial?.debtToEquity ? Number(financial.debtToEquity) : undefined,
+      currentRatio: financial?.currentRatio ? Number(financial.currentRatio) : undefined,
+
+      // Growth
+      revenueGrowth: financial?.revenueGrowth ? Number(financial.revenueGrowth) * 100 : undefined,
+      epsgrowth: financial?.earningsGrowth ? Number(financial.earningsGrowth) * 100 : undefined,
+
+      // Dividend
+      dividendYield: summaryDetail?.dividendYield ? Number(summaryDetail.dividendYield) * 100 : undefined,
+
+      // BIST-specific extras
+      market: 'TR',
+      priceChangePercent: changePct,
+      delayed: true,
+      delayedMinutes: 15,
+      source: 'yahoo-finance2',
+
+      timestamp: Date.now(),
+    };
+  } catch (e) {
+    console.error('[BIST fundamentals]', symbol, e);
+    return null;
+  }
+}
+
 async function fetchFinnhubFallback(symbol: string) {
   if (!FINNHUB_KEY) return null;
   try {
@@ -73,6 +160,15 @@ async function fetchFinnhubFallback(symbol: string) {
 export async function GET(request: NextRequest) {
   const symbol = request.nextUrl.searchParams.get('symbol')?.toUpperCase().trim();
   if (!symbol) return NextResponse.json({ error: 'Symbol required' }, { status: 400 });
+
+  // Route BIST symbols to yahoo-finance2 (Phase 1: ~15min delayed, free)
+  if (await isBISTAsync(symbol)) {
+    const bistData = await fetchBISTFundamentals(symbol);
+    if (!bistData) {
+      return NextResponse.json({ error: 'BIST stock not found' }, { status: 404 });
+    }
+    return NextResponse.json(bistData);
+  }
 
   try {
     // 1. Try FMP first
