@@ -244,12 +244,9 @@ function flowArrow(v?: number): string {
 function EtfRow({ label, agg }: { label: string; agg?: EtfFlows['btc'] }) {
   if (!agg?.etf_count) return null;
   const flow = agg.net_flow_est ?? 0;
-  const inflow = agg.inflow_count ?? 0;
-  const outflow = agg.outflow_count ?? 0;
   return (
     <span>
-      {label} {agg.etf_count}{' '}
-      <span className="text-[#8888a0]">({inflow}↑/{outflow}↓)</span>{' '}
+      {label} {agg.etf_count} ETF{' '}
       <span className={flowColor(flow)}>
         {flowArrow(flow)} {flowSignedNum(flow)}
       </span>

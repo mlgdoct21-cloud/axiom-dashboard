@@ -149,23 +149,11 @@ function EtfBody({ data }: { data: EtfFlows }) {
         <div className="grid grid-cols-2 gap-2 text-[11px]">
           <div className="col-span-2 flex items-center justify-between p-2 bg-[#141425] rounded border border-[#2a2a3e]">
             <span className="text-[10px] text-[#8888a0] uppercase tracking-wider">
-              Tahmini Net Akış (bugün)
+              Net Akış (Bugün)
             </span>
             <span className={`font-mono font-semibold text-[14px] ${flowColor}`}>
               {flow > 0 ? '▲' : flow < 0 ? '▼' : '–'} {flowSigned}
             </span>
-          </div>
-          <div>
-            <div className="text-[#8888a0]">Giriş Yapan ETF</div>
-            <div className="text-[#26a69a] font-mono">
-              ↑ {agg.inflow_count ?? 0} / {agg.etf_count}
-            </div>
-          </div>
-          <div>
-            <div className="text-[#8888a0]">Çıkış Yapan ETF</div>
-            <div className="text-[#ef5350] font-mono">
-              ↓ {agg.outflow_count ?? 0} / {agg.etf_count}
-            </div>
           </div>
           <div>
             <div className="text-[#8888a0]">Toplam AUM</div>
@@ -201,9 +189,6 @@ function EtfBody({ data }: { data: EtfFlows }) {
     <div>
       {renderAsset('Bitcoin', '₿', data.btc)}
       {renderAsset('Ethereum', 'Ξ', data.eth)}
-      <p className="text-[10px] text-[#555570] italic mt-2">
-        Net akış tahmini: hacim × günlük değişim. FMP gerçek primary-market inflow datası vermiyor; bu yaklaşık bir sinyal.
-      </p>
     </div>
   );
 }
