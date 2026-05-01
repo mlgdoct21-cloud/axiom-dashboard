@@ -13,6 +13,9 @@ interface NewsDetailProps {
   onVote: (voteType: 'bullish' | 'bearish' | 'panic') => void;
   onAddFavorite?: (symbol: string) => void;
   favorites?: string[];
+  // Empty state için: tüm haber listesi + seçim handler'ı
+  allNews?: NewsItem[];
+  onSelectNews?: (id: string) => void;
 }
 
 interface PriceSnapshot {
@@ -57,6 +60,8 @@ export default function NewsDetail({
   onVote,
   onAddFavorite,
   favorites = [],
+  allNews,
+  onSelectNews,
 }: NewsDetailProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [priceSnapshots, setPriceSnapshots] = useState<Record<string, PriceSnapshot>>({});
@@ -161,7 +166,7 @@ export default function NewsDetail({
   }, [item?.symbols, item?.id]);
 
   if (!item) {
-    return <AxiomDigestEmptyState locale={locale} />;
+    return <AxiomDigestEmptyState locale={locale} news={allNews} onSelectNews={onSelectNews} />;
   }
 
   // Vote yuzdeleri

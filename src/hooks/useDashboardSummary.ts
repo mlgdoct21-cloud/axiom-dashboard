@@ -73,6 +73,28 @@ export interface SectorPerformance {
   trend: 'up' | 'down';
 }
 
+export interface VixData {
+  current: number;
+  label: string;
+  color: 'red' | 'yellow' | 'green';
+  change_pct: number;
+  prev_close: number;
+}
+
+export interface CryptoFng {
+  value: number;          // 0-100
+  label: string;          // TR
+  label_en?: string;
+  color: 'red' | 'yellow' | 'green';
+  prev_value?: number;
+  change?: number;
+}
+
+export interface FearIndices {
+  vix: VixData | null;
+  crypto_fng: CryptoFng | null;
+}
+
 export interface DashboardSummaryData {
   overnight_markets: OvernightMarkets;
   etf_flows: EtfFlows;
@@ -80,6 +102,7 @@ export interface DashboardSummaryData {
   premarket_movers: PreMarketMovers;
   earnings_today: EarningItem[];
   sector_performance: SectorPerformance[];
+  fear_indices?: FearIndices;
   last_updated: string;
   cache_status?: 'hit' | 'miss' | 'stale';
   cache_age_sec?: number;

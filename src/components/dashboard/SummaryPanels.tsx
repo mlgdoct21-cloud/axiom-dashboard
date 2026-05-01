@@ -13,6 +13,7 @@ import type {
   PreMarketMovers,
   EarningItem,
   SectorPerformance,
+  FearIndices,
   IndexQuote,
 } from '@/hooks/useDashboardSummary';
 import type { DailyDigestCard } from '@/hooks/useDailyDigest';
@@ -66,6 +67,7 @@ interface ChipProps {
   loading?: boolean;
   empty?: boolean;
   tooltip?: string;
+  onClick?: () => void;
 }
 
 const accentMap: Record<NonNullable<ChipProps['accent']>, { border: string; dot: string }> = {
@@ -76,12 +78,20 @@ const accentMap: Record<NonNullable<ChipProps['accent']>, { border: string; dot:
   gray:   { border: 'border-l-[#555570]', dot: 'bg-[#555570]' },
 };
 
-export function Chip({ icon, title, primary, secondary, accent = 'gray', loading, empty, tooltip }: ChipProps) {
+export function Chip({ icon, title, primary, secondary, accent = 'gray', loading, empty, tooltip, onClick }: ChipProps) {
   const { border, dot } = accentMap[accent];
+  const interactive = onClick != null;
+  const Component = interactive ? 'button' : 'div';
   return (
-    <div
+    <Component
+      type={interactive ? 'button' : undefined}
+      onClick={onClick}
       title={tooltip}
-      className={`bg-[#1a1a2e] border border-[#2a2a3e] border-l-[3px] ${border} rounded px-2.5 py-2 min-h-[68px] flex flex-col justify-center transition-all hover:bg-[#1f1f3a] cursor-default`}
+      className={`text-left w-full bg-[#1a1a2e] border border-[#2a2a3e] border-l-[3px] ${border} rounded px-2.5 py-2 min-h-[68px] flex flex-col justify-center transition-all ${
+        interactive
+          ? 'hover:bg-[#1f1f3a] hover:border-[#4fc3f7]/40 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#4fc3f7]/50'
+          : 'cursor-default'
+      }`}
     >
       <div className="flex items-center gap-1.5 mb-0.5">
         <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
@@ -101,7 +111,7 @@ export function Chip({ icon, title, primary, secondary, accent = 'gray', loading
           )}
         </>
       )}
-    </div>
+    </Component>
   );
 }
 
@@ -114,7 +124,7 @@ function colorAccent(color?: string): ChipProps['accent'] {
   return 'gray';
 }
 
-export function DigestRiskChip({ card, loading }: { card?: DailyDigestCard; loading?: boolean }) {
+export function DigestRiskChip({ card, loading, onClick }: { card?: DailyDigestCard; loading?: boolean; onClick?: () => void }) {
   const empty = !loading && (!card || (!card.analysis && !card.symbols?.length));
   const symbols = card?.symbols?.slice(0, 3).join(' · ');
   return (
@@ -127,11 +137,12 @@ export function DigestRiskChip({ card, loading }: { card?: DailyDigestCard; load
       loading={loading}
       empty={empty}
       tooltip={card?.analysis}
+      onClick={onClick}
     />
   );
 }
 
-export function DigestQuantChip({ card, loading }: { card?: DailyDigestCard; loading?: boolean }) {
+export function DigestQuantChip({ card, loading, onClick }: { card?: DailyDigestCard; loading?: boolean; onClick?: () => void }) {
   const empty = !loading && (!card || (!card.trigger && !card.symbols?.length));
   const symbols = card?.symbols?.slice(0, 3).join(' · ');
   return (
@@ -144,11 +155,12 @@ export function DigestQuantChip({ card, loading }: { card?: DailyDigestCard; loa
       loading={loading}
       empty={empty}
       tooltip={card?.trigger}
+      onClick={onClick}
     />
   );
 }
 
-export function DigestPortfolioChip({ card, loading }: { card?: DailyDigestCard; loading?: boolean }) {
+export function DigestPortfolioChip({ card, loading, onClick }: { card?: DailyDigestCard; loading?: boolean; onClick?: () => void }) {
   const empty = !loading && (!card || (!card.recommendation && !card.symbols?.length));
   const symbols = card?.symbols?.slice(0, 3).join(' · ');
   return (
@@ -161,13 +173,14 @@ export function DigestPortfolioChip({ card, loading }: { card?: DailyDigestCard;
       loading={loading}
       empty={empty}
       tooltip={card?.recommendation}
+      onClick={onClick}
     />
   );
 }
 
 // ─── 6 FMP panel mini chips ──────────────────────────────────────────────
 
-export function MiniOvernightChip({ data, loading }: { data?: OvernightMarkets | null; loading?: boolean }) {
+export function MiniOvernightChip({ data, loading, onClick }: { data?: OvernightMarkets | null; loading?: boolean; onClick?: () => void }) {
   const all: IndexQuote[] = [
     ...(data?.asia || []),
     ...(data?.europe || []),
@@ -201,11 +214,12 @@ export function MiniOvernightChip({ data, loading }: { data?: OvernightMarkets |
       accent="blue"
       loading={loading}
       empty={empty}
+      onClick={onClick}
     />
   );
 }
 
-export function MiniEtfChip({ data, loading }: { data?: EtfFlows | null; loading?: boolean }) {
+export function MiniEtfChip({ data, loading, onClick }: { data?: EtfFlows | null; loading?: boolean; onClick?: () => void }) {
   const empty = !loading && (!data || (!data.btc.etf_count && !data.eth.etf_count));
   const btc = data?.btc;
   const eth = data?.eth;
@@ -233,11 +247,12 @@ export function MiniEtfChip({ data, loading }: { data?: EtfFlows | null; loading
       accent="yellow"
       loading={loading}
       empty={empty}
+      onClick={onClick}
     />
   );
 }
 
-export function MiniCalChip({ data, loading }: { data?: EconCalendarEvent[] | null; loading?: boolean }) {
+export function MiniCalChip({ data, loading, onClick }: { data?: EconCalendarEvent[] | null; loading?: boolean; onClick?: () => void }) {
   const empty = !loading && (!data || data.length === 0);
   const next = data?.[0];
   const second = data?.[1];
@@ -265,11 +280,12 @@ export function MiniCalChip({ data, loading }: { data?: EconCalendarEvent[] | nu
       loading={loading}
       empty={empty}
       tooltip={next?.event}
+      onClick={onClick}
     />
   );
 }
 
-export function MiniMoversChip({ data, loading }: { data?: PreMarketMovers | null; loading?: boolean }) {
+export function MiniMoversChip({ data, loading, onClick }: { data?: PreMarketMovers | null; loading?: boolean; onClick?: () => void }) {
   const empty = !loading && (!data || (!data.gainers.length && !data.losers.length));
   const topGain = data?.gainers?.[0];
   const topLose = data?.losers?.[0];
@@ -297,11 +313,12 @@ export function MiniMoversChip({ data, loading }: { data?: PreMarketMovers | nul
       accent="green"
       loading={loading}
       empty={empty}
+      onClick={onClick}
     />
   );
 }
 
-export function MiniEarningsChip({ data, loading }: { data?: EarningItem[] | null; loading?: boolean }) {
+export function MiniEarningsChip({ data, loading, onClick }: { data?: EarningItem[] | null; loading?: boolean; onClick?: () => void }) {
   const empty = !loading && (!data || data.length === 0);
   const count = data?.length || 0;
   const symbols = data?.slice(0, 3).map((e) => e.symbol).join(' · ');
@@ -315,11 +332,12 @@ export function MiniEarningsChip({ data, loading }: { data?: EarningItem[] | nul
       accent="yellow"
       loading={loading}
       empty={empty}
+      onClick={onClick}
     />
   );
 }
 
-export function MiniSectorChip({ data, loading }: { data?: SectorPerformance[] | null; loading?: boolean }) {
+export function MiniSectorChip({ data, loading, onClick }: { data?: SectorPerformance[] | null; loading?: boolean; onClick?: () => void }) {
   const empty = !loading && (!data || data.length === 0);
   const top = data?.[0];
   const bottom = data?.[data.length - 1];
@@ -347,6 +365,50 @@ export function MiniSectorChip({ data, loading }: { data?: SectorPerformance[] |
       accent="green"
       loading={loading}
       empty={empty}
+      onClick={onClick}
+    />
+  );
+}
+
+// ─── 10. PANEL: VIX VOLATİLİTE ENDEKSİ ──────────────────────────────────
+
+export function MiniVixChip({
+  data,
+  loading,
+  onClick,
+}: {
+  data?: FearIndices | null;
+  loading?: boolean;
+  onClick?: () => void;
+}) {
+  const vix = data?.vix;
+  const fng = data?.crypto_fng;
+  const empty = !loading && !vix;
+
+  return (
+    <Chip
+      icon="🌡️"
+      title="VIX Volatilite"
+      primary={
+        vix ? (
+          <span>
+            <span className="font-mono text-[13px] font-semibold">{vix.current}</span>{' '}
+            <span className="text-[#8888a0]">({vix.label})</span>{' '}
+            <span className={pctColor(vix.change_pct)}>{pctText(vix.change_pct)}</span>
+          </span>
+        ) : null
+      }
+      secondary={
+        fng ? (
+          <span>
+            Kripto F&amp;G: <span className="font-mono">{fng.value}</span> ({fng.label})
+          </span>
+        ) : null
+      }
+      accent={(vix?.color as ChipProps['accent']) || 'gray'}
+      loading={loading}
+      empty={empty}
+      onClick={onClick}
     />
   );
 }

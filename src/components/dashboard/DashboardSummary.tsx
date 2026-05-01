@@ -1,14 +1,16 @@
 'use client';
 
 /**
- * Compact Dashboard Summary — tek bir kompakt grid'de 9 mini chip:
+ * Compact Dashboard Summary — 10 mini chip'lik kompakt grid.
  *   • 3 digest chip (Risk Radar / Kantitatif / Portföy Sinyal)
  *   • 6 FMP panel chip (Overnight, ETF, Calendar, Movers, Earnings, Sectors)
+ *   • 1 Korku Barometresi (VIX + Crypto F&G)
  *
- * Toplam yükseklik ~140px (lg: 2 row × 5 col). Haberler için bolca yer kalır.
+ * Kart tıklanınca tam içeriği gösteren modal açılır.
+ * Toplam yükseklik ~140px (lg: 2 row × 5 col).
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useDailyDigest } from '@/hooks/useDailyDigest';
 import { useDashboardSummary } from '@/hooks/useDashboardSummary';
 import {
@@ -21,11 +23,14 @@ import {
   MiniMoversChip,
   MiniEarningsChip,
   MiniSectorChip,
+  MiniVixChip,
 } from './SummaryPanels';
+import { SummaryDetailModal, type ModalContent } from './SummaryDetailModal';
 
 export function DashboardSummary() {
   const { digest, loading: digestLoading, error: digestError } = useDailyDigest(true);
   const { data, loading, error, refresh } = useDashboardSummary(true);
+  const [modal, setModal] = useState<ModalContent | null>(null);
 
   const ageText = (() => {
     if (!data?.last_updated) return '';
@@ -41,15 +46,14 @@ export function DashboardSummary() {
   })();
 
   const hasAnyError = digestError || error;
-  const allEmpty =
-    !digestLoading &&
-    !loading &&
-    !digest &&
-    !data;
+
+  // onClick handler'ları: chip → modal aç
+  const open = (c: ModalContent) => setModal(c);
+  const close = () => setModal(null);
 
   return (
     <div className="space-y-1.5">
-      {/* Header row — başlık + status + refresh */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-sm font-semibold text-[#e0e0e0] whitespace-nowrap">
@@ -65,9 +69,7 @@ export function DashboardSummary() {
           )}
         </div>
         <button
-          onClick={() => {
-            refresh();
-          }}
+          onClick={refresh}
           disabled={loading || digestLoading}
           className="text-[10px] text-[#4fc3f7] hover:text-[#ff9800] disabled:opacity-50 flex items-center gap-1 whitespace-nowrap"
           title="Yenile"
@@ -76,18 +78,96 @@ export function DashboardSummary() {
         </button>
       </div>
 
-      {/* 9-chip compact grid */}
+      {/* 10-chip compact grid (5 col × 2 row at lg) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5">
-        <DigestRiskChip card={digest?.risk_radar} loading={digestLoading && !digest} />
-        <DigestQuantChip card={digest?.quant_analysis} loading={digestLoading && !digest} />
-        <DigestPortfolioChip card={digest?.portfolio_signal} loading={digestLoading && !digest} />
-        <MiniOvernightChip data={data?.overnight_markets} loading={loading && !data} />
-        <MiniEtfChip data={data?.etf_flows} loading={loading && !data} />
-        <MiniCalChip data={data?.economic_calendar} loading={loading && !data} />
-        <MiniMoversChip data={data?.premarket_movers} loading={loading && !data} />
-        <MiniEarningsChip data={data?.earnings_today} loading={loading && !data} />
-        <MiniSectorChip data={data?.sector_performance} loading={loading && !data} />
+        <DigestRiskChip
+          card={digest?.risk_radar}
+          loading={digestLoading && !digest}
+          onClick={
+            digest?.risk_radar ? () => open({ type: 'risk', data: digest.risk_radar }) : undefined
+          }
+        />
+        <DigestQuantChip
+          card={digest?.quant_analysis}
+          loading={digestLoading && !digest}
+          onClick={
+            digest?.quant_analysis
+              ? () => open({ type: 'quant', data: digest.quant_analysis })
+              : undefined
+          }
+        />
+        <DigestPortfolioChip
+          card={digest?.portfolio_signal}
+          loading={digestLoading && !digest}
+          onClick={
+            digest?.portfolio_signal
+              ? () => open({ type: 'portfolio', data: digest.portfolio_signal })
+              : undefined
+          }
+        />
+        <MiniOvernightChip
+          data={data?.overnight_markets}
+          loading={loading && !data}
+          onClick={
+            data?.overnight_markets
+              ? () => open({ type: 'overnight', data: data.overnight_markets })
+              : undefined
+          }
+        />
+        <MiniEtfChip
+          data={data?.etf_flows}
+          loading={loading && !data}
+          onClick={data?.etf_flows ? () => open({ type: 'etf', data: data.etf_flows }) : undefined}
+        />
+        <MiniCalChip
+          data={data?.economic_calendar}
+          loading={loading && !data}
+          onClick={
+            data?.economic_calendar
+              ? () => open({ type: 'calendar', data: data.economic_calendar })
+              : undefined
+          }
+        />
+        <MiniMoversChip
+          data={data?.premarket_movers}
+          loading={loading && !data}
+          onClick={
+            data?.premarket_movers
+              ? () => open({ type: 'movers', data: data.premarket_movers })
+              : undefined
+          }
+        />
+        <MiniEarningsChip
+          data={data?.earnings_today}
+          loading={loading && !data}
+          onClick={
+            data?.earnings_today
+              ? () => open({ type: 'earnings', data: data.earnings_today })
+              : undefined
+          }
+        />
+        <MiniSectorChip
+          data={data?.sector_performance}
+          loading={loading && !data}
+          onClick={
+            data?.sector_performance
+              ? () => open({ type: 'sectors', data: data.sector_performance })
+              : undefined
+          }
+        />
+        <MiniVixChip
+          data={data?.fear_indices}
+          loading={loading && !data}
+          onClick={
+            data?.fear_indices
+              ? () => open({ type: 'vix', data: data.fear_indices! })
+              : undefined
+          }
+        />
       </div>
+
+      {/* Detail modal */}
+      <SummaryDetailModal content={modal} onClose={close} />
     </div>
   );
 }

@@ -1,135 +1,211 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+/**
+ * News listesinde haber seçilmediğinde gösterilen empty state.
+ * Eski statik demo bölümünün yerine: AI tarafından seçilen "Bugünün Öne
+ * Çıkan 3 Haberi" — büyük featured card layout. Tıklanınca ilgili haber
+ * sağdaki detay panelinde açılır.
+ */
 
-// For date display "Sen Uyurken..." checking standard hours
-export default function AxiomDigestEmptyState({ locale }: { locale: 'en' | 'tr' }) {
-  const [greeting, setGreeting] = useState('');
-  
-  useEffect(() => {
-    const hour = new Date().getHours();
-    if (hour < 11) {
-      setGreeting(locale === 'tr' ? '🌙 Sen Uyurken Piyasada Neler Oldu?' : '🌙 While You Were Sleeping:');
-    } else if (hour > 18) {
-      setGreeting(locale === 'tr' ? '🌇 Günün Özeti ve Axiom Tespiti' : '🌇 Daily Wrap-Up & Axiom Insights');
-    } else {
-      setGreeting(locale === 'tr' ? '⚡ Axiom Erken Uyarı Sistemi' : '⚡ Axiom Early Warning System');
-    }
-  }, [locale]);
+import React, { useMemo } from 'react';
+import type { NewsItem } from '@/components/tabs/NewsTab';
+
+interface Props {
+  locale: 'en' | 'tr';
+  news?: NewsItem[];
+  onSelectNews?: (id: string) => void;
+}
+
+function timeAgo(ts: number, locale: 'en' | 'tr'): string {
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return locale === 'tr' ? 'şimdi' : 'now';
+  if (mins < 60) return `${mins}${locale === 'tr' ? ' dk önce' : 'm ago'}`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}${locale === 'tr' ? ' saat önce' : 'h ago'}`;
+  return `${Math.floor(hrs / 24)}${locale === 'tr' ? ' g önce' : 'd ago'}`;
+}
+
+function categoryLabel(c: string, locale: 'en' | 'tr'): string {
+  const map: Record<string, { tr: string; en: string }> = {
+    crypto:   { tr: 'Kripto',  en: 'Crypto' },
+    stocks:   { tr: 'Hisse',   en: 'Stocks' },
+    forex:    { tr: 'Forex',   en: 'Forex' },
+    economy:  { tr: 'Ekonomi', en: 'Economy' },
+    general:  { tr: 'Genel',   en: 'General' },
+  };
+  const entry = map[c] || map.general;
+  return locale === 'tr' ? entry.tr : entry.en;
+}
+
+function categoryColor(c: string): string {
+  const map: Record<string, string> = {
+    crypto:   'text-[#ff9800] border-[#ff9800]/40 bg-[#ff9800]/10',
+    stocks:   'text-[#26a69a] border-[#26a69a]/40 bg-[#26a69a]/10',
+    forex:    'text-[#4fc3f7] border-[#4fc3f7]/40 bg-[#4fc3f7]/10',
+    economy:  'text-[#ba68c8] border-[#ba68c8]/40 bg-[#ba68c8]/10',
+    general:  'text-[#8888a0] border-[#8888a0]/40 bg-[#8888a0]/10',
+  };
+  return map[c] || map.general;
+}
+
+function FeaturedCard({
+  item,
+  rank,
+  locale,
+  onClick,
+}: {
+  item: NewsItem;
+  rank: number;
+  locale: 'en' | 'tr';
+  onClick: () => void;
+}) {
+  const summary = item.dashboard_summary || item.summary || '';
+  const isBreaking = item.is_urgent || (Date.now() - item.publishedAt < 3600000);
 
   return (
-    <div className="flex flex-col items-center justify-center h-full bg-[#0d0d1a] p-4 md:p-8 overflow-y-auto">
-      <div className="w-full max-w-4xl flex flex-col gap-6 animate-in fade-in zoom-in duration-500">
-        
-        {/* Header Section */}
-        <div className="text-center mb-4">
-          <h1 className="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#e0e0e0] to-[#8888a0]">
-            {greeting || '...'}
-          </h1>
-          <p className="text-[#8888a0] mt-2 text-sm max-w-2xl mx-auto">
-            {locale === 'tr' 
-              ? 'Kurumsal düzey piyasa tarama algoritmalarımız son 12 saatteki küresel verileri süzdü. İşte analist masalarından çıkan kritik sonuçlar.' 
-              : 'Our institutional-grade algorithms have filtered global data over the last 12 hours. Here are the critical insights from our quant desks.'}
-          </p>
+    <button
+      onClick={onClick}
+      className="text-left bg-[#141425] border border-[#2a2a3e] hover:border-[#4fc3f7]/60 hover:bg-[#1a1a30] rounded-lg p-4 transition-all flex flex-col gap-2 group focus:outline-none focus:ring-2 focus:ring-[#4fc3f7]/50"
+    >
+      {/* Top row: rank badge + category + time + breaking */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[10px] font-bold text-[#4fc3f7] bg-[#4fc3f7]/10 border border-[#4fc3f7]/40 rounded w-5 h-5 flex items-center justify-center">
+          {rank}
+        </span>
+        <span
+          className={`text-[9px] uppercase font-semibold px-1.5 py-0.5 rounded border ${categoryColor(
+            item.category || 'general',
+          )}`}
+        >
+          {categoryLabel(item.category || 'general', locale)}
+        </span>
+        {isBreaking && (
+          <span className="text-[9px] font-bold uppercase text-[#ef5350] bg-[#ef5350]/10 border border-[#ef5350]/40 px-1.5 py-0.5 rounded animate-pulse">
+            🔴 {locale === 'tr' ? 'Acil' : 'Breaking'}
+          </span>
+        )}
+        <span className="text-[10px] text-[#8888a0] ml-auto">
+          {timeAgo(item.publishedAt, locale)}
+        </span>
+      </div>
+
+      {/* Title */}
+      <h3 className="text-base font-semibold text-[#e0e0e0] leading-snug line-clamp-2 group-hover:text-white">
+        {item.title}
+      </h3>
+
+      {/* Summary */}
+      {summary && (
+        <p className="text-[12px] text-[#a0a0b8] leading-relaxed line-clamp-3">{summary}</p>
+      )}
+
+      {/* Footer: source + symbols + CTA */}
+      <div className="flex items-center gap-2 mt-1 flex-wrap text-[11px]">
+        <span className="text-[#4fc3f7] font-medium">{item.source}</span>
+        {item.symbols && item.symbols.length > 0 && (
+          <>
+            <span className="text-[#555570]">·</span>
+            <div className="flex gap-1 flex-wrap">
+              {item.symbols.slice(0, 3).map((sym) => (
+                <span
+                  key={sym}
+                  className="font-mono text-[10px] text-[#ff9800] bg-[#ff9800]/10 px-1.5 py-0.5 rounded"
+                >
+                  {sym.replace('BINANCE:', '').replace('OANDA:', '').replace('USDT', '')}
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+        <span className="ml-auto text-[#8888a0] group-hover:text-[#4fc3f7] transition-colors">
+          {locale === 'tr' ? 'Detayları gör →' : 'View details →'}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+export default function AxiomDigestEmptyState({ locale, news, onSelectNews }: Props) {
+  // Top 3 öne çıkan haberi seç:
+  //   1) is_urgent=true olanlar önce
+  //   2) Sonra son 12 saatlik haberler
+  //   3) Sonra en yeniler (fallback)
+  const top3 = useMemo<NewsItem[]>(() => {
+    if (!news || news.length === 0) return [];
+    const twelveHoursAgo = Date.now() - 12 * 3600 * 1000;
+    const urgent = news
+      .filter((n) => n.is_urgent && n.publishedAt > twelveHoursAgo)
+      .sort((a, b) => b.publishedAt - a.publishedAt);
+    const recent = news
+      .filter(
+        (n) =>
+          !n.is_urgent &&
+          n.publishedAt > twelveHoursAgo &&
+          (n.dashboard_summary || n.summary),
+      )
+      .sort((a, b) => b.publishedAt - a.publishedAt);
+    const fallback = [...news].sort((a, b) => b.publishedAt - a.publishedAt);
+    const seen = new Set<string>();
+    const out: NewsItem[] = [];
+    for (const list of [urgent, recent, fallback]) {
+      for (const n of list) {
+        if (out.length >= 3) break;
+        if (seen.has(n.id)) continue;
+        seen.add(n.id);
+        out.push(n);
+      }
+      if (out.length >= 3) break;
+    }
+    return out;
+  }, [news]);
+
+  const greeting = (() => {
+    const hour = new Date().getHours();
+    if (locale === 'en') {
+      if (hour < 11) return '🌙 While You Were Sleeping';
+      if (hour > 18) return '🌇 Daily Wrap-Up';
+      return '⚡ Today’s Top Stories';
+    }
+    if (hour < 11) return '🌙 Bugünün Öne Çıkan Haberleri';
+    if (hour > 18) return '🌇 Günün Özeti';
+    return '⚡ Bugünün En Önemlileri';
+  })();
+
+  const subtitle =
+    locale === 'tr'
+      ? 'Solda bir haber seç veya aşağıdaki AI seçimi 3 başlıktan birini aç.'
+      : 'Pick a story on the left, or jump into one of the AI-curated headlines below.';
+
+  return (
+    <div className="flex flex-col h-full bg-[#0d0d1a] p-5 md:p-7 overflow-y-auto">
+      <div className="w-full max-w-3xl mx-auto flex flex-col gap-4">
+        {/* Header */}
+        <div className="text-center mb-2">
+          <h1 className="text-xl md:text-2xl font-bold text-[#e0e0e0]">{greeting}</h1>
+          <p className="text-[11px] md:text-[12px] text-[#8888a0] mt-1.5">{subtitle}</p>
         </div>
 
-        {/* Sentiment Gauge / Overview */}
-        <div className="bg-[#141425] border border-[#2a2a3e] rounded-xl p-5 shadow-[0_0_20px_rgba(79,195,247,0.05)] flex flex-col md:flex-row items-center gap-6">
-          <div className="flex-shrink-0 relative">
-            {/* Visual Gauge Mockup */}
-            <svg width="120" height="60" viewBox="0 0 120 60" className="opacity-80">
-              <path d="M 10 50 A 40 40 0 0 1 110 50" fill="none" stroke="#2a2a3e" strokeWidth="8" strokeLinecap="round" />
-              {/* Colored active section */}
-              <path d="M 10 50 A 40 40 0 0 1 80 18" fill="none" stroke="url(#sentimentGrad)" strokeWidth="8" strokeLinecap="round" />
-              {/* Needle */}
-              <polygon points="60,50 58,45 80,18 62,45" fill="#e0e0e0" />
-              <circle cx="60" cy="50" r="4" fill="#e0e0e0" />
-              <defs>
-                <linearGradient id="sentimentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#f44336" />
-                  <stop offset="50%" stopColor="#ff9800" />
-                  <stop offset="100%" stopColor="#4caf50" />
-                </linearGradient>
-              </defs>
-            </svg>
-            <div className="absolute bottom-[-10px] w-full text-center text-xs font-bold text-[#ff9800]">
-              {locale === 'tr' ? 'TEMKİNLİ İYİMSER' : 'CAUTIOUSLY OPTIMISTIC'}
-            </div>
+        {/* Top 3 featured cards */}
+        {top3.length > 0 ? (
+          <div className="flex flex-col gap-3">
+            {top3.map((item, i) => (
+              <FeaturedCard
+                key={item.id}
+                item={item}
+                rank={i + 1}
+                locale={locale}
+                onClick={() => onSelectNews?.(item.id)}
+              />
+            ))}
           </div>
-          <div className="flex-1">
-            <h3 className="text-[11px] text-[#4fc3f7] uppercase tracking-widest font-semibold mb-2">
-              {locale === 'tr' ? 'Axiom Piyasa Eğilimi' : 'Axiom Market Sentiment'}
-            </h3>
-            <p className="text-[#c0c0d0] text-sm leading-relaxed">
-              {locale === 'tr'
-                ? '"Son 12 saatteki 80+ makro gelişim ışığında; Asya piyasalarında kriptoya yönelik satış baskısı zayıflarken, yaklaşan teknoloji bilançoları öncesi opsiyon masalarında sürpriz bir volatilitenin fiyatlandığını gözlemliyoruz."'
-                : '"Based on 80+ macro developments in the last 12 hours; selling pressure on crypto in Asian markets is weakening, while we observe surprising volatility being priced in option desks ahead of upcoming tech earnings."'}
-            </p>
+        ) : (
+          <div className="text-center py-12 text-[#555570] text-sm italic">
+            {locale === 'tr'
+              ? 'Henüz haber akışı hazırlanıyor...'
+              : 'News feed is loading...'}
           </div>
-        </div>
-
-        {/* 3 Actionable Insight Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          
-          {/* Card 1: Risk */}
-          <div className="bg-[#1a0f12] border border-[#5a1b1b] rounded-xl p-4 transition-transform hover:-translate-y-1 hover:shadow-[0_4px_20px_rgba(244,67,54,0.15)]">
-            <div className="flex items-center gap-2 text-[#f44336] text-[10px] font-bold uppercase tracking-wider mb-2">
-              <span className="w-2 h-2 rounded-full bg-[#f44336] animate-pulse"></span>
-              Axiom Risk Radar
-            </div>
-            <h4 className="text-[#e0e0e0] text-sm font-semibold mb-2">
-              {locale === 'tr' ? 'FED Tutanaklarında Gizli Şahin Duruş' : 'Hidden Hawkish Stance in Fed Minutes'}
-            </h4>
-            <p className="text-[#8888a0] text-xs leading-relaxed">
-              {locale === 'tr'
-                ? 'Makro Ekonomi Masamız, tutanak satır aralarında enflasyon katılığının beklendiğinden daha büyük bir risk olarak kodlandığını saptadı. Riskli varlıklarda bugün defansif ağırlık öneriliyor.'
-                : 'Our Macro Economy Desk detected that inflation stickiness is coded as a larger risk than expected in the subtext. A defensive weight is recommended in risk assets today.'}
-            </p>
-          </div>
-
-          {/* Card 2: Quant Fırsat */}
-          <div className="bg-[#0f1a14] border border-[#1b5a3a] rounded-xl p-4 transition-transform hover:-translate-y-1 hover:shadow-[0_4px_20px_rgba(76,175,80,0.15)]">
-            <div className="flex items-center gap-2 text-[#4caf50] text-[10px] font-bold uppercase tracking-wider mb-2">
-              <span className="w-2 h-2 rounded-full bg-[#4caf50]"></span>
-              Axiom Kantitatif Analiz
-            </div>
-            <h4 className="text-[#e0e0e0] text-sm font-semibold mb-2">
-              {locale === 'tr' ? 'AAPL Opsiyonlarında Hacim Patlaması' : 'Volume Anomalies in AAPL Options'}
-            </h4>
-            <p className="text-[#8888a0] text-xs leading-relaxed">
-              {locale === 'tr'
-                ? 'Kantitatif Algoritmalarımız, AAPL kısa vadeli alım (call) opsiyonlarında son 3 saattir kurumsal seviyede blok alımlar tespit etti. Fiyatlanmamış bir bilanço beklentisi olabilir.'
-                : 'Our Quant Algorithms detected institutional-level block buying in short-term AAPL call options over the last 3 hours. There may be unpriced earnings expectations.'}
-            </p>
-          </div>
-
-          {/* Card 3: Watchlist Alert */}
-          <div className="bg-[#1a180f] border border-[#5a4a1b] rounded-xl p-4 transition-transform hover:-translate-y-1 hover:shadow-[0_4px_20px_rgba(255,152,0,0.15)]">
-            <div className="flex items-center gap-2 text-[#ff9800] text-[10px] font-bold uppercase tracking-wider mb-2">
-              <span className="w-2 h-2 rounded-full bg-[#ff9800]"></span>
-              {locale === 'tr' ? 'Portföy Sinyali' : 'Portfolio Signal'}
-            </div>
-            <h4 className="text-[#e0e0e0] text-sm font-semibold mb-2">
-              {locale === 'tr' ? 'BTC / Kritik Destek Testi' : 'BTC / Critical Support Test'}
-            </h4>
-            <p className="text-[#8888a0] text-xs leading-relaxed">
-              {locale === 'tr'
-                ? 'Portföy Analiz Sistemimiz uyarıyor: Takip listenizdeki Bitcoin için offshore borsalardan satış akışı devam ediyor. Kantitatif destek seviyesi: $61,500.'
-                : 'Our Portfolio Analysis System warns: Sell flow from offshore exchanges continues for Bitcoin on your watchlist. Quantitative support level: $61,500.'}
-            </p>
-          </div>
-
-        </div>
-
-        {/* Footer/Signature */}
-        <div className="mt-6 pt-4 border-t border-[#2a2a3e] text-center">
-          <p className="text-[#555570] text-[10px] font-mono tracking-widest uppercase flex items-center justify-center gap-2">
-            <span>◆</span>
-            {locale === 'tr' ? 'Axiom Analitik İstihbarat Masası Tarafından Oluşturuldu' : 'Generated by Axiom Analytical Intelligence Desk'}
-            <span>◆</span>
-          </p>
-        </div>
-
+        )}
       </div>
     </div>
   );

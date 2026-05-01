@@ -300,6 +300,8 @@ export default function NewsTab({ locale }: NewsTabProps) {
             onVote={handleVote}
             onAddFavorite={handleAddFavorite}
             favorites={favorites}
+            allNews={news}
+            onSelectNews={setSelectedNewsId}
           />
         </div>
 
