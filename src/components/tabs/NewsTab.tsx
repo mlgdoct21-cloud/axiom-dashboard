@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import NewsList from '@/components/news/NewsList';
 import NewsDetail from '@/components/news/NewsDetail';
 import FavoritesBar from '@/components/news/FavoritesBar';
+import { DashboardSummary } from '@/components/dashboard/DashboardSummary';
 import MarketTicker from '@/components/ticker/MarketTicker';
 import { useNewsStream, type StreamedNews } from '@/hooks/useNewsStream';
 import {
@@ -264,6 +265,11 @@ export default function NewsTab({ locale }: NewsTabProps) {
     <div className="flex flex-col h-full overflow-hidden bg-[#141425]">
       {/* Market Ticker — Top 20 Cryptos + Indices + Mag7 */}
       <MarketTicker locale={locale} />
+
+      {/* Dashboard Summary — 3-row modular layout (digest + 6 FMP panels) */}
+      <div className="px-4 pt-4 pb-2 border-b border-[#2a2a3e]">
+        <DashboardSummary />
+      </div>
 
       {/* Main Grid: News List + Detail + Watchlist */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-0 flex-1 overflow-hidden">
