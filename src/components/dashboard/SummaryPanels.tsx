@@ -219,16 +219,18 @@ export function MiniOvernightChip({ data, loading, onClick }: { data?: Overnight
   );
 }
 
-function flowText(v?: number): string {
-  if (v == null || !isFinite(v)) return '—';
-  const sign = v >= 0 ? '+' : '';
-  return `${sign}${formatBigNum(Math.abs(v)).replace('$', '$')}`.replace('$-', '-$');
-}
-
-function flowSignedNum(v?: number): string {
+function signedUsd(v?: number): string {
   if (v == null || !isFinite(v)) return '—';
   const abs = formatBigNum(Math.abs(v));
   return v >= 0 ? `+${abs}` : `-${abs}`;
+}
+
+function signedCoin(v?: number, coin?: string): string {
+  if (v == null || !isFinite(v) || !coin) return '—';
+  const abs = Math.abs(v);
+  const formatted =
+    abs >= 1000 ? abs.toFixed(0) : abs >= 100 ? abs.toFixed(1) : abs.toFixed(2);
+  return v >= 0 ? `+${formatted} ${coin}` : `-${formatted} ${coin}`;
 }
 
 function flowColor(v?: number): string {
@@ -236,20 +238,16 @@ function flowColor(v?: number): string {
   return v > 0 ? 'text-[#26a69a]' : 'text-[#ef5350]';
 }
 
-function flowArrow(v?: number): string {
-  if (v == null || !isFinite(v) || v === 0) return '–';
-  return v > 0 ? '▲' : '▼';
-}
-
-function EtfRow({ label, agg }: { label: string; agg?: EtfFlows['btc'] }) {
+function EtfRow({ label, coin, agg }: { label: string; coin: string; agg?: EtfFlows['btc'] }) {
   if (!agg?.etf_count) return null;
-  const flow = agg.net_flow_est ?? 0;
+  const flow = agg.net_flow_usd ?? 0;
+  const coins = agg.net_flow_coins ?? 0;
+  const color = flowColor(flow);
   return (
     <span>
-      {label} {agg.etf_count} ETF{' '}
-      <span className={flowColor(flow)}>
-        {flowArrow(flow)} {flowSignedNum(flow)}
-      </span>
+      {label}{' '}
+      <span className={`font-semibold ${color}`}>{signedUsd(flow)}</span>{' '}
+      <span className="text-[#8888a0]">{signedCoin(coins, coin)}</span>
     </span>
   );
 }
@@ -259,17 +257,17 @@ export function MiniEtfChip({ data, loading, onClick }: { data?: EtfFlows | null
   const btc = data?.btc;
   const eth = data?.eth;
 
-  // Renk: ağırlıklı ortalama net flow
-  const totalFlow = (btc?.net_flow_est ?? 0) + (eth?.net_flow_est ?? 0);
+  // Renk: toplam BTC+ETH net flow yönüne göre
+  const totalFlow = (btc?.net_flow_usd ?? 0) + (eth?.net_flow_usd ?? 0);
   const accent: ChipProps['accent'] =
     totalFlow > 0 ? 'green' : totalFlow < 0 ? 'red' : 'yellow';
 
   return (
     <Chip
       icon="₿"
-      title="Spot ETF Akışları"
-      primary={btc?.etf_count ? <EtfRow label="BTC" agg={btc} /> : null}
-      secondary={eth?.etf_count ? <EtfRow label="ETH" agg={eth} /> : null}
+      title="Spot ETF Net Akış"
+      primary={btc?.etf_count ? <EtfRow label="BTC" coin="BTC" agg={btc} /> : null}
+      secondary={eth?.etf_count ? <EtfRow label="ETH" coin="ETH" agg={eth} /> : null}
       accent={accent}
       loading={loading}
       empty={empty}

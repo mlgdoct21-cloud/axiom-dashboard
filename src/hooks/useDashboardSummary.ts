@@ -26,9 +26,12 @@ export interface EtfFlowAggregate {
   avg_change_pct: number;
   etf_count: number;
   top_etf?: { symbol: string; aum: number } | null;
-  net_flow_est?: number;     // signed USD (+= net giriş, -= net çıkış)
-  inflow_count?: number;     // pozitif kapayan ETF sayısı
-  outflow_count?: number;    // negatif kapayan ETF sayısı
+  /** Daily net inflow in USD, signed (+ = net giriş, - = net çıkış) */
+  net_flow_usd?: number;
+  /** Coin-equivalent of net_flow_usd (BTC for btc, ETH for eth) */
+  net_flow_coins?: number;
+  /** Spot price used for the coin conversion */
+  coin_price?: number;
 }
 
 export interface EtfFlows {

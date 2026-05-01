@@ -133,28 +133,38 @@ function OvernightBody({ data }: { data: OvernightMarkets }) {
 }
 
 function EtfBody({ data }: { data: EtfFlows }) {
-  const renderAsset = (label: string, icon: string, agg: EtfFlows['btc']) => {
+  const renderAsset = (label: string, icon: string, coin: string, agg: EtfFlows['btc']) => {
     if (!agg.etf_count) return null;
-    const flow = agg.net_flow_est ?? 0;
+    const flowUsd = agg.net_flow_usd ?? 0;
+    const flowCoins = agg.net_flow_coins ?? 0;
     const flowColor =
-      flow > 0 ? 'text-[#26a69a]' : flow < 0 ? 'text-[#ef5350]' : 'text-[#8888a0]';
-    const flowSigned =
-      flow >= 0 ? `+${formatBigNum(flow)}` : `-${formatBigNum(Math.abs(flow))}`;
+      flowUsd > 0 ? 'text-[#26a69a]' : flowUsd < 0 ? 'text-[#ef5350]' : 'text-[#8888a0]';
+
+    const usdSigned =
+      flowUsd >= 0 ? `+${formatBigNum(flowUsd)}` : `-${formatBigNum(Math.abs(flowUsd))}`;
+    const coinAbs = Math.abs(flowCoins);
+    const coinFormatted =
+      coinAbs >= 1000 ? coinAbs.toFixed(0) : coinAbs >= 100 ? coinAbs.toFixed(1) : coinAbs.toFixed(2);
+    const coinSigned = flowUsd >= 0 ? `+${coinFormatted} ${coin}` : `-${coinFormatted} ${coin}`;
 
     return (
-      <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded p-3 mb-3">
-        <div className="text-[12px] font-semibold text-[#e0e0e0] mb-2">
+      <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded p-4 mb-3">
+        <div className="text-[12px] font-semibold text-[#e0e0e0] mb-3">
           {icon} {label} Spot ETF
         </div>
-        <div className="grid grid-cols-2 gap-2 text-[11px]">
-          <div className="col-span-2 flex items-center justify-between p-2 bg-[#141425] rounded border border-[#2a2a3e]">
-            <span className="text-[10px] text-[#8888a0] uppercase tracking-wider">
-              Net Akış (Bugün)
-            </span>
-            <span className={`font-mono font-semibold text-[14px] ${flowColor}`}>
-              {flow > 0 ? '▲' : flow < 0 ? '▼' : '–'} {flowSigned}
-            </span>
+
+        {/* Hero — SoSoValue tarzı USD + coin amount */}
+        <div className="border-t border-b border-[#2a2a3e] py-3 mb-3">
+          <div className="text-[10px] text-[#8888a0] uppercase tracking-wider mb-1">
+            Daily Total Net Inflow
           </div>
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <span className={`text-2xl font-bold font-mono ${flowColor}`}>{usdSigned}</span>
+            <span className={`text-sm font-mono ${flowColor} opacity-80`}>{coinSigned}</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-[11px]">
           <div>
             <div className="text-[#8888a0]">Toplam AUM</div>
             <div className="text-[#e0e0e0] font-mono">{formatBigNum(agg.total_aum)}</div>
@@ -187,8 +197,8 @@ function EtfBody({ data }: { data: EtfFlows }) {
   };
   return (
     <div>
-      {renderAsset('Bitcoin', '₿', data.btc)}
-      {renderAsset('Ethereum', 'Ξ', data.eth)}
+      {renderAsset('Bitcoin', '₿', 'BTC', data.btc)}
+      {renderAsset('Ethereum', 'Ξ', 'ETH', data.eth)}
     </div>
   );
 }
