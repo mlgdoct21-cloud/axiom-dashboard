@@ -219,32 +219,61 @@ export function MiniOvernightChip({ data, loading, onClick }: { data?: Overnight
   );
 }
 
+function flowText(v?: number): string {
+  if (v == null || !isFinite(v)) return '—';
+  const sign = v >= 0 ? '+' : '';
+  return `${sign}${formatBigNum(Math.abs(v)).replace('$', '$')}`.replace('$-', '-$');
+}
+
+function flowSignedNum(v?: number): string {
+  if (v == null || !isFinite(v)) return '—';
+  const abs = formatBigNum(Math.abs(v));
+  return v >= 0 ? `+${abs}` : `-${abs}`;
+}
+
+function flowColor(v?: number): string {
+  if (v == null || !isFinite(v) || v === 0) return 'text-[#8888a0]';
+  return v > 0 ? 'text-[#26a69a]' : 'text-[#ef5350]';
+}
+
+function flowArrow(v?: number): string {
+  if (v == null || !isFinite(v) || v === 0) return '–';
+  return v > 0 ? '▲' : '▼';
+}
+
+function EtfRow({ label, agg }: { label: string; agg?: EtfFlows['btc'] }) {
+  if (!agg?.etf_count) return null;
+  const flow = agg.net_flow_est ?? 0;
+  const inflow = agg.inflow_count ?? 0;
+  const outflow = agg.outflow_count ?? 0;
+  return (
+    <span>
+      {label} {agg.etf_count}{' '}
+      <span className="text-[#8888a0]">({inflow}↑/{outflow}↓)</span>{' '}
+      <span className={flowColor(flow)}>
+        {flowArrow(flow)} {flowSignedNum(flow)}
+      </span>
+    </span>
+  );
+}
+
 export function MiniEtfChip({ data, loading, onClick }: { data?: EtfFlows | null; loading?: boolean; onClick?: () => void }) {
   const empty = !loading && (!data || (!data.btc.etf_count && !data.eth.etf_count));
   const btc = data?.btc;
   const eth = data?.eth;
 
+  // Renk: ağırlıklı ortalama net flow
+  const totalFlow = (btc?.net_flow_est ?? 0) + (eth?.net_flow_est ?? 0);
+  const accent: ChipProps['accent'] =
+    totalFlow > 0 ? 'green' : totalFlow < 0 ? 'red' : 'yellow';
+
   return (
     <Chip
       icon="₿"
       title="Spot ETF Akışları"
-      primary={
-        btc?.etf_count ? (
-          <span>
-            BTC {formatBigNum(btc.daily_volume)}{' '}
-            <span className={pctColor(btc.avg_change_pct)}>{pctText(btc.avg_change_pct)}</span>
-          </span>
-        ) : null
-      }
-      secondary={
-        eth?.etf_count ? (
-          <span>
-            ETH {formatBigNum(eth.daily_volume)}{' '}
-            <span className={pctColor(eth.avg_change_pct)}>{pctText(eth.avg_change_pct)}</span>
-          </span>
-        ) : null
-      }
-      accent="yellow"
+      primary={btc?.etf_count ? <EtfRow label="BTC" agg={btc} /> : null}
+      secondary={eth?.etf_count ? <EtfRow label="ETH" agg={eth} /> : null}
+      accent={accent}
       loading={loading}
       empty={empty}
       onClick={onClick}
