@@ -4,6 +4,7 @@ import { getSecFilingsData } from '@/lib/sec-edgar';
 import YahooFinance from 'yahoo-finance2';
 import { isBISTAsync } from '@/lib/bist-detect-server';
 import { toYahooSymbol, BIST_COMPANY_NAMES } from '@/lib/bist-symbols';
+import { extractLatestReportedQuarter, type LatestReportedQuarter } from '@/lib/earnings-detect';
 
 const yfBist = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 
@@ -45,12 +46,14 @@ type Mode = 'teaser' | 'full';
 type Locale = 'en' | 'tr';
 
 // ─── FMP helpers ──────────────────────────────────────────────────────────────
-async function fmp(endpoint: string, params: Record<string, string> = {}) {
+// Two TTLs: stable endpoints (profile, scores) cache 1h; earnings-sensitive
+// endpoints cache 5min so a fresh quarterly release surfaces within minutes.
+async function fmpRaw(endpoint: string, params: Record<string, string>, revalidate: number) {
   if (!FMP_KEY) return null;
   const qs = new URLSearchParams({ ...params, apikey: FMP_KEY }).toString();
   const url = `https://financialmodelingprep.com/stable/${endpoint}?${qs}`;
   try {
-    const res = await fetch(url, { next: { revalidate: 3600 } });
+    const res = await fetch(url, { next: { revalidate } });
     if (!res.ok) {
       console.warn(`[insider-report fmp] ${endpoint} HTTP ${res.status}`);
       return null;
@@ -58,6 +61,43 @@ async function fmp(endpoint: string, params: Record<string, string> = {}) {
     return await res.json();
   } catch (e) {
     console.error(`[insider-report fmp] ${endpoint}`, e);
+    return null;
+  }
+}
+
+const fmpStable = (endpoint: string, params: Record<string, string> = {}) =>
+  fmpRaw(endpoint, params, 3600);
+
+const fmpFresh = (endpoint: string, params: Record<string, string> = {}) =>
+  fmpRaw(endpoint, params, 300);
+
+// Cheap earnings-date probe used before cache lookup so a fresh quarterly
+// release auto-invalidates a stale cached report. The full collectInsider…
+// call later will hit the same fmpFresh cache (300s), so this is essentially
+// free.
+async function probeLatestEarningsDate(symbol: string): Promise<string | null> {
+  const earnings = await fmpFresh('earnings', { symbol, limit: '12' });
+  const latest = extractLatestReportedQuarter(earnings);
+  return latest?.date ?? null;
+}
+
+// BIST equivalent — FMP doesn't cover BIST so we probe Yahoo Finance
+// `defaultKeyStatistics.mostRecentQuarter`. Returns YYYY-MM-DD or null.
+// The full BIST report generator below pulls quoteSummary again; this small
+// extra call has no shared cache (yahoo-finance2 has no built-in cache) but
+// `mostRecentQuarter` is a tiny single field, so the cost is negligible.
+async function probeBISTLatestEarningsDate(symbol: string): Promise<string | null> {
+  try {
+    const summary = await yfBist.quoteSummary(toYahooSymbol(symbol), {
+      modules: ['defaultKeyStatistics'],
+    }).catch(() => null);
+    const mrq = (summary as any)?.defaultKeyStatistics?.mostRecentQuarter;
+    if (!mrq) return null;
+    const d = mrq instanceof Date ? mrq : new Date(mrq);
+    if (isNaN(d.getTime())) return null;
+    return d.toISOString().slice(0, 10);
+  } catch (e) {
+    console.warn('[insider-report bist probe]', String(e).slice(0, 120));
     return null;
   }
 }
@@ -80,13 +120,13 @@ async function collectInsiderReportData(symbol: string) {
     analystRatingRes,
     secFilingsRes,
   ] = await Promise.allSettled([
-    fmp('profile', { symbol }),
-    fmp('financial-scores', { symbol }),
-    fmp('insider-trading/search', { symbol, page: '0', limit: '100' }),
-    fmp('insider-trading/statistics', { symbol }),
-    fmp('earnings', { symbol, limit: '12' }),
-    fmp('price-target-consensus', { symbol }),
-    fmp('ratings-snapshot', { symbol }),
+    fmpStable('profile', { symbol }),
+    fmpStable('financial-scores', { symbol }),
+    fmpFresh('insider-trading/search', { symbol, page: '0', limit: '100' }),
+    fmpFresh('insider-trading/statistics', { symbol }),
+    fmpFresh('earnings', { symbol, limit: '12' }),
+    fmpStable('price-target-consensus', { symbol }),
+    fmpStable('ratings-snapshot', { symbol }),
     getSecFilingsData(symbol), // SEC.gov — 10-K (Item 7) + 10-Q (Item 2), free
   ]);
 
@@ -130,6 +170,7 @@ type AgentInput = {
   earnings: {
     surprises: { quarter: string; beat: boolean; surprisePct: number }[];
     beatRate: number;
+    latestReportedQuarter: LatestReportedQuarter | null;
   };
   insiderTrading: {
     sixMonths: { totalBuys: number; totalSells: number; netBuyingActivity: boolean; netDollarFlow: number };
@@ -229,6 +270,8 @@ function toAgentInput(symbol: string, locale: Locale, raw: any): AgentInput {
     ? surpriseItems.filter((s) => s.beat).length / surpriseItems.length
     : 0;
 
+  const latestReportedQuarter = extractLatestReportedQuarter(surprises);
+
   // Price target upside
   const currentPrice = Number(profile?.price || 0);
   const avgTarget = Number(priceTarget?.targetConsensus || priceTarget?.priceTarget || 0);
@@ -255,6 +298,7 @@ function toAgentInput(symbol: string, locale: Locale, raw: any): AgentInput {
     earnings: {
       surprises: surpriseItems,
       beatRate: Number(beatRate.toFixed(2)),
+      latestReportedQuarter,
     },
     insiderTrading: {
       sixMonths: {
@@ -326,8 +370,21 @@ ${inputJson}`;
   }
 
   // mode === 'full'
-  const taskTr = `Aşağıdaki veriye bakarak YATIRIMCI için detaylı bir SORUŞTURMA RAPORU yaz (800–1200 kelime).
+  const fresh = input.earnings.latestReportedQuarter;
+  const freshDirectiveTr = fresh && fresh.isFresh
+    ? `
 
+🆕 ZORUNLU — TAZE BİLANÇO UYARISI:
+Şirket ${fresh.daysAgo} gün önce (${fresh.date}) yeni bir çeyrek bilançosu açıkladı:
+- EPS: $${fresh.epsActual?.toFixed(2)}${fresh.epsEstimated != null ? ` (beklenti $${fresh.epsEstimated.toFixed(2)}, sürpriz ${fresh.surprisePct! >= 0 ? '+' : ''}${fresh.surprisePct?.toFixed(1)}%)` : ''}
+${fresh.revenue != null ? `- Gelir: $${(fresh.revenue / 1e9).toFixed(2)}B${fresh.revenueEstimated != null ? ` (beklenti $${(fresh.revenueEstimated / 1e9).toFixed(2)}B, sürpriz ${fresh.revenueSurprisePct! >= 0 ? '+' : ''}${fresh.revenueSurprisePct?.toFixed(1)}%)` : ''}` : ''}
+
+Bu bilanço HENÜZ YENİ — raporun başında açıkça referans almak ZORUNLUDUR. 5. perdenin (Pazar Testi) ilk paragrafında "Şirket ${fresh.date} tarihinde Q bilançosunu açıkladı: EPS $${fresh.epsActual?.toFixed(2)}${fresh.surprisePct != null ? ` (sürpriz ${fresh.surprisePct >= 0 ? '+' : ''}${fresh.surprisePct.toFixed(1)}%)` : ''}" gibi spesifik bir cümle ile başla. Sürprizi ve piyasa beklentisi ile farkını yorumla.
+`
+    : '';
+
+  const taskTr = `Aşağıdaki veriye bakarak YATIRIMCI için detaylı bir SORUŞTURMA RAPORU yaz (800–1200 kelime).
+${freshDirectiveTr}
 ZORUNLU KURAL — HALLÜSİNASYON YASAK:
 - Sadece VERİDE bulunan sayıları, isimleri, tarihleri kullan
 - Uydurma söz/demeç/rakam yazma
@@ -402,8 +459,20 @@ SADECE şu JSON'u döndür (başka hiçbir şey yazma):
 VERİ:
 ${inputJson}`;
 
-  const taskEn = `Using the data below, write a detailed INVESTIGATIVE REPORT for an investor (800–1200 words).
+  const freshDirectiveEn = fresh && fresh.isFresh
+    ? `
 
+🆕 MANDATORY — FRESH EARNINGS ALERT:
+The company released a new quarterly earnings report ${fresh.daysAgo} day(s) ago (${fresh.date}):
+- EPS: $${fresh.epsActual?.toFixed(2)}${fresh.epsEstimated != null ? ` (est $${fresh.epsEstimated.toFixed(2)}, surprise ${fresh.surprisePct! >= 0 ? '+' : ''}${fresh.surprisePct?.toFixed(1)}%)` : ''}
+${fresh.revenue != null ? `- Revenue: $${(fresh.revenue / 1e9).toFixed(2)}B${fresh.revenueEstimated != null ? ` (est $${(fresh.revenueEstimated / 1e9).toFixed(2)}B, surprise ${fresh.revenueSurprisePct! >= 0 ? '+' : ''}${fresh.revenueSurprisePct?.toFixed(1)}%)` : ''}` : ''}
+
+This earnings release is RECENT — the report MUST reference it explicitly. Open Act 5 (Market Test) with a specific sentence like: "On ${fresh.date} the company posted EPS $${fresh.epsActual?.toFixed(2)}${fresh.surprisePct != null ? ` (surprise ${fresh.surprisePct >= 0 ? '+' : ''}${fresh.surprisePct.toFixed(1)}%)` : ''}". Discuss the surprise and how it changes the consensus view.
+`
+    : '';
+
+  const taskEn = `Using the data below, write a detailed INVESTIGATIVE REPORT for an investor (800–1200 words).
+${freshDirectiveEn}
 STRUCTURE — 6 Acts:
 
 1) Market & Competitive Context (100–150 words)
@@ -556,31 +625,36 @@ async function callGemini(prompt: string): Promise<{ ok: true; data: any } | { o
 const DB_CACHE_TTL_MS = 60 * 1000; // fallback in-memory TTL
 
 /**
- * Compound cache key: SYMBOL::LOCALE::MODE
+ * Compound cache key: SYMBOL::LOCALE::MODE::EARNINGS_DATE
  *
- * Why composite: a single Gemini call produces (locale, mode)-specific text.
- * - TR teaser ≠ EN teaser (language)
- * - teaser ≠ full (length, format)
+ * Why composite: a single Gemini call produces (locale, mode)-specific text,
+ * AND we want a fresh quarterly release to invalidate stale reports
+ * automatically — so the latest reported earnings date is part of the key.
+ * If a company reports new earnings, the key changes and the cached
+ * pre-earnings report is no longer hit.
  *
  * The Supabase table's `symbol` column is the PK; we encode the tuple into it
- * so no schema migration is needed. TR is the default (TR-first product),
- * EN/other locales get separate cache entries.
+ * so no schema migration is needed.
  *
  * Examples:
- *   "GARAN::tr::full"      ← Türkçe tam rapor (varsayılan)
- *   "GARAN::tr::teaser"    ← Türkçe Telegram teaser
- *   "GARAN::en::full"      ← English full report
- *   "AAPL::tr::full"       ← Türkçe AAPL raporu (US sembolü, çevirisi)
+ *   "AAPL::tr::full::2026-04-30"   ← post-earnings AAPL TR rapor
+ *   "AAPL::tr::full::2026-01-30"   ← önceki çeyreğin raporu (otomatik bayatlar)
+ *   "GARAN::tr::full::na"          ← BIST: earnings tarihi yok
  */
-function cacheKey(symbol: string, locale: Locale, mode: Mode): string {
-  return `${symbol.toUpperCase()}::${locale}::${mode}`;
+function cacheKey(
+  symbol: string, locale: Locale, mode: Mode, earningsDate?: string | null,
+): string {
+  const date = earningsDate || 'na';
+  return `${symbol.toUpperCase()}::${locale}::${mode}::${date}`;
 }
 
-async function getCachedReport(symbol: string, locale: Locale, mode: Mode): Promise<any | null> {
+async function getCachedReport(
+  symbol: string, locale: Locale, mode: Mode, earningsDate?: string | null,
+): Promise<any | null> {
   const supabase = getSupabase();
   if (!supabase) return null;
 
-  const key = cacheKey(symbol, locale, mode);
+  const key = cacheKey(symbol, locale, mode, earningsDate);
 
   try {
     const now = new Date().toISOString();
@@ -608,16 +682,20 @@ async function getCachedReport(symbol: string, locale: Locale, mode: Mode): Prom
 }
 
 async function setCachedReport(
-  symbol: string, payload: any, locale: Locale, mode: Mode
+  symbol: string, payload: any, locale: Locale, mode: Mode,
+  earningsDate?: string | null,
 ): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) return;
 
-  const key = cacheKey(symbol, locale, mode);
+  const key = cacheKey(symbol, locale, mode, earningsDate);
 
   try {
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + 6 * 60 * 60 * 1000).toISOString();
+    // 24h TTL — stale-serve risk is bounded because the cache key already
+    // includes the latest reported earnings date. A new quarterly release
+    // produces a brand-new key on the next request.
+    const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
 
     const { error } = await supabase
       .from('insider_report_cache')
@@ -636,7 +714,7 @@ async function setCachedReport(
       return;
     }
 
-    console.log(`✓ Cache SET (Supabase): ${key} (expires in 6h)`);
+    console.log(`✓ Cache SET (Supabase): ${key} (expires in 24h)`);
   } catch (e) {
     console.error('[insider-report cache write] Exception:', String(e).slice(0, 160));
   }
@@ -958,8 +1036,11 @@ export async function GET(request: NextRequest) {
         { status: 503 },
       );
     }
+    // BIST earnings-aware key: probe yfinance mostRecentQuarter so a fresh
+    // BIST quarterly release naturally invalidates the cached report.
+    const bistEarningsDate = await probeBISTLatestEarningsDate(symbol);
     if (!force) {
-      const cached = await getCachedReport(symbol, locale, mode);
+      const cached = await getCachedReport(symbol, locale, mode, bistEarningsDate);
       if (cached) {
         return NextResponse.json({ ...cached, cached: true, cacheSource: 'supabase' });
       }
@@ -971,7 +1052,7 @@ export async function GET(request: NextRequest) {
         { status: 502 },
       );
     }
-    await setCachedReport(symbol, payload, locale, mode);
+    await setCachedReport(symbol, payload, locale, mode, bistEarningsDate);
     return NextResponse.json({ ...payload, cached: false, cacheSource: 'gemini-bist' });
   }
 
@@ -982,11 +1063,12 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Cache lookup (Supabase DB) — keyed by (symbol, locale, mode)
-  // TR is the default locale (TR-first product); EN/other locales get
-  // separate cache entries. Teaser and full also cached separately.
+  // Earnings-aware cache lookup: probe latest earnings date first, encode it
+  // into the cache key. A new quarterly release naturally invalidates the
+  // pre-earnings cached report (key changes → cache miss → fresh generation).
+  const earningsDate = await probeLatestEarningsDate(symbol);
   if (!force) {
-    const cached = await getCachedReport(symbol, locale, mode);
+    const cached = await getCachedReport(symbol, locale, mode, earningsDate);
     if (cached) {
       return NextResponse.json({ ...cached, cached: true, cacheSource: 'supabase' });
     }
@@ -1036,8 +1118,12 @@ export async function GET(request: NextRequest) {
       },
     };
 
-    // Store in Supabase cache (6h TTL, keyed by symbol+locale+mode)
-    await setCachedReport(symbol, payload, locale, mode);
+    // Store in Supabase cache (24h TTL; key includes earnings date so a fresh
+    // quarter naturally bypasses stale entries on the next request).
+    await setCachedReport(
+      symbol, payload, locale, mode,
+      agentInput.earnings.latestReportedQuarter?.date ?? earningsDate,
+    );
 
     return NextResponse.json({ ...payload, cached: false, cacheSource: 'gemini' });
   } catch (e) {

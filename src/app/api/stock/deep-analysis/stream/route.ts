@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import YahooFinance from 'yahoo-finance2';
+import { extractLatestReportedQuarter, type LatestReportedQuarter } from '@/lib/earnings-detect';
 
 const yahooFinance = new YahooFinance({ suppressNotices: ['ripHistorical'] as any });
 
@@ -272,6 +273,8 @@ async function fetchBISTStockData(symbol: string) {
     dividendYield: Number(yfDetail.dividendYield ?? 0) || 0,
     revenueTrend,
     cashflowData,
+    quarterlyTrend: [] as Array<any>,
+    latestReportedQuarter: null as LatestReportedQuarter | null,
     ohlc, fibonacci, sma50, sma200, rsi,
     analystRec: null,
     analystBuyPct: 65,
@@ -296,10 +299,15 @@ async function fetchStockData(symbol: string) {
     return null;
   }
 
-  const fetchFMP = async (endpoint: string, params: string = '') => {
+  // Two-tier TTL: stable data (profile, ratios, prices) caches 1h; earnings-
+  // sensitive data (quarterly income, earnings surprises) caches 5min so a
+  // freshly released bilanço surfaces within minutes instead of hours.
+  const fetchFMP = async (
+    endpoint: string, params: string = '', revalidate: number = 3600,
+  ) => {
     try {
       const url = `https://financialmodelingprep.com/stable/${endpoint}?symbol=${symbol}&${params}apikey=${apiKey}`;
-      const res = await fetch(url, { next: { revalidate: 3600 } });
+      const res = await fetch(url, { next: { revalidate } });
       if (!res.ok) {
         console.warn(`[FMP] ${endpoint} failed: ${res.status}`);
         return null;
@@ -311,7 +319,7 @@ async function fetchStockData(symbol: string) {
     }
   };
 
-  // Parallel fetch for stable endpoints
+  // Parallel fetch — note quarterly income-statement and earnings use 300s TTL
   const results = await Promise.allSettled([
     fetchFMP('profile'),
     fetchFMP('key-metrics-ttm'),
@@ -320,6 +328,8 @@ async function fetchStockData(symbol: string) {
     fetchFMP('cash-flow-statement', 'limit=4&'),
     fetchFMP('analyst-estimates', 'limit=1&'),
     fetchFMP('historical-price-eod/full', 'limit=200&'),
+    fetchFMP('income-statement', 'period=quarter&limit=4&', 300),
+    fetchFMP('earnings', 'limit=12&', 300),
   ]);
 
   const profile = (results[0].status === 'fulfilled' ? results[0].value : null)?.[0] || {};
@@ -331,6 +341,21 @@ async function fetchStockData(symbol: string) {
   // stable/historical-price-eod/full returns a flat array (not wrapped in .historical)
   const histRaw = (results[6].status === 'fulfilled' ? results[6].value : null);
   const hist = Array.isArray(histRaw) ? histRaw : (histRaw?.historical || []);
+  const incomeQuarterly = (results[7].status === 'fulfilled' ? results[7].value : null) || [];
+  const earningsRaw = (results[8].status === 'fulfilled' ? results[8].value : null) || [];
+
+  const latestReportedQuarter = extractLatestReportedQuarter(earningsRaw);
+
+  const quarterlyTrend = (Array.isArray(incomeQuarterly) ? incomeQuarterly : [])
+    .slice(0, 4)
+    .map((s: any) => ({
+      date: String(s.date || '').slice(0, 10) || '—',
+      revenue: s.revenue ?? 0,
+      netIncome: s.netIncome ?? 0,
+      operatingIncome: s.operatingIncome ?? 0,
+      eps: s.eps ?? s.epsdiluted ?? null,
+      operatingMargin: s.revenue ? +((s.operatingIncome / s.revenue) * 100).toFixed(1) : 0,
+    }));
 
   // ─── Hybrid Fallback: Yahoo Finance ──────────────────────────────
   let yfData: any = null;
@@ -452,6 +477,8 @@ async function fetchStockData(symbol: string) {
     dividendYield: toDec(ratios.dividendYieldTTM || yfDetail?.dividendYield || 0.0),
     revenueTrend,
     cashflowData,
+    quarterlyTrend,
+    latestReportedQuarter,
     ohlc, fibonacci, sma50, sma200, rsi,
     analystRec: null,
     analystBuyPct: estimates.numberAnalysts ? 75 : 65,
@@ -465,6 +492,39 @@ async function fetchStockData(symbol: string) {
 // ─── Helper: format number ────────────────────────────────────────────────────
 const fmt = (v: number | null | undefined, mult = 1, suffix = '', dec = 1) =>
   v != null ? `${(v * mult).toFixed(dec)}${suffix}` : 'N/A';
+
+// Renders a "fresh earnings" alert block when a company reported earnings
+// within the last 7 days. Returns empty string otherwise. Injected into the
+// Forensic and Portfolio prompts so agents must reference the new bilanço.
+function freshEarningsBlock(
+  q: LatestReportedQuarter | null,
+  quarterlyTrend: Array<any>,
+): string {
+  if (!q || !q.isFresh) return '';
+  const epsLine = `EPS $${q.epsActual?.toFixed(2)}` +
+    (q.epsEstimated != null
+      ? ` (beklenti $${q.epsEstimated.toFixed(2)}, sürpriz ${q.surprisePct! >= 0 ? '+' : ''}${q.surprisePct?.toFixed(1)}%)`
+      : '');
+  const revLine = q.revenue != null
+    ? `Gelir $${(q.revenue / 1e9).toFixed(2)}B` +
+      (q.revenueEstimated != null
+        ? ` (beklenti $${(q.revenueEstimated / 1e9).toFixed(2)}B, sürpriz ${q.revenueSurprisePct! >= 0 ? '+' : ''}${q.revenueSurprisePct?.toFixed(1)}%)`
+        : '')
+    : '';
+  const qRows = quarterlyTrend.length
+    ? '\nÇEYREKLİK GELİR TRENDİ (Son 4 Çeyrek):\n' +
+      quarterlyTrend.map((r: any) =>
+        `  ${r.date}: Gelir ${fmt(r.revenue, 1e-9, 'B$', 2)}, Net Kâr ${fmt(r.netIncome, 1e-9, 'B$', 2)}, EPS ${r.eps != null ? '$' + Number(r.eps).toFixed(2) : 'N/A'}, Op.Marj %${r.operatingMargin}`
+      ).join('\n')
+    : '';
+  return `
+
+🆕 TAZE BİLANÇO (${q.daysAgo} gün önce, ${q.date}):
+- ${epsLine}${revLine ? '\n- ' + revLine : ''}${qRows}
+
+ZORUNLU: Bu yeni çeyreği analizinde AÇIKÇA referans al. "${q.date} bilançosu"nu veya sürpriz yüzdesini cümlelerinde geçirmek zorundasın — eski 4-yıllık trendi tek başına yorumlamak YETMEZ.
+`;
+}
 
 // ─── Prompt builders ──────────────────────────────────────────────────────────
 // Ortak sistem personası: her ajan kıdemli, pahalı, söz sakınmayan bir Wall
@@ -491,13 +551,14 @@ function promptForensic(d: StockData): string {
   const cashConv = d.lastNetIncome && d.lastOperatingCF ? (d.lastOperatingCF / d.lastNetIncome).toFixed(2) : 'N/A';
   const revRows = d.revenueTrend.map((r: any) => `  ${r.date}: Gelir ${fmt(r.revenue,1e-9,'B$',1)}, Net Kâr ${fmt(r.netIncome,1e-9,'B$',1)}, Op.Marj %${r.operatingMargin ?? 'N/A'}`).join('\n');
   const cfRows  = d.cashflowData.map((r: any) => `  ${r.date}: Op.CF ${fmt(r.operatingCF,1e-9,'B$',1)}, FCF ${fmt(r.fcf,1e-9,'B$',1)}`).join('\n');
+  const freshBlock = freshEarningsBlock(d.latestReportedQuarter, d.quarterlyTrend);
   return `Sen 40 yıllık tecrübeli, Enron/Worldcom skandallarını öngörmüş bir
 Adli Muhasebecisin (CFA + CPA). Sayı yalan söylemez, sen de sayının dilini
 anlarsın. Şirketin defterlerinde saklı hikayeyi bul — karı şişirmek,
 gideri geciktirmek, nakit akışıyla kâr arasındaki çelişki.
 
 HİSSE: ${d.symbol} (${d.name}) | Sektör: ${d.sector} | Ülke: ${d.country}
-
+${freshBlock}
 GELİR TABLOSU (Son 4 Yıl):
 ${revRows || '  Veri yok'}
 
@@ -749,6 +810,7 @@ function promptPortfolio(
   d: StockData,
   a1: any, a2: any, a3: any, a4: any
 ): string {
+  const freshBlock = freshEarningsBlock(d.latestReportedQuarter, d.quarterlyTrend);
   return `Sen 40 yıllık Portföy Yöneticisisin — Bridgewater'dan emekli,
 şimdi aile ofisinde yönetiyorsun. Dört uzmanından (Muhasebeci, Stratejist,
 Risk Avukatı, Teknisyen) gelen raporları aldın. Onların hiçbiri yanlış
@@ -757,6 +819,7 @@ vermek. "Ucuz + yüksek risk" mi yoksa "pahalı + güvenli" mi tercih edilir?
 Sen bilirsin — piyasa dönemi ve müşterinin profili önemli.
 
 HİSSE: ${d.symbol} (${d.name}) | Sektör: ${d.sector} | Güncel Fiyat: $${d.currentPrice.toFixed(2)}
+${freshBlock}
 
 ADLİ MUHASEBECİ SONUCU: ${JSON.stringify(a1)}
 SEKTÖR STRATEJİSTİ SONUCU: ${JSON.stringify(a2)}
@@ -830,8 +893,14 @@ export async function GET(req: NextRequest) {
       }
 
       // Strip ohlc from raw_data to keep payload small; UI only needs metrics
-      const { ohlc, revenueTrend, cashflowData, fibonacci, ...metrics } = d;
-      send('raw_data', { metrics, revenueTrend, cashflowData, fibonacci });
+      const {
+        ohlc, revenueTrend, cashflowData, fibonacci,
+        quarterlyTrend, latestReportedQuarter, ...metrics
+      } = d;
+      send('raw_data', {
+        metrics, revenueTrend, cashflowData, fibonacci,
+        quarterlyTrend, latestReportedQuarter,
+      });
 
       send('status', { message: 'Analistlerimiz verileri inceliyor...' });
 

@@ -354,6 +354,7 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
   const [metrics,   setMetrics]   = useState<any>(null);
   const [revTrend,  setRevTrend]  = useState<any[]>([]);
   const [fibonacci, setFibonacci] = useState<any>(null);
+  const [latestQ,   setLatestQ]   = useState<any>(null);
   const [agent1,    setAgent1]    = useState<any>(null);
   const [agent2,    setAgent2]    = useState<any>(null);
   const [agent3,    setAgent3]    = useState<any>(null);
@@ -364,16 +365,25 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
   const esRef = useRef<EventSource | null>(null);
   const insiderReportRef = useRef<any>(null);
 
-  const runAnalysis = (sym: string) => {
-    setStatus(''); setMetrics(null); setRevTrend([]); setFibonacci(null);
+  const runAnalysis = (sym: string, force = false) => {
+    setStatus(''); setMetrics(null); setRevTrend([]); setFibonacci(null); setLatestQ(null);
     setAgent1(null); setAgent2(null); setAgent3(null); setAgent4(null); setAgent5(null);
     setDone(false); setError(null); setActiveTab(0);
     if (esRef.current) { esRef.current.close(); esRef.current = null; }
 
-    const es = new EventSource(`/api/stock/deep-analysis/stream?symbol=${encodeURIComponent(sym)}`);
+    // Cache-bust query param when forced; backend itself doesn't read it but it
+    // forces the browser/edge to issue a fresh request.
+    const bust = force ? `&t=${Date.now()}` : '';
+    const es = new EventSource(`/api/stock/deep-analysis/stream?symbol=${encodeURIComponent(sym)}${bust}`);
     esRef.current = es;
     es.addEventListener('status',   e => setStatus(JSON.parse((e as MessageEvent).data).message || ''));
-    es.addEventListener('raw_data', e => { const d = JSON.parse((e as MessageEvent).data); setMetrics(d.metrics); setRevTrend(d.revenueTrend || []); setFibonacci(d.fibonacci || null); });
+    es.addEventListener('raw_data', e => {
+      const d = JSON.parse((e as MessageEvent).data);
+      setMetrics(d.metrics);
+      setRevTrend(d.revenueTrend || []);
+      setFibonacci(d.fibonacci || null);
+      setLatestQ(d.latestReportedQuarter || null);
+    });
     es.addEventListener('agent_1',  e => setAgent1(JSON.parse((e as MessageEvent).data)));
     es.addEventListener('agent_2',  e => setAgent2(JSON.parse((e as MessageEvent).data)));
     es.addEventListener('agent_3',  e => setAgent3(JSON.parse((e as MessageEvent).data)));
@@ -465,6 +475,35 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
         </div>
       )}
       {error && <div className="px-3 py-2 bg-[#1a0d0d] border border-[#ff4757]/40 rounded text-xs text-[#ff9800]">⚠ {error}</div>}
+
+      {/* ── Fresh earnings badge + manual rerun ── */}
+      {(latestQ?.isFresh || done) && (
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          {latestQ?.isFresh && (
+            <div
+              className="flex items-center gap-2 px-3 py-1.5 rounded text-xs font-semibold"
+              style={{ background: '#26de8122', border: '1px solid #26de8166', color: '#26de81' }}
+            >
+              <span>🆕</span>
+              <span>
+                Yeni Bilanço · {latestQ.date} ({latestQ.daysAgo}g önce)
+                {latestQ.epsActual != null && ` · EPS $${Number(latestQ.epsActual).toFixed(2)}`}
+                {latestQ.surprisePct != null && ` (sürpriz ${latestQ.surprisePct >= 0 ? '+' : ''}${Number(latestQ.surprisePct).toFixed(1)}%)`}
+              </span>
+            </div>
+          )}
+          {done && (
+            <button
+              onClick={() => runAnalysis(symbol, true)}
+              className="ml-auto px-3 py-1.5 rounded text-xs font-semibold transition"
+              style={{ background: '#4fc3f722', border: '1px solid #4fc3f766', color: '#4fc3f7' }}
+              title="Veriyi sıfırdan çek ve 5 ajanı yeniden çalıştır"
+            >
+              🔄 Yeniden Çalıştır
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ── Hero: Agent 5 decision ── */}
       {agent5 ? (
