@@ -18,6 +18,13 @@ export interface MacroRelease {
   expected_yoy_pct?: number | null;
   surprise_mom_pp?: number | null;
   surprise_yoy_pp?: number | null;
+  market_reaction?: {
+    t_offset_seconds: number;
+    dxy_change_pct: number | null;
+    spy_change_pct: number | null;
+    us10y_change_bp: number | null;
+    snapshot: { dxy: number | null; spy: number | null; us10y: number | null };
+  } | null;
   narrative_md: string | null;
   sentiment_score: number | null;
   source_url: string | null;

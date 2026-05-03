@@ -456,6 +456,193 @@ function MetricRow({ label, prior, expected, actual }: {
   );
 }
 
+type MarketReactionPayload = NonNullable<MacroRelease['market_reaction']>;
+
+interface HistoryPoint {
+  event_id: string;
+  released_at: string;
+  actual_value: number | null;
+  prior_value: number | null;
+  mom_pct: number | null;
+  yoy_pct: number | null;
+}
+
+interface HistoryPayload {
+  event_type: string;
+  source: string;
+  points: HistoryPoint[];
+}
+
+function HistoryChart({ headlineType, coreType }: { headlineType: string; coreType: string | null }) {
+  const [headline, setHeadline] = React.useState<HistoryPayload | null>(null);
+  const [core, setCore] = React.useState<HistoryPayload | null>(null);
+  const [hover, setHover] = React.useState<{ idx: number } | null>(null);
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/macro/history/${headlineType}?months=14`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => active && setHeadline(d as HistoryPayload | null))
+      .catch(() => {});
+    if (coreType) {
+      fetch(`/api/macro/history/${coreType}?months=14`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => active && setCore(d as HistoryPayload | null))
+        .catch(() => {});
+    }
+    return () => { active = false; };
+  }, [headlineType, coreType]);
+
+  const pts = headline?.points ?? [];
+  if (pts.length < 2) return null;
+
+  const W = 560;
+  const H = 140;
+  const PAD_L = 36;
+  const PAD_R = 8;
+  const PAD_T = 12;
+  const PAD_B = 22;
+  const innerW = W - PAD_L - PAD_R;
+  const innerH = H - PAD_T - PAD_B;
+
+  const seriesA = pts.map((p) => p.mom_pct).filter((v): v is number => v != null);
+  const seriesB = (core?.points ?? []).map((p) => p.mom_pct).filter((v): v is number => v != null);
+  const all = [...seriesA, ...seriesB];
+  if (all.length === 0) return null;
+  const yMin = Math.min(...all);
+  const yMax = Math.max(...all);
+  const yRange = yMax - yMin || 1;
+  const yPad = yRange * 0.2;
+  const yLo = yMin - yPad;
+  const yHi = yMax + yPad;
+
+  const xFor = (i: number) => PAD_L + (i / Math.max(1, pts.length - 1)) * innerW;
+  const yFor = (v: number) => PAD_T + (1 - (v - yLo) / (yHi - yLo)) * innerH;
+
+  const path = (points: (number | null)[]) =>
+    points
+      .map((v, i) => {
+        if (v == null) return '';
+        const cmd = i === 0 ? 'M' : 'L';
+        return `${cmd}${xFor(i).toFixed(1)},${yFor(v).toFixed(1)}`;
+      })
+      .filter((s) => s)
+      .join(' ');
+
+  const headlinePath = path(pts.map((p) => p.mom_pct));
+  const corePts = core?.points ?? [];
+  // Align Core to headline by released_at — backend returns same period set.
+  const corePath = corePts.length === pts.length ? path(corePts.map((p) => p.mom_pct)) : '';
+
+  const labelMap: Record<string, string> = {
+    CPI: 'CPI', PCE: 'PCE', CORE_CPI: 'Çekirdek CPI', CORE_PCE: 'Çekirdek PCE',
+  };
+  const headlineLabel = labelMap[headlineType] ?? headlineType;
+  const coreLabel = coreType ? (labelMap[coreType] ?? coreType) : null;
+
+  const hovered = hover ? pts[hover.idx] : null;
+  const hoveredCore = hover && core?.points?.[hover.idx] ? core.points[hover.idx] : null;
+
+  return (
+    <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded p-3" data-testid="macro-history-chart">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] text-[#8888a0] uppercase tracking-wider">14 ay MoM %</span>
+        <div className="flex items-center gap-3 text-[10px]">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block w-3 h-0.5 bg-[#4fc3f7]" /> {headlineLabel}
+          </span>
+          {coreLabel && (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block w-3 h-0.5 bg-[#ffa726]" /> {coreLabel}
+            </span>
+          )}
+        </div>
+      </div>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full h-[140px]"
+        onMouseMove={(e) => {
+          const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
+          const x = ((e.clientX - rect.left) / rect.width) * W;
+          const idx = Math.round(((x - PAD_L) / innerW) * (pts.length - 1));
+          if (idx >= 0 && idx < pts.length) setHover({ idx });
+        }}
+        onMouseLeave={() => setHover(null)}
+      >
+        {/* zero line */}
+        {yLo < 0 && yHi > 0 && (
+          <line
+            x1={PAD_L} x2={W - PAD_R} y1={yFor(0)} y2={yFor(0)}
+            stroke="#2a2a3e" strokeDasharray="2 3"
+          />
+        )}
+        {/* y-axis labels */}
+        <text x={PAD_L - 4} y={yFor(yHi - yPad) + 3} textAnchor="end" fontSize="9" fill="#555570">{(yHi - yPad).toFixed(1)}%</text>
+        <text x={PAD_L - 4} y={yFor(yLo + yPad) + 3} textAnchor="end" fontSize="9" fill="#555570">{(yLo + yPad).toFixed(1)}%</text>
+        {/* x-axis: first + last released_at month */}
+        <text x={PAD_L} y={H - 6} fontSize="9" fill="#555570">{pts[0].released_at.slice(0, 7)}</text>
+        <text x={W - PAD_R} y={H - 6} textAnchor="end" fontSize="9" fill="#555570">{pts[pts.length - 1].released_at.slice(0, 7)}</text>
+        {/* core line first (drawn under headline) */}
+        {corePath && <path d={corePath} fill="none" stroke="#ffa726" strokeWidth="1.5" />}
+        <path d={headlinePath} fill="none" stroke="#4fc3f7" strokeWidth="1.75" />
+        {/* hover marker */}
+        {hovered && hovered.mom_pct != null && (
+          <>
+            <line
+              x1={xFor(hover!.idx)} x2={xFor(hover!.idx)}
+              y1={PAD_T} y2={H - PAD_B}
+              stroke="#555570" strokeDasharray="2 2"
+            />
+            <circle cx={xFor(hover!.idx)} cy={yFor(hovered.mom_pct)} r="3" fill="#4fc3f7" />
+            {hoveredCore?.mom_pct != null && (
+              <circle cx={xFor(hover!.idx)} cy={yFor(hoveredCore.mom_pct)} r="3" fill="#ffa726" />
+            )}
+          </>
+        )}
+      </svg>
+      {hovered && (
+        <div className="text-[10px] text-[#8888a0] mt-1 flex gap-3">
+          <span className="text-[#e0e0e0]">{hovered.released_at.slice(0, 7)}</span>
+          {hovered.mom_pct != null && (
+            <span className="text-[#4fc3f7] font-mono">
+              {headlineLabel} {hovered.mom_pct > 0 ? '+' : ''}{hovered.mom_pct.toFixed(2)}%
+            </span>
+          )}
+          {hoveredCore?.mom_pct != null && (
+            <span className="text-[#ffa726] font-mono">
+              {coreLabel} {hoveredCore.mom_pct > 0 ? '+' : ''}{hoveredCore.mom_pct.toFixed(2)}%
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MarketReactionLine({ reaction }: { reaction: MarketReactionPayload }) {
+  const dxy = reaction.dxy_change_pct;
+  const spy = reaction.spy_change_pct;
+  const us10y = reaction.us10y_change_bp;
+  if (dxy == null && spy == null && us10y == null) return null;
+  const cell = (label: string, val: number | null, fmt: (v: number) => string) => {
+    if (val == null) return null;
+    const cls = val > 0 ? 'text-[#ef5350]' : val < 0 ? 'text-[#26a69a]' : 'text-[#e0e0e0]';
+    return (
+      <span key={label} className="inline-flex items-baseline gap-1">
+        <span className="text-[10px] text-[#8888a0] uppercase tracking-wider">{label}</span>
+        <span className={`text-[12px] font-mono font-semibold ${cls}`}>{fmt(val)}</span>
+      </span>
+    );
+  };
+  return (
+    <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded px-3 py-2 flex items-center gap-4 flex-wrap" data-testid="macro-market-reaction">
+      <span className="text-[10px] text-[#ff9800] uppercase tracking-wider">📉 Piyasa tepkisi (T+5dk)</span>
+      {cell('DXY', dxy, (v) => `${v > 0 ? '+' : ''}${v.toFixed(2)}%`)}
+      {cell('SPY', spy, (v) => `${v > 0 ? '+' : ''}${v.toFixed(2)}%`)}
+      {cell('US10Y', us10y, (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}bp`)}
+    </div>
+  );
+}
+
 function MetricsTable({ headline, core }: { headline: MacroRelease; core: MacroRelease | null }) {
   const et = (headline.event_type || '').toUpperCase();
   if (!PCT_DELTA_EVENTS.has(et)) return null;
@@ -527,6 +714,13 @@ function MacroBody({ data, core }: { data: MacroRelease; core: MacroRelease | nu
       </div>
 
       <MetricsTable headline={data} core={core} />
+
+      {PCT_DELTA_EVENTS.has((data.event_type || '').toUpperCase()) && (
+        <HistoryChart
+          headlineType={(data.event_type || '').toUpperCase()}
+          coreType={core ? (core.event_type || '').toUpperCase() : null}
+        />
+      )}
 
       {data.narrative_md ? (
         <p className="text-sm text-[#e0e0e0] leading-relaxed whitespace-pre-line">
@@ -611,6 +805,10 @@ function MacroBody({ data, core }: { data: MacroRelease; core: MacroRelease | nu
             </div>
           )}
         </div>
+      )}
+
+      {data.market_reaction && (
+        <MarketReactionLine reaction={data.market_reaction} />
       )}
 
       {data.source_url && (
