@@ -17,6 +17,7 @@ import type {
   IndexQuote,
 } from '@/hooks/useDashboardSummary';
 import type { DailyDigestCard } from '@/hooks/useDailyDigest';
+import type { MacroRelease } from '@/hooks/useMacroLatest';
 
 // ─── Modal kind union ────────────────────────────────────────────────────
 
@@ -30,7 +31,8 @@ export type ModalContent =
   | { type: 'movers'; data: PreMarketMovers }
   | { type: 'earnings'; data: EarningItem[] }
   | { type: 'sectors'; data: SectorPerformance[] }
-  | { type: 'vix'; data: FearIndices };
+  | { type: 'vix'; data: FearIndices }
+  | { type: 'macro'; data: MacroRelease };
 
 // ─── Helpers (paylaşılan) ────────────────────────────────────────────────
 
@@ -404,6 +406,82 @@ function FearBody({ data }: { data: FearIndices }) {
   );
 }
 
+function MacroBody({ data }: { data: MacroRelease }) {
+  const sentiment = data.sentiment_score;
+  const tone = (() => {
+    if (sentiment == null) return { label: 'Bilinmiyor', color: 'text-[#8888a0]', dot: 'bg-[#555570]' };
+    if (sentiment >= 0.66) return { label: 'Güvercin / risk-on', color: 'text-[#26a69a]', dot: 'bg-[#26a69a]' };
+    if (sentiment <= 0.33) return { label: 'Şahin / risk-off', color: 'text-[#ef5350]', dot: 'bg-[#ef5350]' };
+    return { label: 'Karışık', color: 'text-[#ffa726]', dot: 'bg-[#ffa726]' };
+  })();
+  const releasedHuman = data.released_at
+    ? new Date(data.released_at).toLocaleString('tr-TR', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      })
+    : '—';
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 text-[12px]">
+        <span className="px-2 py-0.5 rounded bg-[#0f0f20] border border-[#2a2a3e] text-[#ff9800] font-mono uppercase tracking-wider">
+          {data.event_type}
+        </span>
+        <span className="text-[#8888a0]">{flagFor(data.country)} {data.country}</span>
+        <span className="text-[#555570]">·</span>
+        <span className="text-[#8888a0]">Yayın: {releasedHuman}</span>
+      </div>
+
+      {data.narrative_md ? (
+        <p className="text-sm text-[#e0e0e0] leading-relaxed whitespace-pre-line">
+          {data.narrative_md}
+        </p>
+      ) : (
+        <p className="text-[12px] text-[#555570] italic">Henüz narrative üretilmedi.</p>
+      )}
+
+      <div className="flex items-center gap-2 text-[11px]">
+        <span className={`w-2 h-2 rounded-full ${tone.dot}`} />
+        <span className="text-[#8888a0]">Piyasa tonu:</span>
+        <span className={`font-semibold ${tone.color}`}>{tone.label}</span>
+        {sentiment != null && (
+          <span className="text-[#555570] font-mono ml-1">({sentiment.toFixed(2)})</span>
+        )}
+      </div>
+
+      {(data.actual_value != null || data.prior_value != null) && (
+        <div className="grid grid-cols-2 gap-2">
+          {data.actual_value != null && (
+            <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded px-3 py-2">
+              <div className="text-[9px] text-[#8888a0] uppercase tracking-wider">Bu dönem</div>
+              <div className="text-[14px] font-mono text-[#e0e0e0]">
+                {data.actual_value.toLocaleString('tr-TR')}
+              </div>
+            </div>
+          )}
+          {data.prior_value != null && (
+            <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded px-3 py-2">
+              <div className="text-[9px] text-[#8888a0] uppercase tracking-wider">Önceki dönem</div>
+              <div className="text-[14px] font-mono text-[#e0e0e0]">
+                {data.prior_value.toLocaleString('tr-TR')}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {data.source_url && (
+        <a
+          href={data.source_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-[11px] text-[#4fc3f7] hover:text-[#ff9800]"
+        >
+          🔗 Resmi kaynak
+        </a>
+      )}
+    </div>
+  );
+}
+
 // ─── Main modal component ────────────────────────────────────────────────
 
 const TITLE_MAP: Record<ModalContent['type'], { icon: string; title: string }> = {
@@ -417,6 +495,7 @@ const TITLE_MAP: Record<ModalContent['type'], { icon: string; title: string }> =
   earnings:   { icon: '📊', title: 'Bugün Bilançolar' },
   sectors:    { icon: '🔥', title: 'Sektör Performansı' },
   vix:        { icon: '🌡️', title: 'VIX Volatilite Endeksi + Kripto F&G' },
+  macro:      { icon: '🌐', title: 'Makro Pulse — Son Release' },
 };
 
 export function SummaryDetailModal({
@@ -492,6 +571,7 @@ export function SummaryDetailModal({
           {content.type === 'earnings' && <EarningsBody data={content.data} />}
           {content.type === 'sectors' && <SectorsBody data={content.data} />}
           {content.type === 'vix' && <FearBody data={content.data} />}
+          {content.type === 'macro' && <MacroBody data={content.data} />}
         </div>
 
         {/* Footer */}

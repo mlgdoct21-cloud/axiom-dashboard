@@ -13,6 +13,7 @@
 import React, { useState } from 'react';
 import { useDailyDigest } from '@/hooks/useDailyDigest';
 import { useDashboardSummary } from '@/hooks/useDashboardSummary';
+import { useMacroLatest } from '@/hooks/useMacroLatest';
 import {
   DigestRiskChip,
   DigestQuantChip,
@@ -24,12 +25,14 @@ import {
   MiniEarningsChip,
   MiniSectorChip,
   MiniVixChip,
+  MiniMacroChip,
 } from './SummaryPanels';
 import { SummaryDetailModal, type ModalContent } from './SummaryDetailModal';
 
 export function DashboardSummary() {
   const { digest, loading: digestLoading, error: digestError } = useDailyDigest(true);
   const { data, loading, error, refresh } = useDashboardSummary(true);
+  const { data: macroData, loading: macroLoading } = useMacroLatest(true);
   const [modal, setModal] = useState<ModalContent | null>(null);
 
   const ageText = (() => {
@@ -78,8 +81,8 @@ export function DashboardSummary() {
         </button>
       </div>
 
-      {/* 10-chip compact grid (5 col × 2 row at lg) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5">
+      {/* 11-chip compact grid (6 col × 2 row at lg, last slot empty) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5">
         <DigestRiskChip
           card={digest?.risk_radar}
           loading={digestLoading && !digest}
@@ -161,6 +164,15 @@ export function DashboardSummary() {
           onClick={
             data?.fear_indices
               ? () => open({ type: 'vix', data: data.fear_indices! })
+              : undefined
+          }
+        />
+        <MiniMacroChip
+          release={macroData?.release}
+          loading={macroLoading && !macroData}
+          onClick={
+            macroData?.release
+              ? () => open({ type: 'macro', data: macroData.release! })
               : undefined
           }
         />

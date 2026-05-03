@@ -17,6 +17,7 @@ import type {
   IndexQuote,
 } from '@/hooks/useDashboardSummary';
 import type { DailyDigestCard } from '@/hooks/useDailyDigest';
+import type { MacroRelease } from '@/hooks/useMacroLatest';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -433,6 +434,88 @@ export function MiniVixChip({
       loading={loading}
       empty={empty}
       onClick={onClick}
+    />
+  );
+}
+
+// ─── 11. PANEL: MACRO PULSE (Fed/CPI/NFP narrative) ─────────────────────
+
+const _MACRO_EMOJI: Record<string, string> = {
+  CPI: '📊',
+  NFP: '👷',
+  PCE: '📈',
+  FOMC_STATEMENT: '🏛️',
+  FOMC_MINUTES: '📜',
+  FOMC_PROJECTIONS: '🔮',
+  RATE_DECISION: '⚖️',
+};
+
+const _MACRO_LABEL: Record<string, string> = {
+  CPI: 'CPI',
+  NFP: 'NFP',
+  PCE: 'PCE',
+  FOMC_STATEMENT: 'FOMC',
+  FOMC_MINUTES: 'FOMC Tutanak',
+  FOMC_PROJECTIONS: 'FOMC SEP',
+  RATE_DECISION: 'Faiz Kararı',
+};
+
+function _macroAccent(score: number | null | undefined): ChipProps['accent'] {
+  if (score == null) return 'gray';
+  if (score >= 0.66) return 'green';
+  if (score <= 0.33) return 'red';
+  return 'yellow';
+}
+
+function _macroAgeText(releasedAt: string | null | undefined): string {
+  if (!releasedAt) return '';
+  try {
+    const t = new Date(releasedAt).getTime();
+    const diffMin = Math.floor((Date.now() - t) / 60000);
+    if (diffMin < 60) return `${diffMin}dk önce`;
+    const diffH = Math.floor(diffMin / 60);
+    if (diffH < 48) return `${diffH}sa önce`;
+    return `${Math.floor(diffH / 24)}g önce`;
+  } catch {
+    return '';
+  }
+}
+
+export function MiniMacroChip({
+  release,
+  loading,
+  onClick,
+}: {
+  release?: MacroRelease | null;
+  loading?: boolean;
+  onClick?: () => void;
+}) {
+  const empty = !loading && !release;
+  const et = (release?.event_type || '').toUpperCase();
+  const emoji = _MACRO_EMOJI[et] || '🌐';
+  const label = _MACRO_LABEL[et] || et || 'Makro';
+  const ageText = _macroAgeText(release?.released_at);
+  // Narrative kısa özet — chip'te 1 satır gösterilsin
+  const narrative = release?.narrative_md?.slice(0, 90) || '';
+
+  return (
+    <Chip
+      icon={emoji}
+      title="Makro Pulse"
+      primary={
+        release ? (
+          <span>
+            <span className="font-semibold">{label}</span>
+            {ageText && <span className="text-[#8888a0]"> · {ageText}</span>}
+          </span>
+        ) : null
+      }
+      secondary={narrative ? <span title={release?.narrative_md || ''}>{narrative}…</span> : null}
+      accent={_macroAccent(release?.sentiment_score)}
+      loading={loading}
+      empty={empty}
+      onClick={onClick}
+      tooltip={release?.narrative_md || undefined}
     />
   );
 }
