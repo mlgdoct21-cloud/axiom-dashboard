@@ -18,6 +18,7 @@ import type {
 } from '@/hooks/useDashboardSummary';
 import type { DailyDigestCard } from '@/hooks/useDailyDigest';
 import type { MacroRelease } from '@/hooks/useMacroLatest';
+import { useMacroUpcoming } from '@/hooks/useMacroLatest';
 import { sectorLabelTr } from '@/lib/macro-sector-labels';
 
 // ─── Modal kind union ────────────────────────────────────────────────────
@@ -910,9 +911,77 @@ function MacroBody({ data, core }: { data: MacroRelease; core: MacroRelease | nu
         </a>
       )}
 
+      <UpcomingReleases />
+
       <p className="text-[10px] text-[#555570] italic pt-2 border-t border-[#2a2a3e]" data-testid="macro-disclaimer">
         ⚠️ Yatırım tavsiyesi değildir.
       </p>
+    </div>
+  );
+}
+
+const _EVENT_LABELS_TR: Record<string, string> = {
+  CPI: 'TÜFE (CPI)',
+  NFP: 'Tarım Dışı İstihdam (NFP)',
+  PCE: 'PCE Enflasyon',
+  FOMC_DECISION: 'Fed Faiz Kararı (FOMC)',
+};
+
+function _formatUpcomingWhen(scheduledAt: string): string {
+  const d = new Date(scheduledAt);
+  const trMonths = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz',
+    'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+  const day = d.getUTCDate();
+  const month = trMonths[d.getUTCMonth()];
+  const hh = String(d.getUTCHours()).padStart(2, '0');
+  const mm = String(d.getUTCMinutes()).padStart(2, '0');
+  return `${day} ${month} ${hh}:${mm} UTC`;
+}
+
+function _daysUntil(scheduledAt: string): number {
+  const ms = new Date(scheduledAt).getTime() - Date.now();
+  return Math.floor(ms / 86400000);
+}
+
+function UpcomingReleases() {
+  const { data, loading } = useMacroUpcoming(true, { days: 30, limit: 4 });
+  if (loading && !data) return null;
+  const events = data?.events ?? [];
+  if (events.length === 0) return null;
+  return (
+    <div className="space-y-2 pt-2 border-t border-[#2a2a3e]" data-testid="macro-upcoming">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] text-[#8888a0] uppercase tracking-wider">Sırada</span>
+        <span className="text-[9px] text-[#555570]">FRED takvimi · 30 gün</span>
+      </div>
+      <div className="space-y-1">
+        {events.map((e) => {
+          const days = _daysUntil(e.scheduled_at);
+          const label = _EVENT_LABELS_TR[e.event_type] ?? e.event_type;
+          const dayBadge =
+            days <= 0 ? 'bugün' :
+            days === 1 ? 'yarın' :
+            `${days} gün`;
+          const dayColor =
+            days <= 1 ? 'text-[#ff9800] border-[#ff9800]/40 bg-[#1f1610]' :
+            days <= 7 ? 'text-[#4fc3f7] border-[#4fc3f7]/40 bg-[#0f1820]' :
+            'text-[#8888a0] border-[#2a2a3e] bg-[#0f0f20]';
+          return (
+            <div
+              key={`${e.event_type}-${e.scheduled_at}`}
+              className="flex items-center gap-2 text-[12px] py-1"
+            >
+              <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${dayColor}`}>
+                {dayBadge}
+              </span>
+              <span className="text-[#e0e0e0] flex-1 truncate">{label}</span>
+              <span className="text-[10px] text-[#8888a0] font-mono">
+                {_formatUpcomingWhen(e.scheduled_at)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

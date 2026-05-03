@@ -40,6 +40,66 @@ export interface MacroLatestData {
   core_release?: MacroRelease | null;
 }
 
+export interface UpcomingEvent {
+  event_type: string;
+  label: string;
+  scheduled_at: string;
+  sources_to_accelerate: string[];
+}
+
+export interface MacroUpcomingData {
+  now: string;
+  count: number;
+  events: UpcomingEvent[];
+}
+
+interface UseMacroUpcomingReturn {
+  data: MacroUpcomingData | null;
+  loading: boolean;
+  error: Error | null;
+  refresh: () => void;
+}
+
+/**
+ * Fetches the next N events from the merged calendar (FRED auto-fill +
+ * YAML manual). Backend caches 5 min; we poll every 10 min.
+ */
+export function useMacroUpcoming(
+  enabled: boolean = true,
+  { days = 30, limit = 6 }: { days?: number; limit?: number } = {},
+): UseMacroUpcomingReturn {
+  const [data, setData] = useState<MacroUpcomingData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetchUpcoming = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch(`/api/macro/upcoming?days=${days}&limit=${limit}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = (await res.json()) as MacroUpcomingData;
+      setData(body);
+    } catch (err) {
+      const e = err instanceof Error ? err : new Error(String(err));
+      setError(e);
+      console.error('[useMacroUpcoming] fetch error:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [days, limit]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    if (typeof window === 'undefined') return;
+    fetchUpcoming();
+    const interval = setInterval(fetchUpcoming, 10 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [enabled, fetchUpcoming]);
+
+  return { data, loading, error, refresh: fetchUpcoming };
+}
+
 interface UseMacroLatestReturn {
   data: MacroLatestData | null;
   loading: boolean;
