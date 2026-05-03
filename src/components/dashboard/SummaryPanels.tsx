@@ -18,6 +18,7 @@ import type {
 } from '@/hooks/useDashboardSummary';
 import type { DailyDigestCard } from '@/hooks/useDailyDigest';
 import type { MacroRelease } from '@/hooks/useMacroLatest';
+import { useMacroUpcoming } from '@/hooks/useMacroLatest';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -64,6 +65,8 @@ interface ChipProps {
   title: string;
   primary?: React.ReactNode;
   secondary?: React.ReactNode;
+  /** Optional 3rd line for forward-looking/preview info (e.g. "Sırada: NFP 8 May"). */
+  tertiary?: React.ReactNode;
   accent?: 'red' | 'yellow' | 'green' | 'blue' | 'gray';
   loading?: boolean;
   empty?: boolean;
@@ -79,7 +82,7 @@ const accentMap: Record<NonNullable<ChipProps['accent']>, { border: string; dot:
   gray:   { border: 'border-l-[#555570]', dot: 'bg-[#555570]' },
 };
 
-export function Chip({ icon, title, primary, secondary, accent = 'gray', loading, empty, tooltip, onClick }: ChipProps) {
+export function Chip({ icon, title, primary, secondary, tertiary, accent = 'gray', loading, empty, tooltip, onClick }: ChipProps) {
   const { border, dot } = accentMap[accent];
   const interactive = onClick != null;
   const Component = interactive ? 'button' : 'div';
@@ -88,7 +91,7 @@ export function Chip({ icon, title, primary, secondary, accent = 'gray', loading
       type={interactive ? 'button' : undefined}
       onClick={onClick}
       title={tooltip}
-      className={`text-left w-full bg-[#1a1a2e] border border-[#2a2a3e] border-l-[3px] ${border} rounded px-2.5 py-2 min-h-[68px] flex flex-col justify-center transition-all ${
+      className={`text-left w-full bg-[#1a1a2e] border border-[#2a2a3e] border-l-[3px] ${border} rounded px-2.5 py-2 min-h-[80px] flex flex-col justify-center transition-all ${
         interactive
           ? 'hover:bg-[#1f1f3a] hover:border-[#4fc3f7]/40 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#4fc3f7]/50'
           : 'cursor-default'
@@ -109,6 +112,9 @@ export function Chip({ icon, title, primary, secondary, accent = 'gray', loading
           <div className="text-[11px] font-medium text-[#e0e0e0] leading-tight truncate">{primary}</div>
           {secondary && (
             <div className="text-[10px] text-[#8888a0] leading-tight truncate mt-0.5">{secondary}</div>
+          )}
+          {tertiary && (
+            <div className="text-[9px] text-[#4fc3f7]/80 leading-tight truncate mt-0.5">{tertiary}</div>
           )}
         </>
       )}
@@ -481,6 +487,28 @@ function _macroAgeText(releasedAt: string | null | undefined): string {
   }
 }
 
+const _UPCOMING_LABEL: Record<string, string> = {
+  CPI: 'CPI',
+  NFP: 'NFP',
+  PCE: 'PCE',
+  FOMC_DECISION: 'FOMC',
+};
+
+const _TR_MONTH_SHORT = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+
+function _formatUpcomingShort(scheduledAt: string): string {
+  const d = new Date(scheduledAt);
+  return `${d.getUTCDate()} ${_TR_MONTH_SHORT[d.getUTCMonth()]}`;
+}
+
+function _daysUntilShort(scheduledAt: string): string {
+  const ms = new Date(scheduledAt).getTime() - Date.now();
+  const days = Math.floor(ms / 86400000);
+  if (days <= 0) return 'bugün';
+  if (days === 1) return 'yarın';
+  return `${days}g`;
+}
+
 export function MiniMacroChip({
   release,
   loading,
@@ -490,13 +518,27 @@ export function MiniMacroChip({
   loading?: boolean;
   onClick?: () => void;
 }) {
+  // Pull next event from the same merged calendar the modal uses. Hook caches
+  // 5min and polls 10min so adding a second consumer here is cheap.
+  const { data: upcoming } = useMacroUpcoming(true, { days: 30, limit: 1 });
+  const nextEvent = upcoming?.events?.[0] ?? null;
   const empty = !loading && !release;
   const et = (release?.event_type || '').toUpperCase();
   const emoji = _MACRO_EMOJI[et] || '🌐';
   const label = _MACRO_LABEL[et] || et || 'Makro';
   const ageText = _macroAgeText(release?.released_at);
-  // Narrative kısa özet — chip'te 1 satır gösterilsin
-  const narrative = release?.narrative_md?.slice(0, 90) || '';
+  const narrative = release?.narrative_md?.slice(0, 70) || '';
+
+  // Tertiary = next upcoming event, e.g. "📅 Sırada: NFP — yarın (8 May)".
+  const tertiary = nextEvent ? (
+    <span>
+      📅 Sırada:{' '}
+      <span className="font-medium text-[#e0e0e0]">
+        {_UPCOMING_LABEL[nextEvent.event_type] || nextEvent.event_type}
+      </span>{' '}
+      — {_daysUntilShort(nextEvent.scheduled_at)} ({_formatUpcomingShort(nextEvent.scheduled_at)})
+    </span>
+  ) : null;
 
   return (
     <Chip
@@ -511,6 +553,7 @@ export function MiniMacroChip({
         ) : null
       }
       secondary={narrative ? <span title={release?.narrative_md || ''}>{narrative}…</span> : null}
+      tertiary={tertiary}
       accent={_macroAccent(release?.sentiment_score)}
       loading={loading}
       empty={empty}
