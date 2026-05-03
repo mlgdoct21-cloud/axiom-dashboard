@@ -14,6 +14,8 @@ export interface MacroRelease {
   yoy_pct?: number | null;
   prior_mom_pct?: number | null;
   prior_yoy_pct?: number | null;
+  change_k?: number | null;
+  prior_change_k?: number | null;
   expected_mom_pct?: number | null;
   expected_yoy_pct?: number | null;
   surprise_mom_pp?: number | null;

@@ -415,7 +415,19 @@ const SHORT_LABEL_TR: Record<string, string> = {
   CORE_CPI: 'Çekirdek CPI',
   CORE_PCE: 'Çekirdek PCE',
   NFP: 'NFP',
+  UNRATE: 'İşsizlik',
 };
+
+function fmtJobsK(v: number | null | undefined): string {
+  if (v == null) return '—';
+  const sign = v >= 0 ? '+' : '';
+  return `${sign}${Math.round(v)}K`;
+}
+
+function fmtLevelPct(v: number | null | undefined): string {
+  if (v == null) return '—';
+  return `${Number(v).toFixed(1)}%`;
+}
 
 function fmtPct(v: number | null | undefined): string {
   if (v == null) return '—';
@@ -643,8 +655,67 @@ function MarketReactionLine({ reaction }: { reaction: MarketReactionPayload }) {
   );
 }
 
+function NfpMetricRow({ label, prior, expected, actual, fmt }: {
+  label: string;
+  prior: number | null | undefined;
+  expected: number | null | undefined;
+  actual: number | null | undefined;
+  fmt: (v: number | null | undefined) => string;
+}) {
+  if (prior == null && expected == null && actual == null) return null;
+  const cls = (v: number | null | undefined) => {
+    if (v == null) return 'text-[#555570]';
+    if (v > 0) return 'text-[#26a69a]'; // jobs added = green
+    if (v < 0) return 'text-[#ef5350]';
+    return 'text-[#e0e0e0]';
+  };
+  return (
+    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 gap-y-0.5 items-baseline py-1 border-b border-[#1a1a2e] last:border-0">
+      <span className="text-[12px] text-[#e0e0e0] font-medium">{label}</span>
+      <div className="text-right">
+        <div className="text-[8px] text-[#555570] uppercase tracking-wider leading-tight">Önceki</div>
+        <div className="text-[12px] font-mono text-[#8888a0]">{fmt(prior)}</div>
+      </div>
+      <div className="text-right">
+        <div className="text-[8px] text-[#555570] uppercase tracking-wider leading-tight">Beklenti</div>
+        <div className="text-[12px] font-mono text-[#8888a0]">{fmt(expected)}</div>
+      </div>
+      <div className="text-right">
+        <div className="text-[8px] text-[#555570] uppercase tracking-wider leading-tight">Gelen</div>
+        <div className={`text-[13px] font-mono font-semibold ${cls(actual)}`}>{fmt(actual)}</div>
+      </div>
+    </div>
+  );
+}
+
 function MetricsTable({ headline, core }: { headline: MacroRelease; core: MacroRelease | null }) {
   const et = (headline.event_type || '').toUpperCase();
+  // NFP path — raw K change + paired UNRATE level. Different formatting,
+  // semantically the same Önceki | Beklenti | Gelen layout.
+  if (et === 'NFP') {
+    const headLabel = SHORT_LABEL_TR[et] ?? et;
+    const isUnrate = core && (core.event_type || '').toUpperCase() === 'UNRATE';
+    return (
+      <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded p-3" data-testid="macro-metrics-table">
+        <NfpMetricRow
+          label={`${headLabel} Aylık`}
+          prior={headline.prior_change_k}
+          expected={headline.expected_mom_pct}
+          actual={headline.change_k}
+          fmt={fmtJobsK}
+        />
+        {isUnrate && (
+          <NfpMetricRow
+            label="İşsizlik"
+            prior={core!.prior_value}
+            expected={core!.expected_mom_pct}
+            actual={core!.actual_value}
+            fmt={fmtLevelPct}
+          />
+        )}
+      </div>
+    );
+  }
   if (!PCT_DELTA_EVENTS.has(et)) return null;
   const headLabel = SHORT_LABEL_TR[et] ?? et;
   const coreLabel = core ? (SHORT_LABEL_TR[(core.event_type || '').toUpperCase()] ?? core.event_type) : null;
