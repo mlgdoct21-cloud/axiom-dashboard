@@ -11,6 +11,13 @@ export interface MacroRelease {
   actual_value: number | null;
   prior_value: number | null;
   mom_pct?: number | null;
+  yoy_pct?: number | null;
+  prior_mom_pct?: number | null;
+  prior_yoy_pct?: number | null;
+  expected_mom_pct?: number | null;
+  expected_yoy_pct?: number | null;
+  surprise_mom_pp?: number | null;
+  surprise_yoy_pp?: number | null;
   narrative_md: string | null;
   sentiment_score: number | null;
   source_url: string | null;
@@ -21,6 +28,7 @@ export interface MacroRelease {
 export interface MacroLatestData {
   now: string;
   release: MacroRelease | null;
+  core_release?: MacroRelease | null;
 }
 
 interface UseMacroLatestReturn {

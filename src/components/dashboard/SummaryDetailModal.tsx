@@ -33,7 +33,7 @@ export type ModalContent =
   | { type: 'earnings'; data: EarningItem[] }
   | { type: 'sectors'; data: SectorPerformance[] }
   | { type: 'vix'; data: FearIndices }
-  | { type: 'macro'; data: MacroRelease };
+  | { type: 'macro'; data: MacroRelease; core?: MacroRelease | null };
 
 // ─── Helpers (paylaşılan) ────────────────────────────────────────────────
 
@@ -407,7 +407,75 @@ function FearBody({ data }: { data: FearIndices }) {
   );
 }
 
-function MacroBody({ data }: { data: MacroRelease }) {
+const PCT_DELTA_EVENTS = new Set(['CPI', 'PCE', 'CORE_CPI', 'CORE_PCE']);
+
+const SHORT_LABEL_TR: Record<string, string> = {
+  CPI: 'CPI',
+  PCE: 'PCE',
+  CORE_CPI: 'Çekirdek CPI',
+  CORE_PCE: 'Çekirdek PCE',
+  NFP: 'NFP',
+};
+
+function fmtPct(v: number | null | undefined): string {
+  if (v == null) return '—';
+  const sign = v > 0 ? '+' : '';
+  return `${sign}${Number(v).toFixed(2)}%`;
+}
+
+function pctClass(v: number | null | undefined): string {
+  if (v == null) return 'text-[#555570]';
+  if (v > 0) return 'text-[#ef5350]';
+  if (v < 0) return 'text-[#26a69a]';
+  return 'text-[#e0e0e0]';
+}
+
+function MetricRow({ label, prior, expected, actual }: {
+  label: string;
+  prior: number | null | undefined;
+  expected: number | null | undefined;
+  actual: number | null | undefined;
+}) {
+  if (prior == null && expected == null && actual == null) return null;
+  return (
+    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 gap-y-0.5 items-baseline py-1 border-b border-[#1a1a2e] last:border-0">
+      <span className="text-[12px] text-[#e0e0e0] font-medium">{label}</span>
+      <div className="text-right">
+        <div className="text-[8px] text-[#555570] uppercase tracking-wider leading-tight">Önceki</div>
+        <div className="text-[12px] font-mono text-[#8888a0]">{fmtPct(prior)}</div>
+      </div>
+      <div className="text-right">
+        <div className="text-[8px] text-[#555570] uppercase tracking-wider leading-tight">Beklenti</div>
+        <div className="text-[12px] font-mono text-[#8888a0]">{fmtPct(expected)}</div>
+      </div>
+      <div className="text-right">
+        <div className="text-[8px] text-[#555570] uppercase tracking-wider leading-tight">Gelen</div>
+        <div className={`text-[13px] font-mono font-semibold ${pctClass(actual)}`}>{fmtPct(actual)}</div>
+      </div>
+    </div>
+  );
+}
+
+function MetricsTable({ headline, core }: { headline: MacroRelease; core: MacroRelease | null }) {
+  const et = (headline.event_type || '').toUpperCase();
+  if (!PCT_DELTA_EVENTS.has(et)) return null;
+  const headLabel = SHORT_LABEL_TR[et] ?? et;
+  const coreLabel = core ? (SHORT_LABEL_TR[(core.event_type || '').toUpperCase()] ?? core.event_type) : null;
+  return (
+    <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded p-3" data-testid="macro-metrics-table">
+      <MetricRow label={`${headLabel} MoM`} prior={headline.prior_mom_pct} expected={headline.expected_mom_pct} actual={headline.mom_pct} />
+      {core && (
+        <MetricRow label={`${coreLabel} MoM`} prior={core.prior_mom_pct} expected={core.expected_mom_pct} actual={core.mom_pct} />
+      )}
+      <MetricRow label={`${headLabel} YoY`} prior={headline.prior_yoy_pct} expected={headline.expected_yoy_pct} actual={headline.yoy_pct} />
+      {core && (
+        <MetricRow label={`${coreLabel} YoY`} prior={core.prior_yoy_pct} expected={core.expected_yoy_pct} actual={core.yoy_pct} />
+      )}
+    </div>
+  );
+}
+
+function MacroBody({ data, core }: { data: MacroRelease; core: MacroRelease | null }) {
   const sentiment = data.sentiment_score;
   const tone = (() => {
     if (sentiment == null) return { label: 'Bilinmiyor', color: 'text-[#8888a0]', dot: 'bg-[#555570]' };
@@ -450,7 +518,15 @@ function MacroBody({ data }: { data: MacroRelease }) {
         <span className="text-[#8888a0]">{flagFor(data.country)} {data.country}</span>
         <span className="text-[#555570]">·</span>
         <span className="text-[#8888a0]">Yayın: {releasedHuman}</span>
+        {periodLabel && (
+          <>
+            <span className="text-[#555570]">·</span>
+            <span className="text-[#8888a0]">{periodLabel}</span>
+          </>
+        )}
       </div>
+
+      <MetricsTable headline={data} core={core} />
 
       {data.narrative_md ? (
         <p className="text-sm text-[#e0e0e0] leading-relaxed whitespace-pre-line">
@@ -516,25 +592,7 @@ function MacroBody({ data }: { data: MacroRelease }) {
         )}
       </div>
 
-      {isPctEvent && momPct != null && (
-        <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded px-3 py-2.5" data-testid="macro-mom">
-          <div className="text-[9px] text-[#8888a0] uppercase tracking-wider mb-1">
-            {periodLabel ? `${periodLabel} · Aylık değişim (MoM)` : 'Aylık değişim (MoM)'}
-          </div>
-          <div className={`text-[20px] font-mono font-semibold ${momColor}`}>
-            {momPct > 0 ? '+' : ''}{momPct.toFixed(2)}%
-          </div>
-          {(data.actual_value != null || data.prior_value != null) && (
-            <div className="text-[10px] text-[#555570] font-mono mt-1">
-              {data.prior_value != null && <>önceki endeks {data.prior_value.toLocaleString('tr-TR')}</>}
-              {data.actual_value != null && data.prior_value != null && ' → '}
-              {data.actual_value != null && <>mevcut {data.actual_value.toLocaleString('tr-TR')}</>}
-            </div>
-          )}
-        </div>
-      )}
-
-      {(!isPctEvent || momPct == null) && (data.actual_value != null || data.prior_value != null) && (
+      {!isPctEvent && (data.actual_value != null || data.prior_value != null) && (
         <div className="grid grid-cols-2 gap-2">
           {data.actual_value != null && (
             <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded px-3 py-2">
@@ -662,7 +720,7 @@ export function SummaryDetailModal({
           {content.type === 'earnings' && <EarningsBody data={content.data} />}
           {content.type === 'sectors' && <SectorsBody data={content.data} />}
           {content.type === 'vix' && <FearBody data={content.data} />}
-          {content.type === 'macro' && <MacroBody data={content.data} />}
+          {content.type === 'macro' && <MacroBody data={content.data} core={content.core ?? null} />}
         </div>
 
         {/* Footer */}

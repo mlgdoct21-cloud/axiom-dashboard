@@ -172,7 +172,7 @@ export function DashboardSummary() {
           loading={macroLoading && !macroData}
           onClick={
             macroData?.release
-              ? () => open({ type: 'macro', data: macroData.release! })
+              ? () => open({ type: 'macro', data: macroData.release!, core: macroData.core_release ?? null })
               : undefined
           }
         />
