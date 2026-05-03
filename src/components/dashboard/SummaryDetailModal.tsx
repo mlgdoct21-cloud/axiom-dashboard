@@ -477,6 +477,7 @@ interface HistoryPoint {
   prior_value: number | null;
   mom_pct: number | null;
   yoy_pct: number | null;
+  change_k?: number | null;
 }
 
 interface HistoryPayload {
@@ -489,6 +490,11 @@ function HistoryChart({ headlineType, coreType }: { headlineType: string; coreTy
   const [headline, setHeadline] = React.useState<HistoryPayload | null>(null);
   const [core, setCore] = React.useState<HistoryPayload | null>(null);
   const [hover, setHover] = React.useState<{ idx: number } | null>(null);
+  const isNfp = headlineType === 'NFP';
+  const valueOf = (p: HistoryPoint): number | null =>
+    isNfp ? (p.change_k ?? null) : (p.mom_pct ?? null);
+  const fmtTick = (v: number) => (isNfp ? `${v >= 0 ? '+' : ''}${v.toFixed(0)}K` : `${v.toFixed(1)}%`);
+  const fmtCell = (v: number) => (isNfp ? `${v >= 0 ? '+' : ''}${v.toFixed(0)}K` : `${v > 0 ? '+' : ''}${v.toFixed(2)}%`);
   useEffect(() => {
     let active = true;
     fetch(`/api/macro/history/${headlineType}?months=14`)
@@ -516,8 +522,8 @@ function HistoryChart({ headlineType, coreType }: { headlineType: string; coreTy
   const innerW = W - PAD_L - PAD_R;
   const innerH = H - PAD_T - PAD_B;
 
-  const seriesA = pts.map((p) => p.mom_pct).filter((v): v is number => v != null);
-  const seriesB = (core?.points ?? []).map((p) => p.mom_pct).filter((v): v is number => v != null);
+  const seriesA = pts.map(valueOf).filter((v): v is number => v != null);
+  const seriesB = (core?.points ?? []).map(valueOf).filter((v): v is number => v != null);
   const all = [...seriesA, ...seriesB];
   if (all.length === 0) return null;
   const yMin = Math.min(...all);
@@ -540,24 +546,29 @@ function HistoryChart({ headlineType, coreType }: { headlineType: string; coreTy
       .filter((s) => s)
       .join(' ');
 
-  const headlinePath = path(pts.map((p) => p.mom_pct));
+  const headlinePath = path(pts.map(valueOf));
   const corePts = core?.points ?? [];
   // Align Core to headline by released_at — backend returns same period set.
-  const corePath = corePts.length === pts.length ? path(corePts.map((p) => p.mom_pct)) : '';
+  const corePath = corePts.length === pts.length ? path(corePts.map(valueOf)) : '';
 
   const labelMap: Record<string, string> = {
     CPI: 'CPI', PCE: 'PCE', CORE_CPI: 'Çekirdek CPI', CORE_PCE: 'Çekirdek PCE',
+    NFP: 'NFP', UNRATE: 'İşsizlik',
   };
   const headlineLabel = labelMap[headlineType] ?? headlineType;
   const coreLabel = coreType ? (labelMap[coreType] ?? coreType) : null;
 
   const hovered = hover ? pts[hover.idx] : null;
   const hoveredCore = hover && core?.points?.[hover.idx] ? core.points[hover.idx] : null;
+  const hoveredVal = hovered ? valueOf(hovered) : null;
+  const hoveredCoreVal = hoveredCore ? valueOf(hoveredCore) : null;
 
   return (
     <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded p-3" data-testid="macro-history-chart">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] text-[#8888a0] uppercase tracking-wider">14 ay MoM %</span>
+        <span className="text-[10px] text-[#8888a0] uppercase tracking-wider">
+          14 ay {isNfp ? 'aylık değişim (K)' : 'MoM %'}
+        </span>
         <div className="flex items-center gap-3 text-[10px]">
           <span className="inline-flex items-center gap-1.5">
             <span className="inline-block w-3 h-0.5 bg-[#4fc3f7]" /> {headlineLabel}
@@ -588,8 +599,8 @@ function HistoryChart({ headlineType, coreType }: { headlineType: string; coreTy
           />
         )}
         {/* y-axis labels */}
-        <text x={PAD_L - 4} y={yFor(yHi - yPad) + 3} textAnchor="end" fontSize="9" fill="#555570">{(yHi - yPad).toFixed(1)}%</text>
-        <text x={PAD_L - 4} y={yFor(yLo + yPad) + 3} textAnchor="end" fontSize="9" fill="#555570">{(yLo + yPad).toFixed(1)}%</text>
+        <text x={PAD_L - 4} y={yFor(yHi - yPad) + 3} textAnchor="end" fontSize="9" fill="#555570">{fmtTick(yHi - yPad)}</text>
+        <text x={PAD_L - 4} y={yFor(yLo + yPad) + 3} textAnchor="end" fontSize="9" fill="#555570">{fmtTick(yLo + yPad)}</text>
         {/* x-axis: first + last released_at month */}
         <text x={PAD_L} y={H - 6} fontSize="9" fill="#555570">{pts[0].released_at.slice(0, 7)}</text>
         <text x={W - PAD_R} y={H - 6} textAnchor="end" fontSize="9" fill="#555570">{pts[pts.length - 1].released_at.slice(0, 7)}</text>
@@ -597,16 +608,16 @@ function HistoryChart({ headlineType, coreType }: { headlineType: string; coreTy
         {corePath && <path d={corePath} fill="none" stroke="#ffa726" strokeWidth="1.5" />}
         <path d={headlinePath} fill="none" stroke="#4fc3f7" strokeWidth="1.75" />
         {/* hover marker */}
-        {hovered && hovered.mom_pct != null && (
+        {hovered && hoveredVal != null && (
           <>
             <line
               x1={xFor(hover!.idx)} x2={xFor(hover!.idx)}
               y1={PAD_T} y2={H - PAD_B}
               stroke="#555570" strokeDasharray="2 2"
             />
-            <circle cx={xFor(hover!.idx)} cy={yFor(hovered.mom_pct)} r="3" fill="#4fc3f7" />
-            {hoveredCore?.mom_pct != null && (
-              <circle cx={xFor(hover!.idx)} cy={yFor(hoveredCore.mom_pct)} r="3" fill="#ffa726" />
+            <circle cx={xFor(hover!.idx)} cy={yFor(hoveredVal)} r="3" fill="#4fc3f7" />
+            {hoveredCoreVal != null && (
+              <circle cx={xFor(hover!.idx)} cy={yFor(hoveredCoreVal)} r="3" fill="#ffa726" />
             )}
           </>
         )}
@@ -614,14 +625,14 @@ function HistoryChart({ headlineType, coreType }: { headlineType: string; coreTy
       {hovered && (
         <div className="text-[10px] text-[#8888a0] mt-1 flex gap-3">
           <span className="text-[#e0e0e0]">{hovered.released_at.slice(0, 7)}</span>
-          {hovered.mom_pct != null && (
+          {hoveredVal != null && (
             <span className="text-[#4fc3f7] font-mono">
-              {headlineLabel} {hovered.mom_pct > 0 ? '+' : ''}{hovered.mom_pct.toFixed(2)}%
+              {headlineLabel} {fmtCell(hoveredVal)}
             </span>
           )}
-          {hoveredCore?.mom_pct != null && (
+          {hoveredCoreVal != null && (
             <span className="text-[#ffa726] font-mono">
-              {coreLabel} {hoveredCore.mom_pct > 0 ? '+' : ''}{hoveredCore.mom_pct.toFixed(2)}%
+              {coreLabel} {fmtCell(hoveredCoreVal)}
             </span>
           )}
         </div>
@@ -786,10 +797,16 @@ function MacroBody({ data, core }: { data: MacroRelease; core: MacroRelease | nu
 
       <MetricsTable headline={data} core={core} />
 
-      {PCT_DELTA_EVENTS.has((data.event_type || '').toUpperCase()) && (
+      {(PCT_DELTA_EVENTS.has((data.event_type || '').toUpperCase()) ||
+        (data.event_type || '').toUpperCase() === 'NFP') && (
         <HistoryChart
           headlineType={(data.event_type || '').toUpperCase()}
-          coreType={core ? (core.event_type || '').toUpperCase() : null}
+          coreType={
+            // For NFP we don't overlay UNRATE — different unit (% vs K).
+            (data.event_type || '').toUpperCase() === 'NFP'
+              ? null
+              : core ? (core.event_type || '').toUpperCase() : null
+          }
         />
       )}
 
