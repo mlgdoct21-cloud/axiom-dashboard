@@ -414,11 +414,20 @@ function MacroBody({ data }: { data: MacroRelease }) {
     if (sentiment <= 0.33) return { label: 'Şahin / risk-off', color: 'text-[#ef5350]', dot: 'bg-[#ef5350]' };
     return { label: 'Karışık', color: 'text-[#ffa726]', dot: 'bg-[#ffa726]' };
   })();
+  const gaugeColor = (() => {
+    if (sentiment == null) return 'bg-[#555570]';
+    if (sentiment >= 0.66) return 'bg-[#26a69a]';
+    if (sentiment <= 0.33) return 'bg-[#ef5350]';
+    return 'bg-[#ffa726]';
+  })();
   const releasedHuman = data.released_at
     ? new Date(data.released_at).toLocaleString('tr-TR', {
         day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
       })
     : '—';
+  const sectorsPos = data.sectors_positive ?? [];
+  const sectorsNeg = data.sectors_negative ?? [];
+  const hasSectors = sectorsPos.length > 0 || sectorsNeg.length > 0;
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 text-[12px]">
@@ -438,12 +447,59 @@ function MacroBody({ data }: { data: MacroRelease }) {
         <p className="text-[12px] text-[#555570] italic">Henüz narrative üretilmedi.</p>
       )}
 
-      <div className="flex items-center gap-2 text-[11px]">
-        <span className={`w-2 h-2 rounded-full ${tone.dot}`} />
-        <span className="text-[#8888a0]">Piyasa tonu:</span>
-        <span className={`font-semibold ${tone.color}`}>{tone.label}</span>
+      {hasSectors && (
+        <div className="space-y-1.5">
+          {sectorsPos.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] text-[#8888a0] uppercase tracking-wider mr-1">Olumlu</span>
+              {sectorsPos.map((s) => (
+                <span
+                  key={`pos-${s}`}
+                  className="px-2 py-0.5 rounded text-[11px] bg-[#0f1f15] border border-[#26a69a]/40 text-[#26a69a]"
+                  data-testid="macro-sector-pos"
+                >
+                  ↑ {s}
+                </span>
+              ))}
+            </div>
+          )}
+          {sectorsNeg.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] text-[#8888a0] uppercase tracking-wider mr-1">Olumsuz</span>
+              {sectorsNeg.map((s) => (
+                <span
+                  key={`neg-${s}`}
+                  className="px-2 py-0.5 rounded text-[11px] bg-[#1f0f10] border border-[#ef5350]/40 text-[#ef5350]"
+                  data-testid="macro-sector-neg"
+                >
+                  ↓ {s}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2 text-[11px]">
+          <span className={`w-2 h-2 rounded-full ${tone.dot}`} />
+          <span className="text-[#8888a0]">Piyasa tonu:</span>
+          <span className={`font-semibold ${tone.color}`}>{tone.label}</span>
+          {sentiment != null && (
+            <span className="text-[#555570] font-mono ml-1">({sentiment.toFixed(2)})</span>
+          )}
+        </div>
         {sentiment != null && (
-          <span className="text-[#555570] font-mono ml-1">({sentiment.toFixed(2)})</span>
+          <div className="flex items-center gap-2" data-testid="macro-gauge">
+            <span className="text-[9px] text-[#555570]">Şahin</span>
+            <div className="flex-1 h-1.5 rounded-full bg-[#0f0f20] border border-[#2a2a3e] overflow-hidden">
+              <div
+                className={`h-full ${gaugeColor}`}
+                style={{ width: `${Math.max(0, Math.min(1, sentiment)) * 100}%` }}
+              />
+            </div>
+            <span className="text-[9px] text-[#555570]">Güvercin</span>
+          </div>
         )}
       </div>
 
@@ -478,6 +534,10 @@ function MacroBody({ data }: { data: MacroRelease }) {
           🔗 Resmi kaynak
         </a>
       )}
+
+      <p className="text-[10px] text-[#555570] italic pt-2 border-t border-[#2a2a3e]" data-testid="macro-disclaimer">
+        ⚠️ Yatırım tavsiyesi değildir.
+      </p>
     </div>
   );
 }

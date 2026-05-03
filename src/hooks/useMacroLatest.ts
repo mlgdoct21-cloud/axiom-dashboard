@@ -13,6 +13,8 @@ export interface MacroRelease {
   narrative_md: string | null;
   sentiment_score: number | null;
   source_url: string | null;
+  sectors_positive?: string[];
+  sectors_negative?: string[];
 }
 
 export interface MacroLatestData {
