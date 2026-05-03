@@ -18,6 +18,7 @@ import type {
 } from '@/hooks/useDashboardSummary';
 import type { DailyDigestCard } from '@/hooks/useDailyDigest';
 import type { MacroRelease } from '@/hooks/useMacroLatest';
+import { sectorLabelTr } from '@/lib/macro-sector-labels';
 
 // ─── Modal kind union ────────────────────────────────────────────────────
 
@@ -428,6 +429,18 @@ function MacroBody({ data }: { data: MacroRelease }) {
   const sectorsPos = data.sectors_positive ?? [];
   const sectorsNeg = data.sectors_negative ?? [];
   const hasSectors = sectorsPos.length > 0 || sectorsNeg.length > 0;
+  const momPct = data.mom_pct ?? null;
+  const isPctEvent = ['CPI', 'PCE', 'CORE_CPI', 'CORE_PCE'].includes(
+    (data.event_type || '').toUpperCase(),
+  );
+  const momColor = momPct == null ? 'text-[#8888a0]' : momPct > 0 ? 'text-[#ef5350]' : 'text-[#26a69a]';
+  const trMonths = ['', 'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+    'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+  const periodLabel = (() => {
+    if (!data.released_at) return null;
+    const d = new Date(data.released_at);
+    return `${trMonths[d.getUTCMonth() + 1]} ${d.getUTCFullYear()}`;
+  })();
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 text-[12px]">
@@ -458,7 +471,7 @@ function MacroBody({ data }: { data: MacroRelease }) {
                   className="px-2 py-0.5 rounded text-[11px] bg-[#0f1f15] border border-[#26a69a]/40 text-[#26a69a]"
                   data-testid="macro-sector-pos"
                 >
-                  ↑ {s}
+                  ↑ {sectorLabelTr(s)}
                 </span>
               ))}
             </div>
@@ -472,7 +485,7 @@ function MacroBody({ data }: { data: MacroRelease }) {
                   className="px-2 py-0.5 rounded text-[11px] bg-[#1f0f10] border border-[#ef5350]/40 text-[#ef5350]"
                   data-testid="macro-sector-neg"
                 >
-                  ↓ {s}
+                  ↓ {sectorLabelTr(s)}
                 </span>
               ))}
             </div>
@@ -503,7 +516,25 @@ function MacroBody({ data }: { data: MacroRelease }) {
         )}
       </div>
 
-      {(data.actual_value != null || data.prior_value != null) && (
+      {isPctEvent && momPct != null && (
+        <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded px-3 py-2.5" data-testid="macro-mom">
+          <div className="text-[9px] text-[#8888a0] uppercase tracking-wider mb-1">
+            {periodLabel ? `${periodLabel} · Aylık değişim (MoM)` : 'Aylık değişim (MoM)'}
+          </div>
+          <div className={`text-[20px] font-mono font-semibold ${momColor}`}>
+            {momPct > 0 ? '+' : ''}{momPct.toFixed(2)}%
+          </div>
+          {(data.actual_value != null || data.prior_value != null) && (
+            <div className="text-[10px] text-[#555570] font-mono mt-1">
+              {data.prior_value != null && <>önceki endeks {data.prior_value.toLocaleString('tr-TR')}</>}
+              {data.actual_value != null && data.prior_value != null && ' → '}
+              {data.actual_value != null && <>mevcut {data.actual_value.toLocaleString('tr-TR')}</>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {(!isPctEvent || momPct == null) && (data.actual_value != null || data.prior_value != null) && (
         <div className="grid grid-cols-2 gap-2">
           {data.actual_value != null && (
             <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded px-3 py-2">

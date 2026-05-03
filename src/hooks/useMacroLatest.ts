@@ -10,6 +10,7 @@ export interface MacroRelease {
   released_at: string | null;
   actual_value: number | null;
   prior_value: number | null;
+  mom_pct?: number | null;
   narrative_md: string | null;
   sentiment_score: number | null;
   source_url: string | null;
