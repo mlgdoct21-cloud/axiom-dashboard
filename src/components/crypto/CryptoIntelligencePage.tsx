@@ -1,9 +1,18 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import CryptoDashboard from './CryptoDashboard';
+import OnChainTab from './OnChainTab';
 
 const SYMBOLS = ['BTC', 'ETH', 'SOL', 'ARB', 'AVAX', 'ADA', 'DOT', 'LINK', 'UNI', 'NEAR'];
+
+type TabKey = 'whitepaper' | 'onchain';
+
+const TABS: { key: TabKey; label: string; icon: string; available: (symbol: string) => boolean }[] = [
+  { key: 'whitepaper', label: 'Whitepaper', icon: '📄', available: () => true },
+  { key: 'onchain',    label: 'On-Chain',   icon: '🔗', available: (s) => s === 'BTC' || s === 'ETH' },
+];
 
 interface CoinResult {
   id: string;
@@ -13,14 +22,38 @@ interface CoinResult {
   thumb: string;
 }
 
-export default function CryptoIntelligencePage() {
-  const [symbol, setSymbol] = useState('BTC');
+function CryptoIntelligencePageInner() {
+  const router       = useRouter();
+  const pathname     = usePathname();
+  const searchParams = useSearchParams();
+
+  const initialTab: TabKey = searchParams?.get('tab') === 'onchain' ? 'onchain' : 'whitepaper';
+  const initialSymbol = (searchParams?.get('symbol') || 'BTC').toUpperCase();
+
+  const [symbol, setSymbol] = useState(initialSymbol);
+  const [tab, setTab]       = useState<TabKey>(initialTab);
   const [query, setQuery]   = useState('');
   const [results, setResults] = useState<CoinResult[]>([]);
   const [open, setOpen]     = useState(false);
   const [searching, setSearching] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Sync URL when symbol/tab changes (deep-link friendly)
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams?.toString() || '');
+    params.set('symbol', symbol);
+    params.set('tab', tab);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol, tab]);
+
+  // If user picks a non-BTC/ETH coin while on On-Chain tab, fall back to Whitepaper
+  useEffect(() => {
+    if (tab === 'onchain' && symbol !== 'BTC' && symbol !== 'ETH') {
+      setTab('whitepaper');
+    }
+  }, [symbol, tab]);
 
   // Debounced CoinGecko search
   useEffect(() => {
@@ -69,7 +102,7 @@ export default function CryptoIntelligencePage() {
       <div>
         <h1 className="text-xl font-bold text-[#e0e0e0]">Kripto Analiz</h1>
         <p className="text-sm text-[#555570] mt-1">
-          Tokenomics · Whitepaper Özeti · Akıllı Para · Kilit Açılımları
+          📄 Whitepaper analizi · 🔗 On-Chain akıllı para sinyalleri
         </p>
       </div>
 
@@ -150,8 +183,55 @@ export default function CryptoIntelligencePage() {
         )}
       </div>
 
-      {/* Dashboard */}
-      <CryptoDashboard symbol={symbol} />
+      {/* Tab Navigation */}
+      <div className="flex gap-1 border-b border-[#2a2a3e]">
+        {TABS.map(t => {
+          const isActive = tab === t.key;
+          const isAvailable = t.available(symbol);
+          const disabled = !isAvailable;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => isAvailable && setTab(t.key)}
+              disabled={disabled}
+              title={disabled ? 'Bu sekme yalnızca BTC ve ETH için mevcuttur' : undefined}
+              className={`px-4 py-2.5 text-sm font-semibold transition-all relative ${
+                isActive
+                  ? 'text-[#4fc3f7]'
+                  : disabled
+                    ? 'text-[#333] cursor-not-allowed'
+                    : 'text-[#888] hover:text-[#e0e0f0]'
+              }`}
+            >
+              <span className="mr-1.5">{t.icon}</span>
+              {t.label}
+              {isActive && (
+                <span className="absolute left-0 right-0 -bottom-px h-0.5 bg-[#4fc3f7]" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Tab content */}
+      {tab === 'whitepaper' ? (
+        <CryptoDashboard symbol={symbol} />
+      ) : (
+        <OnChainTab symbol={symbol} />
+      )}
     </div>
+  );
+}
+
+export default function CryptoIntelligencePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex justify-center py-10">
+        <div className="w-8 h-8 border-4 border-[#4fc3f7] border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <CryptoIntelligencePageInner />
+    </Suspense>
   );
 }
