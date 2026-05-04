@@ -59,7 +59,7 @@ export default function OnChainIntelCard({ symbol }: { symbol: string }) {
   }
 
   if (error) {
-    const isOnlyBtcEth = symbol !== 'BTC';
+    const unsupported = error === 'symbol_not_supported';
     return (
       <div className="bg-[#1a0d0d] border border-[#ff9800]/30 rounded-xl p-5">
         <div className="flex items-start gap-3">
@@ -67,8 +67,8 @@ export default function OnChainIntelCard({ symbol }: { symbol: string }) {
           <div className="flex-1">
             <div className="text-sm font-bold text-[#ff9800] mb-1">On-Chain Sinyaller</div>
             <div className="text-xs text-[#c0c0d0]">
-              {isOnlyBtcEth
-                ? 'On-chain veriler şu an yalnızca BTC için kullanılabiliyor. Yakında ETH ve diğer büyük coinler eklenecek.'
+              {unsupported
+                ? `${symbol} için on-chain veri henüz mevcut değil. Şu an BTC ve ETH desteklenmektedir; diğer büyük coinler yakında eklenecek.`
                 : error}
             </div>
           </div>
