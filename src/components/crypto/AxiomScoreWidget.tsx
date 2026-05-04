@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { OnChainSnapshot, ScoreZone } from '@/lib/cryptoquant';
 
 const ZONE_META: Record<ScoreZone, { color: string; label: string; emoji: string; bg: string }> = {
@@ -15,10 +16,17 @@ export default function AxiomScoreWidget({ data, premium = true }: {
   data: OnChainSnapshot;
   premium?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const score = data.axiom_score ?? 0;
   const zone = ZONE_META[data.score_zone] ?? ZONE_META.UNKNOWN;
-  const positives = data.score_breakdown?.filter(b => b.contribution > 0).slice(0, 3) ?? [];
-  const negatives = data.score_breakdown?.filter(b => b.contribution < 0).slice(0, 3) ?? [];
+  const allBreakdown = data.score_breakdown ?? [];
+  const positives = allBreakdown.filter(b => b.contribution > 0).sort((a, b) => b.contribution - a.contribution);
+  const negatives = allBreakdown.filter(b => b.contribution < 0).sort((a, b) => a.contribution - b.contribution);
+  const neutrals  = allBreakdown.filter(b => b.contribution === 0);
+  // Collapsed: top 3 / Expanded: all
+  const visiblePositives = expanded ? positives : positives.slice(0, 3);
+  const visibleNegatives = expanded ? negatives : negatives.slice(0, 3);
+  const hiddenCount = (positives.length - visiblePositives.length) + (negatives.length - visibleNegatives.length) + (expanded ? 0 : neutrals.length);
 
   if (data.axiom_score == null) {
     return (
@@ -87,40 +95,73 @@ export default function AxiomScoreWidget({ data, premium = true }: {
         {data.score_summary}
       </div>
 
-      {/* Breakdown — premium only */}
-      {premium && (positives.length > 0 || negatives.length > 0) ? (
-        <div className="grid sm:grid-cols-2 gap-3">
-          {positives.length > 0 && (
-            <div>
-              <div className="text-[10px] font-bold tracking-widest text-[#26de81] uppercase mb-1.5">
-                Güç Veren ({positives.reduce((s, p) => s + p.contribution, 0)} puan)
+      {/* Breakdown — premium only, collapse/expand toggle */}
+      {premium && allBreakdown.length > 0 ? (
+        <>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {visiblePositives.length > 0 && (
+              <div>
+                <div className="text-[10px] font-bold tracking-widest text-[#26de81] uppercase mb-1.5">
+                  Güç Veren ({positives.reduce((s, p) => s + p.contribution, 0)} puan)
+                </div>
+                <ul className="space-y-1">
+                  {visiblePositives.map(p => (
+                    <li key={p.metric} className="flex items-baseline gap-2 text-[11px]">
+                      <span className="text-[#26de81] font-mono font-bold shrink-0">+{p.contribution}</span>
+                      <span className="text-[#c0c0d0] truncate">{p.label_tr}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <ul className="space-y-1">
-                {positives.map(p => (
-                  <li key={p.metric} className="flex items-baseline gap-2 text-[11px]">
-                    <span className="text-[#26de81] font-mono font-bold shrink-0">+{p.contribution}</span>
-                    <span className="text-[#c0c0d0] truncate">{p.label_tr}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {negatives.length > 0 && (
-            <div>
-              <div className="text-[10px] font-bold tracking-widest text-[#ff4757] uppercase mb-1.5">
-                Baskı Yapan ({negatives.reduce((s, n) => s + n.contribution, 0)} puan)
+            )}
+            {visibleNegatives.length > 0 && (
+              <div>
+                <div className="text-[10px] font-bold tracking-widest text-[#ff4757] uppercase mb-1.5">
+                  Baskı Yapan ({negatives.reduce((s, n) => s + n.contribution, 0)} puan)
+                </div>
+                <ul className="space-y-1">
+                  {visibleNegatives.map(n => (
+                    <li key={n.metric} className="flex items-baseline gap-2 text-[11px]">
+                      <span className="text-[#ff4757] font-mono font-bold shrink-0">{n.contribution}</span>
+                      <span className="text-[#c0c0d0] truncate">{n.label_tr}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <ul className="space-y-1">
-                {negatives.map(n => (
+            )}
+          </div>
+
+          {/* Expanded: also show neutrals */}
+          {expanded && neutrals.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-[#1a1a2e]">
+              <div className="text-[10px] font-bold tracking-widest text-[#888] uppercase mb-1.5">
+                Nötr ({neutrals.length} sinyal)
+              </div>
+              <ul className="grid sm:grid-cols-2 gap-x-4 gap-y-1">
+                {neutrals.map(n => (
                   <li key={n.metric} className="flex items-baseline gap-2 text-[11px]">
-                    <span className="text-[#ff4757] font-mono font-bold shrink-0">{n.contribution}</span>
-                    <span className="text-[#c0c0d0] truncate">{n.label_tr}</span>
+                    <span className="text-[#666] font-mono font-bold shrink-0">0/{n.weight}</span>
+                    <span className="text-[#888] truncate">{n.label_tr}</span>
                   </li>
                 ))}
               </ul>
             </div>
           )}
-        </div>
+
+          {/* Toggle button */}
+          {(positives.length > 3 || negatives.length > 3 || neutrals.length > 0) && (
+            <button
+              type="button"
+              onClick={() => setExpanded(e => !e)}
+              className="mt-3 w-full text-[11px] py-2 rounded-lg bg-[#1a1a2e] hover:bg-[#22223a] text-[#888] hover:text-[#4fc3f7] transition flex items-center justify-center gap-2 border border-[#2a2a3e]"
+            >
+              {expanded
+                ? <>▴ Daralt — sadece top 3 göster</>
+                : <>▾ Tüm sinyalleri göster (+{hiddenCount} gizli)</>
+              }
+            </button>
+          )}
+        </>
       ) : !premium ? (
         <div className="bg-[#a78bfa]/10 border border-[#a78bfa]/30 rounded-lg px-3 py-2 text-[11px] text-[#a78bfa] text-center">
           🔒 Skor breakdown PREMIUM tier — /upgrade ile detayı görün
