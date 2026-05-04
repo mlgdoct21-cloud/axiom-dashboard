@@ -31,11 +31,35 @@ async function handleOverview(request: NextRequest) {
     return NextResponse.json({ error: 'symbol gerekli' }, { status: 400 });
   }
 
-  // Cache read inside try/catch — Supabase failures should not crash the route
+  // Cache read inside try/catch — Supabase failures should not crash the route.
+  // Hibrit cache stratejisi: Gemini analizi 6h cached kalır (maliyet sıfır),
+  // sadece `price` objesi her request'te getCoinGeckoData (5dk cache'li)
+  // ile fresh override edilir → kullanıcı doğru fiyatı görür, Gemini tetiklenmez.
   if (!force) {
     try {
       const cached = await getCachedCryptoReport('overview_v3', symbol);
-      if (cached) return NextResponse.json({ ...cached, cached: true });
+      if (cached) {
+        let priceFresh = false;
+        try {
+          const live = await getCoinGeckoData(symbol);
+          if (live) {
+            cached.price = {
+              current:       live.current_price,
+              change24h:     live.price_change_24h,
+              change7d:      live.price_change_7d,
+              marketCap:     live.market_cap,
+              marketCapRank: live.market_cap_rank,
+              volume24h:     live.total_volume,
+              ath:           live.ath,
+              athChangePct:  live.ath_change_percentage,
+            };
+            priceFresh = true;
+          }
+        } catch (e) {
+          console.warn('[crypto/overview] live price refresh failed, using cached price:', e);
+        }
+        return NextResponse.json({ ...cached, cached: true, price_live: priceFresh });
+      }
     } catch (e) {
       console.error('[crypto/overview] cache read failed:', e);
       // continue without cache
