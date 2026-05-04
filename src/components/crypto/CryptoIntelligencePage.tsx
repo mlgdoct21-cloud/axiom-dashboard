@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
-import CryptoDashboard from './CryptoDashboard';
+import WhitepaperTab from './WhitepaperTab';
 import OnChainTab from './OnChainTab';
 
 const SYMBOLS = ['BTC', 'ETH', 'SOL', 'ARB', 'AVAX', 'ADA', 'DOT', 'LINK', 'UNI', 'NEAR'];
@@ -216,7 +216,7 @@ function CryptoIntelligencePageInner() {
 
       {/* Tab content */}
       {tab === 'whitepaper' ? (
-        <CryptoDashboard symbol={symbol} />
+        <WhitepaperTab symbol={symbol} />
       ) : (
         <OnChainTab symbol={symbol} />
       )}
