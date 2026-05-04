@@ -88,8 +88,18 @@ export default function LoginPage() {
             </p>
           </div>
 
+          {/* Telegram one-tap login (preferred, secure) */}
+          <div className="mt-6 p-4 bg-gradient-to-br from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20 border border-cyan-200 dark:border-cyan-800 rounded-lg">
+            <p className="text-sm text-cyan-800 dark:text-cyan-300 font-medium mb-1">
+              🔐 Telegram ile tek tıkla giriş
+            </p>
+            <p className="text-xs text-cyan-700 dark:text-cyan-400">
+              Bot'a <code className="px-1 bg-white/60 dark:bg-black/30 rounded">/login</code> yazıp gelen linke tıklayın — şifresiz, daha güvenli.
+            </p>
+          </div>
+
           {/* Info */}
-          <div className="mt-8 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+          <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
             <p className="text-sm text-blue-600 dark:text-blue-400">
               💡 Enter your Telegram user ID to access your personalized financial news feed.
             </p>
