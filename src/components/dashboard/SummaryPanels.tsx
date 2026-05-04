@@ -19,6 +19,7 @@ import type {
 import type { DailyDigestCard } from '@/hooks/useDailyDigest';
 import type { MacroRelease } from '@/hooks/useMacroLatest';
 import { useMacroUpcoming } from '@/hooks/useMacroLatest';
+import { useOnChain } from '@/hooks/useOnChain';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -562,3 +563,67 @@ export function MiniMacroChip({
     />
   );
 }
+
+// ─── On-Chain Mini Chip (CryptoQuant) ────────────────────────────────────
+
+function _onchainAccent(overall?: string): ChipProps['accent'] {
+  if (overall === 'BULLISH') return 'green';
+  if (overall === 'BEARISH') return 'red';
+  if (overall === 'MIXED')   return 'yellow';
+  return 'gray';
+}
+
+export function MiniOnChainChip({ onClick }: { onClick?: () => void }) {
+  const { data, loading, error } = useOnChain('BTC');
+  const empty = !loading && (!data || !data.signals || Object.keys(data.signals || {}).length === 0);
+
+  // Headline = exchange netflow signal (most actionable)
+  const netflowSig = data?.signals?.exchange_netflow;
+  const whaleSig   = data?.signals?.whale_ratio;
+
+  if (error && error === 'cryptoquant_not_configured') {
+    return (
+      <Chip
+        icon="🔗"
+        title="On-Chain"
+        primary={<span className="text-[#8888a0]">Yakında</span>}
+        secondary="CryptoQuant verisi"
+        accent="gray"
+        empty={false}
+        loading={false}
+      />
+    );
+  }
+
+  return (
+    <Chip
+      icon="🔗"
+      title="On-Chain"
+      primary={
+        netflowSig ? (
+          <span>
+            <span className="font-semibold">{netflowSig.value_str}</span>
+          </span>
+        ) : null
+      }
+      secondary={
+        netflowSig ? (
+          <span>{netflowSig.label_tr}</span>
+        ) : null
+      }
+      tertiary={
+        whaleSig ? (
+          <span>🐋 Balina {whaleSig.value_str} · {whaleSig.label_tr}</span>
+        ) : data?.overall_tr ? (
+          <span>{data.overall_tr}</span>
+        ) : null
+      }
+      accent={_onchainAccent(data?.overall)}
+      loading={loading}
+      empty={empty}
+      tooltip={data?.overall_tr || 'BTC on-chain sinyaller (CryptoQuant)'}
+      onClick={onClick}
+    />
+  );
+}
+

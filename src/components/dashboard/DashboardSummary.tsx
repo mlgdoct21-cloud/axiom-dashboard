@@ -11,6 +11,7 @@
  */
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useDailyDigest } from '@/hooks/useDailyDigest';
 import { useDashboardSummary } from '@/hooks/useDashboardSummary';
 import { useMacroLatest } from '@/hooks/useMacroLatest';
@@ -26,6 +27,7 @@ import {
   MiniSectorChip,
   MiniVixChip,
   MiniMacroChip,
+  MiniOnChainChip,
 } from './SummaryPanels';
 import { SummaryDetailModal, type ModalContent } from './SummaryDetailModal';
 
@@ -34,6 +36,7 @@ export function DashboardSummary() {
   const { data, loading, error, refresh } = useDashboardSummary(true);
   const { data: macroData, loading: macroLoading } = useMacroLatest(true);
   const [modal, setModal] = useState<ModalContent | null>(null);
+  const router = useRouter();
 
   const ageText = (() => {
     if (!data?.last_updated) return '';
@@ -175,6 +178,9 @@ export function DashboardSummary() {
               ? () => open({ type: 'macro', data: macroData.release!, core: macroData.core_release ?? null })
               : undefined
           }
+        />
+        <MiniOnChainChip
+          onClick={() => router.push('/dashboard/crypto?symbol=BTC')}
         />
       </div>
 
