@@ -19,10 +19,15 @@ export default function AxiomScoreWidget({ data, premium = true }: {
   const [expanded, setExpanded] = useState(false);
   const score = data.axiom_score ?? 0;
   const zone = ZONE_META[data.score_zone] ?? ZONE_META.UNKNOWN;
+  const [formulaOpen, setFormulaOpen] = useState(false);
   const allBreakdown = data.score_breakdown ?? [];
   const positives = allBreakdown.filter(b => b.contribution > 0).sort((a, b) => b.contribution - a.contribution);
   const negatives = allBreakdown.filter(b => b.contribution < 0).sort((a, b) => a.contribution - b.contribution);
   const neutrals  = allBreakdown.filter(b => b.contribution === 0);
+  const positiveSum = positives.reduce((s, p) => s + p.contribution, 0);
+  const negativeSum = negatives.reduce((s, n) => s + n.contribution, 0);
+  const signedTotal = positiveSum + negativeSum;
+  const maxTotal = allBreakdown.reduce((s, b) => s + b.weight, 0);
   // Collapsed: top 3 / Expanded: all
   const visiblePositives = expanded ? positives : positives.slice(0, 3);
   const visibleNegatives = expanded ? negatives : negatives.slice(0, 3);
@@ -45,11 +50,20 @@ export default function AxiomScoreWidget({ data, premium = true }: {
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
         <div>
-          <div className="text-[10px] uppercase tracking-widest text-[#666] mb-1">
+          <div className="text-[10px] uppercase tracking-widest text-[#666] mb-1 flex items-center gap-1">
             🎯 Axiom Akıllı Skor · CryptoQuant
+            <button
+              type="button"
+              onClick={() => setFormulaOpen(o => !o)}
+              className="ml-1 w-4 h-4 inline-flex items-center justify-center rounded-full bg-[#2a2a3e] hover:bg-[#4fc3f7]/30 text-[10px] text-[#888] hover:text-[#4fc3f7] transition cursor-help normal-case tracking-normal"
+              aria-label="Skor nasıl hesaplandı?"
+              title="Skor nasıl hesaplandı?"
+            >
+              ⓘ
+            </button>
           </div>
           <div className="text-[11px] text-[#888]">
-            9 sinyalin ağırlıklı toplamı, 0-100 ölçeğinde
+            {allBreakdown.length} sinyalin ağırlıklı toplamı, 0-100 ölçeğinde
           </div>
         </div>
         <div className="px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap"
@@ -57,6 +71,51 @@ export default function AxiomScoreWidget({ data, premium = true }: {
           {zone.emoji} {zone.label.toUpperCase()}
         </div>
       </div>
+
+      {/* Formula tooltip — açıldığında 53 vs 73 kafa karışıklığını giderir */}
+      {formulaOpen && (
+        <div className="bg-[#0a0a14] border border-[#4fc3f7]/30 rounded-lg p-3 mb-3 text-[11px] text-[#c0c0d0] leading-relaxed">
+          <div className="font-bold text-[#4fc3f7] mb-2 flex items-center justify-between">
+            <span>📐 Skor Nasıl Hesaplandı?</span>
+            <button
+              type="button"
+              onClick={() => setFormulaOpen(false)}
+              className="text-[#666] hover:text-[#e0e0f0] text-base leading-none"
+              aria-label="Kapat"
+            >×</button>
+          </div>
+          <div className="space-y-1.5 font-mono text-[10px]">
+            <div className="flex justify-between">
+              <span>Pozitif sinyaller toplamı:</span>
+              <span className="text-[#26de81] font-bold">+{positiveSum}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Negatif sinyaller toplamı:</span>
+              <span className="text-[#ff4757] font-bold">{negativeSum}</span>
+            </div>
+            <div className="flex justify-between border-t border-[#1a1a2e] pt-1.5 mt-1.5">
+              <span>Net katkı:</span>
+              <span className="font-bold" style={{ color: zone.color }}>
+                {signedTotal >= 0 ? '+' : ''}{signedTotal} / {maxTotal} max
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Formül:</span>
+              <span className="text-[#888]">50 + (net ÷ max) × 50</span>
+            </div>
+            <div className="flex justify-between border-t border-[#1a1a2e] pt-1.5 mt-1.5">
+              <span className="text-[#e0e0f0]">Sonuç:</span>
+              <span className="font-bold" style={{ color: zone.color }}>
+                50 + ({signedTotal}/{maxTotal}) × 50 = <b>{score.toFixed(0)}/100</b>
+              </span>
+            </div>
+          </div>
+          <div className="text-[10px] text-[#666] mt-3 leading-snug">
+            Her sinyal kendi ağırlığında: BULLISH ise +max, BEARISH ise −max,
+            NEUTRAL ise 0 katkı sağlar. Skor pozitif/negatif dengesini 0-100 ölçeğine taşır.
+          </div>
+        </div>
+      )}
 
       {/* Big number + bar */}
       <div className="flex items-end gap-4 mb-4">
