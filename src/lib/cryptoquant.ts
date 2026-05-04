@@ -13,6 +13,17 @@ export interface SignalEntry {
   label_tr: string;
 }
 
+export type ScoreZone = 'OPPORTUNITY' | 'SAFE' | 'CAUTION' | 'RISKY' | 'DANGER' | 'UNKNOWN';
+
+export interface ScoreBreakdownEntry {
+  metric: string;
+  label_tr: string;
+  value_str: string;
+  weight: number;
+  contribution: number;
+  signal: OnChainSignal;
+}
+
 export interface OnChainSnapshot {
   symbol: string;
   exchange_netflow?: { netflow_total: number; inflow_total: number; outflow_total: number; date: string };
@@ -24,9 +35,21 @@ export interface OnChainSnapshot {
   open_interest?: { open_interest: number; change_pct: number; date: string };
   sopr?: { sopr: number; date: string };
   coinbase_premium?: { coinbase_premium: number; ts: string };
+  mvrv?: { mvrv: number; date: string };
+  nupl?: { nupl: number; date: string };
+  mpi?: { mpi: number; date: string };
+  puell?: { puell: number; date: string };
+  leverage_ratio?: { leverage_ratio: number; date: string };
+  realized_price?: { realized_price: number; date: string };
+  hash_rate?: { hash_rate: number; change_7d_pct: number; date: string };
   signals: Record<string, SignalEntry>;
   overall: OverallSignal;
   overall_tr: string;
+  axiom_score: number | null;
+  score_zone: ScoreZone;
+  score_zone_tr: string;
+  score_summary: string;
+  score_breakdown: ScoreBreakdownEntry[];
   fetched_at: string;
   error?: string;
 }

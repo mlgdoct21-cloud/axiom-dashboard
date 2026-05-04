@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import OnChainIntelCard from './OnChainIntelCard';
-import DerivativesCard  from './DerivativesCard';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -752,10 +751,7 @@ export default function CryptoDashboard({ symbol }: { symbol: string }) {
       {/* ═══════════════════ BALINALAR ═══════════════════ */}
       {/* ═══════════════════ ON-CHAIN INTEL (CryptoQuant) ═══════════════════ */}
       <Section icon="🔗" title="On-Chain Sinyaller — Akıllı Para Akışı" defaultOpen={true}>
-        <div className="space-y-3">
-          <OnChainIntelCard symbol={data.symbol} />
-          <DerivativesCard symbol={data.symbol} />
-        </div>
+        <OnChainIntelCard symbol={data.symbol} />
       </Section>
 
       <Section icon="🐋" title="Balina Takibi — Büyük Oyuncular"
