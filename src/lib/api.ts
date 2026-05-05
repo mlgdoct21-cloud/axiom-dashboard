@@ -1,4 +1,15 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+// Production-safe fallback: if NEXT_PUBLIC_API_URL is missing in the Vercel
+// build (which happened on the active `axiom-dashboard` project — only the
+// stale `-sigma` project had the env set), the client would try
+// http://localhost:8000 from end-user devices, fail, and useAuth would log
+// out → /auth/login redirect loop. This bug was masked by Day 18's
+// ALLOW_PUBLIC_DASHBOARD_LOGIN bypass; uncovered when we tested the real
+// /login deep-link flow on Day 21.
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+    ? 'https://vivacious-growth-production-4875.up.railway.app/api/v1'
+    : 'http://localhost:8000/api/v1');
 const AUTH_KEY = process.env.NEXT_PUBLIC_AUTH_STORAGE_KEY || 'axiom_auth';
 
 export interface AuthResponse {
