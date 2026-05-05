@@ -4,6 +4,12 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { useState, useEffect } from 'react';
 import { apiClient } from '@/lib/api';
 
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+    ? 'https://vivacious-growth-production-4875.up.railway.app/api/v1'
+    : 'http://localhost:8000/api/v1');
+
 interface ChartDataPoint {
   time: string;
   open: number;
@@ -36,7 +42,7 @@ export function PriceChart({ symbol, period = '1d', height = 400 }: PriceChartPr
 
         // Call the technical API endpoint
         const response = await fetch(
-          `http://localhost:8000/api/v1/technical/chart/${symbol}?period=${period}&limit=100`,
+          `${API_URL}/technical/chart/${symbol}?period=${period}&limit=100`,
           {
             headers: {
               'Authorization': `Bearer ${token}`,

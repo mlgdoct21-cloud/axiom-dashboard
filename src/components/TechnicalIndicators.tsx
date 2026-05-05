@@ -2,6 +2,12 @@
 
 import { useState, useEffect } from 'react';
 
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+    ? 'https://vivacious-growth-production-4875.up.railway.app/api/v1'
+    : 'http://localhost:8000/api/v1');
+
 interface IndicatorsData {
   rsi: number | null;
   macd: {
@@ -40,7 +46,7 @@ export function TechnicalIndicators({ symbol }: TechnicalIndicatorsProps) {
         const token = authData ? JSON.parse(authData).access_token : '';
 
         const response = await fetch(
-          `http://localhost:8000/api/v1/technical/indicators/${symbol}`,
+          `${API_URL}/technical/indicators/${symbol}`,
           {
             headers: {
               'Authorization': `Bearer ${token}`,
