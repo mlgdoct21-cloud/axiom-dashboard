@@ -7,11 +7,61 @@ import { getGitHubReleases } from '@/lib/crypto-roadmap';
 const GEMINI_URL =
   'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
+const RAILWAY_URL = 'https://vivacious-growth-production-4875.up.railway.app/api/v1';
+const ONCHAIN_SUPPORTED = new Set(['BTC', 'ETH']);
+
 function fmtNum(n: number): string {
   if (n >= 1e12) return (n / 1e12).toFixed(1) + 'T';
   if (n >= 1e9)  return (n / 1e9).toFixed(1) + 'B';
   if (n >= 1e6)  return (n / 1e6).toFixed(1) + 'M';
   return n.toLocaleString();
+}
+
+/**
+ * Pulls Axiom Score snapshot from backend for BTC/ETH so Gemini can weight
+ * its verdict against on-chain signals. Returns null silently for any
+ * non-supported symbol or fetch failure — the prompt adapts.
+ */
+async function fetchOnChainContext(symbol: string): Promise<{
+  axiom_score: number;
+  score_zone: string;
+  score_summary?: string;
+  positives: { label: string; contribution: number }[];
+  negatives: { label: string; contribution: number }[];
+} | null> {
+  if (!ONCHAIN_SUPPORTED.has(symbol)) return null;
+  const backendUrl = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || RAILWAY_URL;
+  try {
+    const r = await fetch(`${backendUrl}/crypto/onchain?symbol=${symbol}`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
+    if (!r.ok) return null;
+    const snap = await r.json();
+    if (snap?.axiom_score == null) return null;
+    const breakdown: { metric: string; label_tr: string; contribution: number; weight: number }[] =
+      snap.score_breakdown ?? [];
+    const positives = breakdown
+      .filter(b => b.contribution > 0)
+      .sort((a, b) => b.contribution - a.contribution)
+      .slice(0, 3)
+      .map(b => ({ label: b.label_tr, contribution: b.contribution }));
+    const negatives = breakdown
+      .filter(b => b.contribution < 0)
+      .sort((a, b) => a.contribution - b.contribution)
+      .slice(0, 3)
+      .map(b => ({ label: b.label_tr, contribution: b.contribution }));
+    return {
+      axiom_score: snap.axiom_score,
+      score_zone: snap.score_zone,
+      score_summary: snap.score_summary,
+      positives,
+      negatives,
+    };
+  } catch (e) {
+    console.warn('[crypto/overview] on-chain fetch failed:', (e as any)?.message ?? e);
+    return null;
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -37,7 +87,7 @@ async function handleOverview(request: NextRequest) {
   // ile fresh override edilir → kullanıcı doğru fiyatı görür, Gemini tetiklenmez.
   if (!force) {
     try {
-      const cached = await getCachedCryptoReport('overview_v3', symbol);
+      const cached = await getCachedCryptoReport('overview_v4', symbol);
       if (cached) {
         let priceFresh = false;
         try {
@@ -70,10 +120,11 @@ async function handleOverview(request: NextRequest) {
   if (!apiKey) return NextResponse.json({ error: 'GEMINI_API_KEY eksik' }, { status: 500 });
 
   // ── Paralel veri çekimi ────────────────────────────────────────────────────
-  const [coin, onChainHolders, releases] = await Promise.all([
+  const [coin, onChainHolders, releases, onChainCtx] = await Promise.all([
     getCoinGeckoData(symbol),
     getOnChainHolders(symbol),
     getGitHubReleases(symbol),
+    fetchOnChainContext(symbol),
   ]);
 
   if (!coin) {
@@ -86,7 +137,7 @@ async function handleOverview(request: NextRequest) {
 
   // ── Gemini prompt ──────────────────────────────────────────────────────────
   // Whitepaper section: Gemini uses its own training knowledge + CoinGecko description
-  const prompt = buildPrompt(symbol, coin, circulatingPct, onChainHolders, releases, null);
+  const prompt = buildPrompt(symbol, coin, circulatingPct, onChainHolders, releases, null, onChainCtx);
 
   const geminiRes = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
     method: 'POST',
@@ -157,7 +208,7 @@ async function handleOverview(request: NextRequest) {
   };
 
   try {
-    await setCachedCryptoReport('overview_v3', symbol, result);
+    await setCachedCryptoReport('overview_v4', symbol, result);
   } catch (e) {
     console.error('[crypto/overview] cache write failed:', e);
   }
@@ -171,11 +222,42 @@ function buildPrompt(
   onChainHolders: any[] | null,
   releases: any[],
   whitepaperText: string | null,
+  onChainCtx: {
+    axiom_score: number;
+    score_zone: string;
+    score_summary?: string;
+    positives: { label: string; contribution: number }[];
+    negatives: { label: string; contribution: number }[];
+  } | null,
 ): string {
 
   const whitepaperBlock = whitepaperText
     ? `\n── GERÇEK WHİTEPAPER İÇERİĞİ (${coin.whitepaper_url ?? 'çekildi'}) ────────────────────────────\n${whitepaperText}\n(Yukarıdaki metin projenin resmi whitepaper/dökümantasyonundan alınmıştır. Whitepaper bölümünü buna dayanarak yaz.)`
     : '\n(Whitepaper URL\'i yok veya çekilemedi — CoinGecko açıklamasına ve genel bilgine dayan.)';
+
+  const onChainBlock = onChainCtx
+    ? `\n── ON-CHAIN AKILLI SKOR (CryptoQuant, sadece BTC/ETH için mevcut) ────────────
+Axiom Skor: ${onChainCtx.axiom_score.toFixed(0)}/100 (${onChainCtx.score_zone})
+${onChainCtx.score_summary ? `Özet: ${onChainCtx.score_summary}` : ''}
+Top güç sinyalleri: ${
+        onChainCtx.positives.length
+          ? onChainCtx.positives.map(p => `${p.label} (+${p.contribution})`).join(', ')
+          : 'yok'
+      }
+Top baskı sinyalleri: ${
+        onChainCtx.negatives.length
+          ? onChainCtx.negatives.map(n => `${n.label} (${n.contribution})`).join(', ')
+          : 'yok'
+      }
+
+VERDICT KISITI: Bu skor borsa akışları, balina davranışı, kaldıraç, madenci aktivitesi gibi 9-14 on-chain sinyalin ağırlıklı bileşkesidir. Verdict'i belirlerken bu skoru ağırlıklı bir input olarak kullan:
+- Skor 30 altı (DANGER/RISKY) → "AL" deme. SAT veya BEKLE.
+- Skor 30-50 (RISKY/CAUTION) → SAT veya BEKLE.
+- Skor 50-70 (CAUTION/SAFE) → BEKLE varsayılan; whitepaper ve roadmap güçlüyse AL.
+- Skor 70+ (SAFE/OPPORTUNITY) → AL teknik olarak destekli; tokenomics zayıfsa BEKLE.
+key_insight'ta bu skoru ve hangi sinyallerin baskın olduğunu kısaca belirt.
+`
+    : '';
 
   const holdersBlock = onChainHolders?.length
     ? `\nGerçek on-chain top holder adresleri (Ethplorer):\n` +
@@ -207,7 +289,7 @@ ATH: $${coin.ath?.toLocaleString()} (şu an %${Math.abs(coin.ath_change_percenta
 Kategoriler: ${coin.categories?.slice(0, 5).join(', ') ?? ''}
 ${holdersBlock}
 ${releasesBlock}
-
+${onChainBlock}
 ── PROJE AÇIKLAMASI (CoinGecko) ─────────────────────────────────────────────
 ${coin.description?.slice(0, 1500) ?? 'Açıklama yok'}
 ${whitepaperBlock}
