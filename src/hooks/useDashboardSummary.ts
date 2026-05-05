@@ -32,6 +32,16 @@ export interface EtfFlowAggregate {
   net_flow_coins?: number;
   /** Spot price used for the coin conversion */
   coin_price?: number;
+  /** Source label (bitbo, coinglass_manual, coinglass_playwright, fmp, …) */
+  source?: string;
+  /** ISO 8601 UTC timestamp of when the cached row was written */
+  scraped_at?: string | null;
+  /** Computed age in hours from scraped_at to now */
+  age_hours?: number | null;
+  /** True if scraped_at <= 25h old */
+  is_fresh?: boolean;
+  /** True if scraped_at > 25h old (still ≤7d, served as last-known-good) */
+  is_stale?: boolean;
 }
 
 export interface EtfFlows {

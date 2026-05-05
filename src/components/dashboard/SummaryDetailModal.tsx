@@ -74,6 +74,35 @@ function flagFor(country?: string): string {
   return map[country || ''] || '🌍';
 }
 
+function formatEtfFreshness(scrapedAt?: string | null, ageHours?: number | null, isStale?: boolean | null) {
+  if (!scrapedAt) return null;
+  const d = new Date(scrapedAt);
+  if (isNaN(d.getTime())) return null;
+
+  const dateLine = d.toLocaleString('tr-TR', {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC',
+  }) + ' UTC';
+
+  const hours = ageHours ?? Math.floor((Date.now() - d.getTime()) / 3_600_000);
+  let label: string;
+  let cls: string;
+  if (isStale || hours >= 25) {
+    const days = Math.floor(hours / 24);
+    label = days >= 1 ? `⚠ ${days} gün eski` : `⚠ ${Math.floor(hours)} saat eski`;
+    cls = 'text-[#ef5350] border-[#ef5350]/40 bg-[#ef5350]/10';
+  } else if (hours >= 12) {
+    label = `${Math.floor(hours)} saat önce`;
+    cls = 'text-[#fbbf24] border-[#fbbf24]/40 bg-[#fbbf24]/10';
+  } else if (hours >= 1) {
+    label = `${Math.floor(hours)} saat önce`;
+    cls = 'text-[#26a69a] border-[#26a69a]/40 bg-[#26a69a]/10';
+  } else {
+    label = 'Az önce';
+    cls = 'text-[#26a69a] border-[#26a69a]/40 bg-[#26a69a]/10';
+  }
+  return { label, cls, dateLine, title: `Veri tarihi: ${dateLine}` };
+}
+
 // ─── Per-type renderers ──────────────────────────────────────────────────
 
 function DigestBody({ title, body, symbols }: { title: string; body?: string; symbols?: string[] }) {
@@ -151,16 +180,31 @@ function EtfBody({ data }: { data: EtfFlows }) {
       coinAbs >= 1000 ? coinAbs.toFixed(0) : coinAbs >= 100 ? coinAbs.toFixed(1) : coinAbs.toFixed(2);
     const coinSigned = flowUsd >= 0 ? `+${coinFormatted} ${coin}` : `-${coinFormatted} ${coin}`;
 
+    const freshness = formatEtfFreshness(agg.scraped_at, agg.age_hours, agg.is_stale);
+
     return (
       <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded p-4 mb-3">
-        <div className="text-[12px] font-semibold text-[#e0e0e0] mb-3">
-          {icon} {label} Spot ETF
+        <div className="flex items-center justify-between mb-3 gap-2">
+          <div className="text-[12px] font-semibold text-[#e0e0e0]">
+            {icon} {label} Spot ETF
+          </div>
+          {freshness && (
+            <span
+              className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${freshness.cls}`}
+              title={freshness.title}
+            >
+              {freshness.label}
+            </span>
+          )}
         </div>
 
         {/* Hero — SoSoValue tarzı USD + coin amount */}
         <div className="border-t border-b border-[#2a2a3e] py-3 mb-3">
-          <div className="text-[10px] text-[#8888a0] uppercase tracking-wider mb-1">
-            Daily Total Net Inflow
+          <div className="text-[10px] text-[#8888a0] uppercase tracking-wider mb-1 flex items-center justify-between">
+            <span>Daily Total Net Inflow</span>
+            {freshness && (
+              <span className="text-[#555570] normal-case tracking-normal">{freshness.dateLine}</span>
+            )}
           </div>
           <div className="flex items-baseline gap-3 flex-wrap">
             <span className={`text-2xl font-bold font-mono ${flowColor}`}>{usdSigned}</span>
