@@ -2,6 +2,148 @@
 
 import { useState } from 'react';
 import { OnChainSnapshot, ScoreZone } from '@/lib/cryptoquant';
+import { useScoreHistory } from '@/hooks/useScoreHistory';
+
+function zoneColorForScore(s: number): string {
+  if (s >= 85) return '#a78bfa';
+  if (s >= 70) return '#26de81';
+  if (s >= 50) return '#fbbf24';
+  if (s >= 30) return '#ff9800';
+  return '#ff4757';
+}
+
+function Sparkline({
+  status,
+  points,
+  currentScore,
+  zoneColor,
+}: {
+  status: 'pending' | 'ok' | 'empty' | 'error';
+  points: { date: string; score: number; zone: string }[];
+  currentScore: number;
+  zoneColor: string;
+}) {
+  const [hover, setHover] = useState<number | null>(null);
+
+  if (status === 'pending') {
+    return <div className="h-12 mb-4 rounded bg-[#1a1a2e]/40 animate-pulse" />;
+  }
+  if (status === 'empty' || status === 'error' || points.length < 2) {
+    return (
+      <div className="mb-4 text-[10px] text-[#555] text-center py-2 border border-dashed border-[#1a1a2e] rounded">
+        90-günlük geçmiş yetersiz — sparkline birkaç gün içinde aktifleşecek
+      </div>
+    );
+  }
+
+  const W = 320;
+  const H = 48;
+  const PAD_X = 4;
+  const PAD_Y = 4;
+  const innerW = W - PAD_X * 2;
+  const innerH = H - PAD_Y * 2;
+
+  const xs = points.map((_, i) => PAD_X + (i / (points.length - 1)) * innerW);
+  const ys = points.map(p => PAD_Y + (1 - Math.max(0, Math.min(100, p.score)) / 100) * innerH);
+
+  const pathD = xs.map((x, i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
+  // Area fill underneath the line
+  const areaD = `${pathD} L${xs[xs.length - 1].toFixed(1)},${(H - PAD_Y).toFixed(1)} L${xs[0].toFixed(1)},${(H - PAD_Y).toFixed(1)} Z`;
+
+  const lastIdx = points.length - 1;
+  const firstScore = points[0].score;
+  const delta = currentScore - firstScore;
+
+  return (
+    <div className="mb-4">
+      <div className="flex items-center justify-between text-[10px] text-[#666] mb-1 px-1">
+        <span>Son {points.length} günlük skor</span>
+        <span className={delta >= 0 ? 'text-[#26de81]' : 'text-[#ff4757]'}>
+          {delta >= 0 ? '▲' : '▼'} {Math.abs(delta).toFixed(0)} puan
+        </span>
+      </div>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        className="w-full h-12 select-none"
+        onMouseLeave={() => setHover(null)}
+        onMouseMove={e => {
+          const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
+          const x = ((e.clientX - rect.left) / rect.width) * W;
+          let nearest = 0;
+          let bestDx = Infinity;
+          xs.forEach((px, i) => {
+            const dx = Math.abs(px - x);
+            if (dx < bestDx) {
+              bestDx = dx;
+              nearest = i;
+            }
+          });
+          setHover(nearest);
+        }}
+      >
+        <defs>
+          <linearGradient id="sparkArea" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor={zoneColor} stopOpacity="0.35" />
+            <stop offset="100%" stopColor={zoneColor} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {/* 50 baseline */}
+        <line
+          x1={PAD_X}
+          x2={W - PAD_X}
+          y1={PAD_Y + innerH * 0.5}
+          y2={PAD_Y + innerH * 0.5}
+          stroke="#2a2a3e"
+          strokeWidth="0.5"
+          strokeDasharray="2 2"
+        />
+        <path d={areaD} fill="url(#sparkArea)" />
+        <path d={pathD} fill="none" stroke={zoneColor} strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
+        {/* Last point dot */}
+        <circle
+          cx={xs[lastIdx]}
+          cy={ys[lastIdx]}
+          r="2.5"
+          fill={zoneColor}
+          stroke="#0d0d1a"
+          strokeWidth="1"
+        />
+        {/* Hover marker */}
+        {hover != null && (
+          <>
+            <line
+              x1={xs[hover]}
+              x2={xs[hover]}
+              y1={PAD_Y}
+              y2={H - PAD_Y}
+              stroke="#4fc3f7"
+              strokeWidth="0.6"
+              strokeOpacity="0.5"
+            />
+            <circle
+              cx={xs[hover]}
+              cy={ys[hover]}
+              r="2.5"
+              fill={zoneColorForScore(points[hover].score)}
+              stroke="#0d0d1a"
+              strokeWidth="1"
+            />
+          </>
+        )}
+      </svg>
+      {hover != null && (
+        <div className="text-[10px] text-[#888] text-center mt-0.5">
+          {new Date(points[hover].date).toLocaleDateString('tr-TR', { month: 'short', day: 'numeric' })}
+          {' · '}
+          <span style={{ color: zoneColorForScore(points[hover].score) }} className="font-bold">
+            {points[hover].score.toFixed(0)}/100
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const ZONE_META: Record<ScoreZone, { color: string; label: string; emoji: string; bg: string }> = {
   OPPORTUNITY: { color: '#a78bfa', label: 'Fırsat',     emoji: '💎', bg: '#a78bfa' },
@@ -20,6 +162,7 @@ export default function AxiomScoreWidget({ data, premium = true }: {
   const score = data.axiom_score ?? 0;
   const zone = ZONE_META[data.score_zone] ?? ZONE_META.UNKNOWN;
   const [formulaOpen, setFormulaOpen] = useState(false);
+  const history = useScoreHistory(data.symbol, 90);
   const allBreakdown = data.score_breakdown ?? [];
   const positives = allBreakdown.filter(b => b.contribution > 0).sort((a, b) => b.contribution - a.contribution);
   const negatives = allBreakdown.filter(b => b.contribution < 0).sort((a, b) => a.contribution - b.contribution);
@@ -148,6 +291,14 @@ export default function AxiomScoreWidget({ data, premium = true }: {
           </div>
         </div>
       </div>
+
+      {/* 90-day sparkline — only when we have at least 2 daily snapshots */}
+      <Sparkline
+        status={history.status}
+        points={history.points}
+        currentScore={score}
+        zoneColor={zone.color}
+      />
 
       {/* Summary line */}
       <div className="text-[12px] text-[#c0c0d0] italic mb-4 leading-relaxed">
