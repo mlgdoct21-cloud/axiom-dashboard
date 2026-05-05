@@ -12,6 +12,8 @@ const API_URL =
     : 'http://localhost:8000/api/v1');
 const AUTH_KEY = process.env.NEXT_PUBLIC_AUTH_STORAGE_KEY || 'axiom_auth';
 
+export type UserTier = 'free' | 'premium' | 'advance';
+
 export interface AuthResponse {
   access_token: string;
   refresh_token: string;
@@ -20,6 +22,7 @@ export interface AuthResponse {
     id: number;
     telegram_id: string;
     username: string;
+    tier?: UserTier;
   };
 }
 
@@ -28,6 +31,7 @@ export interface UserResponse {
   telegram_id: string;
   username: string;
   is_active: boolean;
+  tier: UserTier;
   tags: string;
   report_mode: string;
   report_hours: string;

@@ -3,6 +3,7 @@
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
 import { useState } from 'react';
+import { QuotaBadge } from './QuotaBadge';
 
 export function Header() {
   const { user, logout } = useAuth();
@@ -58,6 +59,8 @@ export function Header() {
 
           {/* User Menu */}
           <div className="flex items-center gap-3">
+            {user && <QuotaBadge tier={user.tier} />}
+
             {user && (
               <div className="hidden sm:flex items-center gap-2">
                 <div className="text-right">
