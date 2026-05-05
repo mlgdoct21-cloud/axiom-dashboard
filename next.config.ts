@@ -15,7 +15,13 @@ const cspDirectives = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https: blob:",
   "font-src 'self' data:",
-  "connect-src 'self' https://generativelanguage.googleapis.com https://api.coingecko.com https://api.binance.com https://api.ethplorer.io https://api.github.com https://*.supabase.co https://api.telegram.org",
+  // CRITICAL: include the Railway backend API. Day 21 we discovered the
+  // Telegram /login flow was silently broken because the dashboard's
+  // useAuth.checkAuth tried to fetch /users/me on Railway, but the
+  // browser's CSP blocked it ("Load failed"), JWT was never persisted,
+  // user bounced to /auth/login. The CORS allow-list on the backend was
+  // also wrong but THAT bug was masked behind this CSP one.
+  "connect-src 'self' https://generativelanguage.googleapis.com https://api.coingecko.com https://api.binance.com https://api.ethplorer.io https://api.github.com https://*.supabase.co https://api.telegram.org https://*.up.railway.app",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
