@@ -182,17 +182,17 @@ export default function AxiomDigestEmptyState({ locale, news, onSelectNews }: Pr
       : 'Pick a story on the left, or jump into one of the AI-curated headlines below.';
 
   return (
-    <div className="flex flex-col h-full bg-[#0d0d1a] p-5 md:p-7 overflow-y-auto">
-      <div className="w-full max-w-3xl mx-auto flex flex-col gap-4">
+    <div className="flex flex-col h-full bg-[#0d0d1a] p-4 md:p-5 overflow-y-auto">
+      <div className="w-full mx-auto flex flex-col gap-3">
         {/* Header */}
-        <div className="text-center mb-2">
+        <div className="text-center mb-1">
           <h1 className="text-xl md:text-2xl font-bold text-[#e0e0e0]">{greeting}</h1>
-          <p className="text-[11px] md:text-[12px] text-[#8888a0] mt-1.5">{subtitle}</p>
+          <p className="text-[11px] md:text-[12px] text-[#8888a0] mt-1">{subtitle}</p>
         </div>
 
-        {/* Top 3 featured cards */}
+        {/* Top 3 featured cards — yan yana (md+), scroll gerektirmez */}
         {top3.length > 0 ? (
-          <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {top3.map((item, i) => (
               <FeaturedCard
                 key={item.id}
