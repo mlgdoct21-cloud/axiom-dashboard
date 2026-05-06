@@ -52,7 +52,10 @@ export default function OnChainStoryCard({ symbol }: { symbol: string }) {
     setLoading(true);
     setData(null);
 
-    fetch(`/api/crypto/onchain-story?symbol=${encodeURIComponent(symbol)}`)
+    fetch(
+      `/api/crypto/onchain-story?symbol=${encodeURIComponent(symbol)}&_=${Date.now()}`,
+      { cache: 'no-store' },
+    )
       .then(async (r) => {
         const j = await r.json().catch(() => ({ error: 'fetch_failed' }));
         if (!cancelled) setData(j);
