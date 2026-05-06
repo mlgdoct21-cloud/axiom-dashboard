@@ -77,7 +77,7 @@ export default function OnChainStoryCard({ symbol }: { symbol: string }) {
       <div className="bg-gradient-to-br from-[#0d0d1a] to-[#111125] border border-[#2a2a3e] rounded-xl p-5">
         <div className="flex items-center gap-2 mb-3">
           <span className="text-xl">📖</span>
-          <h3 className="text-sm font-bold text-[#e0e0f0]">Hikâyeleştirici Ajan</h3>
+          <h3 className="text-sm font-bold text-[#e0e0f0]">Axiom Analistleri</h3>
           <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#a78bfa]/15 text-[#a78bfa] border border-[#a78bfa]/30">
             Gemini
           </span>
@@ -98,7 +98,7 @@ export default function OnChainStoryCard({ symbol }: { symbol: string }) {
       <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded-xl p-5">
         <div className="flex items-center gap-2 mb-2">
           <span className="text-xl">📖</span>
-          <h3 className="text-sm font-bold text-[#e0e0f0]">Hikâyeleştirici Ajan</h3>
+          <h3 className="text-sm font-bold text-[#e0e0f0]">Axiom Analistleri</h3>
         </div>
         <p className="text-xs text-[#888]">{msg}</p>
       </div>
@@ -111,7 +111,7 @@ export default function OnChainStoryCard({ symbol }: { symbol: string }) {
     <div className="bg-gradient-to-br from-[#0d0d1a] to-[#111125] border border-[#a78bfa]/30 rounded-xl p-5 space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-xl">📖</span>
-        <h3 className="text-sm font-bold text-[#e0e0f0]">Hikâyeleştirici Ajan</h3>
+        <h3 className="text-sm font-bold text-[#e0e0f0]">Axiom Analistleri</h3>
         <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#a78bfa]/15 text-[#a78bfa] border border-[#a78bfa]/30">
           Gemini · {story.symbol}
         </span>
