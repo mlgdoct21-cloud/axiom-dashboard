@@ -319,3 +319,58 @@ export function MinerConvictionPanel({ data }: { data: OnChainSnapshot }) {
     </PanelShell>
   );
 }
+
+
+// ── XRP-Specific Panels (BTC'de olmayan sinyaller) ─────────────────────────
+
+export function XrpDerivativesPanel({ data }: { data: OnChainSnapshot }) {
+  const funding = data.signals.funding_rates;
+  const liq = data.signals.xrp_liquidations;
+  const taker = data.signals.xrp_taker_buy_sell;
+  const lev = data.signals.leverage_ratio;
+  const oi = data.signals.open_interest;
+
+  const dominantSig = [funding, liq, taker, lev]
+    .filter(Boolean)
+    .map(s => s!.signal)
+    .reduce<Record<string, number>>((acc, s) => ({ ...acc, [s]: (acc[s] ?? 0) + 1 }), {});
+  const dominant = Object.entries(dominantSig).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'NEUTRAL';
+  const status = { label: dominant === 'BULLISH' ? '🟢 İyimser' : dominant === 'BEARISH' ? '🔴 Riskli' : '🟡 Karışık',
+                   color: signalColor[dominant] ?? C.gray };
+
+  return (
+    <PanelShell icon="⚡" title="TÜREV PİYASA" statusLabel={status.label} statusColor={status.color}>
+      <div>
+        <MetricRow metricKey="funding_rates" sig={funding} />
+        <MetricRow metricKey="leverage_ratio" sig={lev} />
+        <MetricRow metricKey="open_interest" sig={oi} />
+        <MetricRow metricKey="xrp_taker_buy_sell" sig={taker} />
+        <MetricRow metricKey="xrp_liquidations" sig={liq} />
+      </div>
+      <div className="mt-3 text-[11px] text-[#888] italic leading-snug border-t border-[#1a1a2e] pt-3">
+        XRP&apos;de türev piyasa hâkim — funding + tasfiye + taker oranı bir araya gelince tablo netleşir.
+      </div>
+    </PanelShell>
+  );
+}
+
+export function XrpNetworkPanel({ data }: { data: OnChainSnapshot }) {
+  const supply = data.signals.xrp_supply_ratio;
+  const nvt = data.signals.xrp_nvt;
+  const tx = data.signals.xrp_tx_count;
+
+  const status = statusFromSignal(supply ?? nvt);
+
+  return (
+    <PanelShell icon="🌐" title="AĞ SAĞLIĞI" statusLabel={status.label} statusColor={status.color}>
+      <div>
+        <MetricRow metricKey="xrp_supply_ratio" sig={supply} />
+        <MetricRow metricKey="xrp_nvt" sig={nvt} />
+        <MetricRow metricKey="xrp_tx_count" sig={tx} />
+      </div>
+      <div className="mt-3 text-[11px] text-[#888] italic leading-snug border-t border-[#1a1a2e] pt-3">
+        Ağ kullanımı + borsa stoğu + değerleme katsayısı (NVT) bir arada XRP&apos;nin sağlığını verir.
+      </div>
+    </PanelShell>
+  );
+}

@@ -9,6 +9,8 @@ import {
   LeverageHeatPanel,
   CycleCompassPanel,
   MinerConvictionPanel,
+  XrpDerivativesPanel,
+  XrpNetworkPanel,
 } from './OnChainPanels';
 
 export default function OnChainIntelCard({ symbol }: { symbol: string }) {
@@ -79,19 +81,29 @@ export default function OnChainIntelCard({ symbol }: { symbol: string }) {
 
   if (!data) return null;
 
+  // XRP için farklı panel seti — derivatives + network ağırlıklı
+  const isXrp = data.symbol === 'XRP';
+
   return (
     <div className="space-y-3">
       <AxiomScoreWidget data={data} premium={true} />
 
-      <div className="grid sm:grid-cols-2 gap-3">
-        <ExchangePulsePanel data={data} />
-        <WhaleRadarPanel data={data} />
-        <LeverageHeatPanel data={data} />
-        <CycleCompassPanel data={data} />
-        <div className="sm:col-span-2">
-          <MinerConvictionPanel data={data} />
+      {isXrp ? (
+        <div className="grid sm:grid-cols-2 gap-3">
+          <XrpDerivativesPanel data={data} />
+          <XrpNetworkPanel data={data} />
         </div>
-      </div>
+      ) : (
+        <div className="grid sm:grid-cols-2 gap-3">
+          <ExchangePulsePanel data={data} />
+          <WhaleRadarPanel data={data} />
+          <LeverageHeatPanel data={data} />
+          <CycleCompassPanel data={data} />
+          <div className="sm:col-span-2">
+            <MinerConvictionPanel data={data} />
+          </div>
+        </div>
+      )}
 
       <div className="text-center text-[9px] text-[#444] pt-1">
         Veri kaynağı: CryptoQuant on-chain · {new Date(data.fetched_at).toLocaleString('tr-TR')}

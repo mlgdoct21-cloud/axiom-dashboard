@@ -214,6 +214,94 @@ export const METRIC_INFO: Record<string, MetricInfo> = {
     ],
     why_matters: "Hash rate ağın 'sigorta primi'dir. Yükseliş trendi madencinin fiyat beklentisinin yüksek olduğunu gösterir.",
   },
+
+  // XRP-specific
+  xrp_liquidations: {
+    short: "Tasfiyeler",
+    full_tr: "XRP Türev Tasfiyeleri",
+    full_en: "XRP Derivatives Liquidations",
+    what_is: "Vadeli işlemlerde stop-loss tetiklenip kapatılan pozisyonların toplam dolar tutarı. Long tasfiyesi düşüşte, short tasfiyesi yükselişte oluşur.",
+    how_to_read: [
+      { range: "< $500K",     emoji: "🟢", label: "Sakin",  meaning: "Türev piyasası dingin" },
+      { range: "Çift yönlü > $5M", emoji: "🟠", label: "Volatil", meaning: "Her iki tarafın da temizlendiği yıkıcı bar" },
+      { range: "Long > 2× Short",  emoji: "🟢", label: "Long Tasfiyesi", meaning: "Düşüşten sonra tabana yakın" },
+      { range: "Short > 2× Long",  emoji: "🔴", label: "Short Sıkışması", meaning: "Yukarı zorlamadan sonra zirve yakın olabilir" },
+    ],
+    why_matters: "Tasfiye asimetrisi piyasanın hangi tarafının yanıldığını gösterir; yön dönüşlerinin habercisi.",
+  },
+  xrp_taker_buy_sell: {
+    short: "Taker Oranı",
+    full_tr: "XRP Taker Alıcı/Satıcı Oranı",
+    full_en: "XRP Taker Buy/Sell Ratio",
+    what_is: "Piyasada agresif alıcılar mı yoksa agresif satıcılar mı baskın? %50 üzeri alıcı baskın, %50 altı satıcı baskın.",
+    how_to_read: [
+      { range: "< 45%", emoji: "🔴", label: "Satıcı Baskın", meaning: "Spotta agresif satış var" },
+      { range: "45-55%", emoji: "🟡", label: "Dengeli",     meaning: "Net agresörlük yok" },
+      { range: "> 55%", emoji: "🟢", label: "Alıcı Baskın",  meaning: "Spotta agresif alım — momentum lehine" },
+    ],
+    why_matters: "Taker buy ratio anlık talep göstergesidir; funding ile birleşince kalıcı sinyal.",
+  },
+  xrp_supply_ratio: {
+    short: "Borsa Arz Oranı",
+    full_tr: "XRP Borsa Arz Oranı",
+    full_en: "XRP Exchange Supply Ratio",
+    what_is: "Borsalardaki toplam XRP / dolaşımdaki toplam XRP. Yüksek = satış yakın, düşük = biriktirme.",
+    how_to_read: [
+      { range: "< 0.10", emoji: "🟢", label: "Düşük Stok",  meaning: "Borsada az XRP — biriktirme aşaması" },
+      { range: "0.10-0.18", emoji: "🟡", label: "Normal",   meaning: "Tipik dağılım" },
+      { range: "> 0.18", emoji: "🔴", label: "Yüksek Stok", meaning: "Borsada bol XRP — satış riski" },
+    ],
+    why_matters: "Borsa stoğu uzun vadeli arz/talep dengesini gösterir; akıllı para hareketinin en sade hali.",
+  },
+  xrp_nvt: {
+    short: "NVT",
+    full_tr: "XRP Network Value to Transactions",
+    full_en: "XRP NVT Ratio",
+    what_is: "Ağın piyasa değerinin, ağdaki günlük işlem hacmine oranı. Geleneksel finansın P/E eşdeğeri.",
+    how_to_read: [
+      { range: "< 30",    emoji: "💎", label: "Çok Aktif",       meaning: "Ağ kullanımı fiyatın çok üzerinde — ucuz" },
+      { range: "30-100",  emoji: "🟢", label: "Sağlıklı",        meaning: "Adil değerleme bölgesi" },
+      { range: "100-200", emoji: "🟡", label: "Yüksek Değerleme", meaning: "Fiyat kullanımdan ileride" },
+      { range: "> 200",   emoji: "🔴", label: "Aşırı Değerli",   meaning: "Balon riski" },
+    ],
+    why_matters: "NVT XRP'nin gerçek kullanımının fiyatla uyumunu ölçer; uzun vadeli yatırımcı için temel sağlık indikatörü.",
+  },
+  xrp_tx_count: {
+    short: "İşlem Sayısı",
+    full_tr: "XRP Günlük İşlem Sayısı (7G değişim)",
+    full_en: "XRP Daily Transaction Count",
+    what_is: "XRP ağında günde işlenen toplam işlem sayısının 7 günlük değişimi.",
+    how_to_read: [
+      { range: "< -10% (7G)", emoji: "🔴", label: "Düşüşte", meaning: "Ağ kullanımı azalıyor" },
+      { range: "±10%",         emoji: "🟡", label: "Stabil",  meaning: "Normal değişim" },
+      { range: "> +10%",       emoji: "🟢", label: "Artışta", meaning: "Ağ kullanımı genişliyor" },
+    ],
+    why_matters: "Tx count ağın gerçek 'üretkenliği'dir; sürdürülebilir fiyat hareketinin temel doğrulayıcısı.",
+  },
+  eth_supply_ratio: {
+    short: "Borsa Arz Oranı",
+    full_tr: "ETH Borsa Arz Oranı",
+    full_en: "ETH Exchange Supply Ratio",
+    what_is: "Borsalardaki toplam ETH / dolaşımdaki toplam ETH. Düşük = biriktirilme, yüksek = satış yakın.",
+    how_to_read: [
+      { range: "< 0.10", emoji: "🟢", label: "Düşük Stok",  meaning: "Borsa rezervi düşük — bullish" },
+      { range: "0.10-0.18", emoji: "🟡", label: "Normal",   meaning: "Dengeli dağılım" },
+      { range: "> 0.18", emoji: "🔴", label: "Yüksek Stok", meaning: "Satış baskısı yakın" },
+    ],
+    why_matters: "ETH'nin BTC'deki whale_ratio karşılığı — büyük cüzdanların eylem yönünü gösterir.",
+  },
+  eth_active_addresses: {
+    short: "Aktif Cüzdan",
+    full_tr: "ETH Aktif Cüzdan Sayısı (7G)",
+    full_en: "ETH Active Addresses",
+    what_is: "ETH ağında günde aktif olan benzersiz cüzdan sayısının 7-günlük değişimi.",
+    how_to_read: [
+      { range: "< -5% (7G)", emoji: "🔴", label: "Düşüşte", meaning: "Ağ canlılığı zayıflıyor" },
+      { range: "±5%",         emoji: "🟡", label: "Stabil",  meaning: "Normal" },
+      { range: "> +5%",       emoji: "🟢", label: "Artışta", meaning: "Yeni kullanıcı + işlem girişi" },
+    ],
+    why_matters: "Ağ kullanımı fiyat trendinin sürdürülebilirlik kanıtıdır.",
+  },
 };
 
 export function getMetricInfo(key: string): MetricInfo | null {

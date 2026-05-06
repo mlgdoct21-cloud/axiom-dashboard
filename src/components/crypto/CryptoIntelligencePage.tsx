@@ -4,14 +4,16 @@ import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import WhitepaperTab from './WhitepaperTab';
 import OnChainTab from './OnChainTab';
+import MarketHealthCard from './MarketHealthCard';
 
-const SYMBOLS = ['BTC', 'ETH', 'SOL', 'ARB', 'AVAX', 'ADA', 'DOT', 'LINK', 'UNI', 'NEAR'];
+const SYMBOLS = ['BTC', 'ETH', 'XRP', 'SOL', 'ARB', 'AVAX', 'ADA', 'DOT', 'LINK', 'UNI', 'NEAR'];
+const ONCHAIN_SUPPORTED = new Set(['BTC', 'ETH', 'XRP']);
 
 type TabKey = 'whitepaper' | 'onchain';
 
 const TABS: { key: TabKey; label: string; icon: string; available: (symbol: string) => boolean }[] = [
   { key: 'whitepaper', label: 'Whitepaper', icon: '📄', available: () => true },
-  { key: 'onchain',    label: 'On-Chain',   icon: '🔗', available: (s) => s === 'BTC' || s === 'ETH' },
+  { key: 'onchain',    label: 'On-Chain',   icon: '🔗', available: (s) => ONCHAIN_SUPPORTED.has(s) },
 ];
 
 interface CoinResult {
@@ -48,9 +50,9 @@ function CryptoIntelligencePageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol, tab]);
 
-  // If user picks a non-BTC/ETH coin while on On-Chain tab, fall back to Whitepaper
+  // If user picks a coin without on-chain support, fall back to Whitepaper
   useEffect(() => {
-    if (tab === 'onchain' && symbol !== 'BTC' && symbol !== 'ETH') {
+    if (tab === 'onchain' && !ONCHAIN_SUPPORTED.has(symbol)) {
       setTab('whitepaper');
     }
   }, [symbol, tab]);
@@ -102,9 +104,12 @@ function CryptoIntelligencePageInner() {
       <div>
         <h1 className="text-xl font-bold text-[#e0e0e0]">Kripto Analiz</h1>
         <p className="text-sm text-[#555570] mt-1">
-          📄 Whitepaper analizi · 🔗 On-Chain akıllı para sinyalleri
+          📄 Whitepaper analizi · 🔗 On-Chain akıllı para sinyalleri · 📋 Piyasa karnesi
         </p>
       </div>
+
+      {/* Market-wide health card — sayfa açılır açılmaz büyük resim */}
+      <MarketHealthCard />
 
       {/* Symbol selector */}
       <div className="flex flex-wrap gap-2">
@@ -195,7 +200,7 @@ function CryptoIntelligencePageInner() {
               type="button"
               onClick={() => isAvailable && setTab(t.key)}
               disabled={disabled}
-              title={disabled ? 'Bu sekme yalnızca BTC ve ETH için mevcuttur' : undefined}
+              title={disabled ? 'Bu sekme yalnızca BTC, ETH ve XRP için mevcuttur' : undefined}
               className={`px-4 py-2.5 text-sm font-semibold transition-all relative ${
                 isActive
                   ? 'text-[#4fc3f7]'
