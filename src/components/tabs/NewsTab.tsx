@@ -5,8 +5,10 @@ import { useTranslations } from 'next-intl';
 import NewsList from '@/components/news/NewsList';
 import NewsDetail from '@/components/news/NewsDetail';
 import FavoritesBar from '@/components/news/FavoritesBar';
+import { DailyDigestCards } from '@/components/news/DailyDigestCards';
 import { DashboardSummary } from '@/components/dashboard/DashboardSummary';
 import MarketTicker from '@/components/ticker/MarketTicker';
+import { useDailyDigest } from '@/hooks/useDailyDigest';
 import { useNewsStream, type StreamedNews } from '@/hooks/useNewsStream';
 import {
   getVotes,
@@ -129,6 +131,8 @@ export default function NewsTab({ locale }: NewsTabProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedNewsId, setSelectedNewsId] = useState<string | null>(null);
+  const [newsModalOpen, setNewsModalOpen] = useState(false);
+  const { digest, loading: digestLoading, error: digestError } = useDailyDigest(true);
   const [votes, setVotes] = useState<Record<string, NewsVote>>({});
   const [favorites, setFavorites] = useState<string[]>([]);
   const [category, setCategory] = useState<NewsCategoryFilter>('all');
@@ -197,6 +201,16 @@ export default function NewsTab({ locale }: NewsTabProps) {
     const interval = setInterval(() => loadNews(true), REFRESH_INTERVAL);
     return () => clearInterval(interval);
   }, [loadNews]);
+
+  // ESC ile haber pop-up modal'ı kapat
+  useEffect(() => {
+    if (!newsModalOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNewsModalOpen(false);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [newsModalOpen]);
 
   // 🔴 CANLI AKIŞ: Backend SSE → yeni analiz edilmiş haberi listeye ekle
   // VEYA mevcut (analyzed=false) item'ı in-place güncelle (özet doldur).
@@ -280,7 +294,10 @@ export default function NewsTab({ locale }: NewsTabProps) {
           loading={loading}
           error={error}
           selectedId={selectedNewsId}
-          onSelectNews={setSelectedNewsId}
+          onSelectNews={(id) => {
+            setSelectedNewsId(id);
+            setNewsModalOpen(true);
+          }}
           category={category}
           onCategoryChange={setCategory}
           locale={locale}
@@ -291,17 +308,12 @@ export default function NewsTab({ locale }: NewsTabProps) {
         />
       </div>
 
-        {/* Orta: haber detay + voting + price snapshot */}
-        <div className="col-span-1 md:col-span-7 border-r border-[#2a2a3e] flex flex-col overflow-hidden">
-          <NewsDetail
-            item={selectedNews}
-            votes={selectedVotes}
-            locale={locale}
-            onVote={handleVote}
-            onAddFavorite={handleAddFavorite}
-            favorites={favorites}
-            allNews={news}
-            onSelectNews={setSelectedNewsId}
+        {/* Orta: bugünün en önemlileri (3 kart yan yana, scroll yok) */}
+        <div className="col-span-1 md:col-span-7 border-r border-[#2a2a3e] flex flex-col overflow-y-auto p-4">
+          <DailyDigestCards
+            digest={digest}
+            loading={digestLoading}
+            error={digestError}
           />
         </div>
 
@@ -316,6 +328,41 @@ export default function NewsTab({ locale }: NewsTabProps) {
           />
         </div>
       </div>
+
+      {/* Haber pop-up modal — habere tıklayınca tüm özet + yorum tek seferde */}
+      {newsModalOpen && selectedNews && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-sm"
+          onClick={() => setNewsModalOpen(false)}
+        >
+          <div
+            className="bg-[#141425] border border-[#2a2a3e] rounded-lg shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-end px-3 py-2 border-b border-[#2a2a3e]">
+              <button
+                onClick={() => setNewsModalOpen(false)}
+                className="text-[#8888a0] hover:text-[#e0e0e0] transition text-xl leading-none w-8 h-8 flex items-center justify-center rounded hover:bg-[#1f1f3a]"
+                title="Kapat (Esc)"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <NewsDetail
+                item={selectedNews}
+                votes={selectedVotes}
+                locale={locale}
+                onVote={handleVote}
+                onAddFavorite={handleAddFavorite}
+                favorites={favorites}
+                allNews={news}
+                onSelectNews={setSelectedNewsId}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
