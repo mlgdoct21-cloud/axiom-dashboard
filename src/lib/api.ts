@@ -36,8 +36,21 @@ export interface UserResponse {
   report_mode: string;
   report_hours: string;
   custom_follows: string;
+  subscription_status: string | null;
+  current_period_end: string | null;
   created_at: string;
   updated_at: string | null;
+}
+
+export interface QuotaHistoryItem {
+  command: string;
+  used_at: string;
+}
+
+export interface QuotaHistoryResponse {
+  days: number;
+  total: number;
+  items: QuotaHistoryItem[];
 }
 
 export interface NewsResponse {
@@ -256,6 +269,20 @@ class ApiClient {
     return this.request<UserResponse>('/users/me/settings', {
       method: 'GET',
     });
+  }
+
+  // Billing Methods
+  async createCustomerPortalSession(): Promise<{ url: string }> {
+    return this.request<{ url: string }>('/billing/customer-portal', {
+      method: 'POST',
+    });
+  }
+
+  async getQuotaHistory(days: number = 7): Promise<QuotaHistoryResponse> {
+    return this.request<QuotaHistoryResponse>(
+      `/feature-quota/history?days=${days}`,
+      { method: 'GET' }
+    );
   }
 
   // News Methods
