@@ -129,6 +129,7 @@ export default function NewsTab({ locale }: NewsTabProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedNewsId, setSelectedNewsId] = useState<string | null>(null);
+  const [newsModalOpen, setNewsModalOpen] = useState(false);
   const [votes, setVotes] = useState<Record<string, NewsVote>>({});
   const [favorites, setFavorites] = useState<string[]>([]);
   const [category, setCategory] = useState<NewsCategoryFilter>('all');
@@ -197,6 +198,16 @@ export default function NewsTab({ locale }: NewsTabProps) {
     const interval = setInterval(() => loadNews(true), REFRESH_INTERVAL);
     return () => clearInterval(interval);
   }, [loadNews]);
+
+  // ESC ile haber pop-up modal'ı kapat
+  useEffect(() => {
+    if (!newsModalOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNewsModalOpen(false);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [newsModalOpen]);
 
   // 🔴 CANLI AKIŞ: Backend SSE → yeni analiz edilmiş haberi listeye ekle
   // VEYA mevcut (analyzed=false) item'ı in-place güncelle (özet doldur).
@@ -280,7 +291,10 @@ export default function NewsTab({ locale }: NewsTabProps) {
           loading={loading}
           error={error}
           selectedId={selectedNewsId}
-          onSelectNews={setSelectedNewsId}
+          onSelectNews={(id) => {
+            setSelectedNewsId(id);
+            setNewsModalOpen(true);
+          }}
           category={category}
           onCategoryChange={setCategory}
           locale={locale}
@@ -291,17 +305,20 @@ export default function NewsTab({ locale }: NewsTabProps) {
         />
       </div>
 
-        {/* Orta: haber detay + voting + price snapshot */}
+        {/* Orta: 3 önemli haber (NewsDetail item=null → AxiomDigestEmptyState) */}
         <div className="col-span-1 md:col-span-7 border-r border-[#2a2a3e] flex flex-col overflow-hidden">
           <NewsDetail
-            item={selectedNews}
-            votes={selectedVotes}
+            item={null}
+            votes={null}
             locale={locale}
             onVote={handleVote}
             onAddFavorite={handleAddFavorite}
             favorites={favorites}
             allNews={news}
-            onSelectNews={setSelectedNewsId}
+            onSelectNews={(id) => {
+              setSelectedNewsId(id);
+              setNewsModalOpen(true);
+            }}
           />
         </div>
 
@@ -316,6 +333,41 @@ export default function NewsTab({ locale }: NewsTabProps) {
           />
         </div>
       </div>
+
+      {/* Haber pop-up — listeden tıklayınca tam ekran modal'da özet + yorum */}
+      {newsModalOpen && selectedNews && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-sm"
+          onClick={() => setNewsModalOpen(false)}
+        >
+          <div
+            className="bg-[#141425] border border-[#2a2a3e] rounded-lg shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-end px-3 py-2 border-b border-[#2a2a3e]">
+              <button
+                onClick={() => setNewsModalOpen(false)}
+                className="text-[#8888a0] hover:text-[#e0e0e0] transition text-xl leading-none w-8 h-8 flex items-center justify-center rounded hover:bg-[#1f1f3a]"
+                title="Kapat (Esc)"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <NewsDetail
+                item={selectedNews}
+                votes={selectedVotes}
+                locale={locale}
+                onVote={handleVote}
+                onAddFavorite={handleAddFavorite}
+                favorites={favorites}
+                allNews={news}
+                onSelectNews={(id) => setSelectedNewsId(id)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
