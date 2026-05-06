@@ -68,7 +68,7 @@ function FeaturedCard({
   return (
     <button
       onClick={onClick}
-      className="text-left bg-[#141425] border border-[#2a2a3e] hover:border-[#4fc3f7]/60 hover:bg-[#1a1a30] rounded-lg p-4 transition-all flex flex-col gap-2 group focus:outline-none focus:ring-2 focus:ring-[#4fc3f7]/50"
+      className="text-left bg-[#141425] border border-[#2a2a3e] hover:border-[#4fc3f7]/60 hover:bg-[#1a1a30] rounded-lg p-4 transition-all flex flex-col gap-2 group focus:outline-none focus:ring-2 focus:ring-[#4fc3f7]/50 h-full"
     >
       {/* Top row: rank badge + category + time + breaking */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -97,9 +97,9 @@ function FeaturedCard({
         {item.title}
       </h3>
 
-      {/* Summary */}
+      {/* Summary — flex-1 ile kartı dikey doldur, daha geniş clamp */}
       {summary && (
-        <p className="text-[12px] text-[#a0a0b8] leading-relaxed line-clamp-3">{summary}</p>
+        <p className="text-[12px] text-[#a0a0b8] leading-relaxed line-clamp-6 flex-1">{summary}</p>
       )}
 
       {/* Footer: source + symbols + CTA */}
@@ -183,16 +183,16 @@ export default function AxiomDigestEmptyState({ locale, news, onSelectNews }: Pr
 
   return (
     <div className="flex flex-col h-full bg-[#0d0d1a] p-4 md:p-5 overflow-y-auto">
-      <div className="w-full mx-auto flex flex-col gap-3">
+      <div className="w-full mx-auto flex flex-col gap-3 flex-1 min-h-0">
         {/* Header */}
-        <div className="text-center mb-1">
+        <div className="text-center mb-1 shrink-0">
           <h1 className="text-xl md:text-2xl font-bold text-[#e0e0e0]">{greeting}</h1>
           <p className="text-[11px] md:text-[12px] text-[#8888a0] mt-1">{subtitle}</p>
         </div>
 
-        {/* Top 3 featured cards — yan yana (md+), scroll gerektirmez */}
+        {/* Top 3 featured cards — flex-1 ile altta boşluk kalmaz */}
         {top3.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 flex-1 min-h-[420px]">
             {top3.map((item, i) => (
               <FeaturedCard
                 key={item.id}
