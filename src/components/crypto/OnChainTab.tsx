@@ -2,6 +2,7 @@
 
 import OnChainIntelCard from './OnChainIntelCard';
 import AlertHistoryCard from './AlertHistoryCard';
+import OnChainStoryCard from './OnChainStoryCard';
 import UpgradeOverlay from './UpgradeOverlay';
 import { useFeatureQuota } from '@/hooks/useFeatureQuota';
 
@@ -55,6 +56,8 @@ export default function OnChainTab({ symbol }: { symbol: string }) {
           Borsa akışları · Balina aktivitesi · Madenci davranışı · Türev piyasa · Döngü pusulası
         </p>
       </div>
+
+      <OnChainStoryCard symbol={symbol} />
 
       <OnChainIntelCard symbol={symbol} />
 
