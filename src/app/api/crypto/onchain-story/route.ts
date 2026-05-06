@@ -1,7 +1,11 @@
 /**
- * On-Chain Storyteller proxy — Gemini-üretimli 3-paragraf hikâye.
- * Backend cache'i 12h; biz CDN'de 1h tutuyoruz, SWR 6h.
+ * On-Chain Storyteller proxy — Gemini-üretimli 5-blok karar çerçevesi.
+ * Backend zaten 12h Postgres cache'liyor; biz no-store ile her isteği
+ * backend'e geçiriyoruz ki force-refresh anında yansısın.
  */
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 import { NextRequest, NextResponse } from 'next/server';
 
 const RAILWAY_URL = 'https://vivacious-growth-production-4875.up.railway.app/api/v1';
@@ -32,7 +36,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(data, {
       status: 200,
       headers: {
-        'Cache-Control': 'public, max-age=3600, stale-while-revalidate=21600',
+        'Cache-Control': 'no-store, must-revalidate',
       },
     });
   } catch (e) {
