@@ -20,6 +20,7 @@ import type { DailyDigestCard } from '@/hooks/useDailyDigest';
 import type { MacroRelease } from '@/hooks/useMacroLatest';
 import { useMacroUpcoming } from '@/hooks/useMacroLatest';
 import { sectorLabelTr } from '@/lib/macro-sector-labels';
+import type { OnChainSnapshot } from '@/lib/cryptoquant';
 
 // ─── Modal kind union ────────────────────────────────────────────────────
 
@@ -34,7 +35,8 @@ export type ModalContent =
   | { type: 'earnings'; data: EarningItem[] }
   | { type: 'sectors'; data: SectorPerformance[] }
   | { type: 'vix'; data: FearIndices }
-  | { type: 'macro'; data: MacroRelease; core?: MacroRelease | null };
+  | { type: 'macro'; data: MacroRelease; core?: MacroRelease | null }
+  | { type: 'onchain'; data: OnChainSnapshot };
 
 // ─── Helpers (paylaşılan) ────────────────────────────────────────────────
 
@@ -140,6 +142,96 @@ function IndexRow({ q }: { q: IndexQuote }) {
         <span className="text-[#e0e0e0]">{q.price.toLocaleString('tr-TR')}</span>
         <span className={pctColor(q.change_pct)}>{pctText(q.change_pct)}</span>
       </span>
+    </div>
+  );
+}
+
+// ─── OnChain modal body ──────────────────────────────────────────────────
+// Renders BTC CryptoQuant signals (exchange netflow, funding, whale ratio,
+// MVRV, NUPL, SOPR, etc.) inline in the modal — no /dashboard/crypto
+// navigation, no auth gate.
+const SIGNAL_LABELS_TR: Record<string, string> = {
+  exchange_netflow: 'Borsa Net Akışı',
+  whale_ratio:      'Balina Oranı',
+  miner_reserve:    'Madenci Rezerv',
+  miner_outflow:    'Madenci Çıkışı',
+  stablecoin_inflow:'Stablecoin Girişi',
+  funding_rates:    'Funding Rate',
+  open_interest:    'Açık Pozisyon',
+  sopr:             'SOPR',
+  coinbase_premium: 'Coinbase Premium',
+  mvrv:             'MVRV',
+  nupl:             'NUPL',
+  mpi:              'Madenci Pozisyon İndeksi',
+  puell:            'Puell Multiple',
+  hash_rate:        'Hash Rate',
+  leverage_ratio:   'Kaldıraç Oranı',
+  realized_price:   'Gerçekleşmiş Fiyat',
+};
+
+function OnChainBody({ data }: { data: import('@/lib/cryptoquant').OnChainSnapshot }) {
+  const score = data?.axiom_score;
+  const zone  = data?.score_zone_tr ?? data?.score_zone ?? null;
+  const overall = data?.overall_tr ?? data?.overall ?? null;
+  const signals = data?.signals ?? {};
+  const entries = Object.entries(signals);
+
+  // Sort: BEARISH first (risk), then BULLISH, then NEUTRAL
+  const order: Record<string, number> = { BEARISH: 0, BULLISH: 1, NEUTRAL: 2 };
+  entries.sort((a, b) => (order[a[1]?.signal ?? 'NEUTRAL'] ?? 3) - (order[b[1]?.signal ?? 'NEUTRAL'] ?? 3));
+
+  return (
+    <div className="space-y-4">
+      {/* Headline: Axiom Score + Overall */}
+      <div className="flex items-center justify-between p-3 bg-[#0f0f20] border border-[#2a2a3e] rounded">
+        <div>
+          <div className="text-[10px] text-[#8888a0] uppercase tracking-wider mb-0.5">Axiom Skor</div>
+          <div className="text-2xl font-bold text-[#e0e0e0] font-mono">
+            {score != null ? score.toFixed(0) : '—'}
+            <span className="text-[12px] text-[#8888a0] font-normal ml-2">/ 100</span>
+          </div>
+        </div>
+        <div className="text-right">
+          {zone && <div className="text-[12px] font-semibold text-[#ff9800]">{zone}</div>}
+          {overall && <div className="text-[10px] text-[#8888a0] mt-0.5">{overall}</div>}
+        </div>
+      </div>
+
+      {/* Signal table */}
+      {entries.length > 0 ? (
+        <div>
+          <div className="text-[10px] text-[#8888a0] uppercase tracking-wider mb-2">Sinyaller</div>
+          <div className="space-y-1">
+            {entries.map(([key, sig]) => {
+              const sigType = sig?.signal ?? 'NEUTRAL';
+              const color =
+                sigType === 'BULLISH' ? 'text-[#26a69a]' :
+                sigType === 'BEARISH' ? 'text-[#ef5350]' :
+                'text-[#8888a0]';
+              return (
+                <div
+                  key={key}
+                  className="flex items-center justify-between py-1.5 border-b border-[#2a2a3e] last:border-b-0 text-[12px]"
+                >
+                  <span className="text-[#e0e0e0]">
+                    {SIGNAL_LABELS_TR[key] ?? key}
+                  </span>
+                  <span className="flex items-center gap-2 font-mono">
+                    <span className="text-[#e0e0e0]">{sig?.value_str ?? '—'}</span>
+                    <span className={color}>{sig?.label_tr ?? sigType}</span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-[#8888a0]">On-chain sinyal verisi yüklenemedi.</p>
+      )}
+
+      <div className="text-[10px] text-[#555570]">
+        Kaynak: CryptoQuant · Güncellenme: {data?.fetched_at ? new Date(data.fetched_at).toLocaleString('tr-TR') : '—'}
+      </div>
     </div>
   );
 }
@@ -1044,6 +1136,7 @@ const TITLE_MAP: Record<ModalContent['type'], { icon: string; title: string }> =
   sectors:    { icon: '🔥', title: 'Sektör Performansı' },
   vix:        { icon: '🌡️', title: 'VIX Volatilite Endeksi + Kripto F&G' },
   macro:      { icon: '🌐', title: 'Makro Pulse — Son Release' },
+  onchain:    { icon: '🔗', title: 'BTC On-Chain Sinyaller' },
 };
 
 export function SummaryDetailModal({
@@ -1120,6 +1213,7 @@ export function SummaryDetailModal({
           {content.type === 'sectors' && <SectorsBody data={content.data} />}
           {content.type === 'vix' && <FearBody data={content.data} />}
           {content.type === 'macro' && <MacroBody data={content.data} core={content.core ?? null} />}
+          {content.type === 'onchain' && <OnChainBody data={content.data} />}
         </div>
 
         {/* Footer */}

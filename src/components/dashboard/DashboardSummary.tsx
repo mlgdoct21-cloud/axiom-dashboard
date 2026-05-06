@@ -11,10 +11,10 @@
  */
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useDailyDigest } from '@/hooks/useDailyDigest';
 import { useDashboardSummary } from '@/hooks/useDashboardSummary';
 import { useMacroLatest } from '@/hooks/useMacroLatest';
+import type { OnChainSnapshot } from '@/lib/cryptoquant';
 import {
   DigestRiskChip,
   DigestQuantChip,
@@ -36,7 +36,7 @@ export function DashboardSummary() {
   const { data, loading, error, refresh } = useDashboardSummary(true);
   const { data: macroData, loading: macroLoading } = useMacroLatest(true);
   const [modal, setModal] = useState<ModalContent | null>(null);
-  const router = useRouter();
+  const [onchainData, setOnchainData] = useState<OnChainSnapshot | null>(null);
 
   const ageText = (() => {
     if (!data?.last_updated) return '';
@@ -180,7 +180,12 @@ export function DashboardSummary() {
           }
         />
         <MiniOnChainChip
-          onClick={() => router.push('/dashboard/crypto?symbol=BTC')}
+          onData={setOnchainData}
+          onClick={
+            onchainData
+              ? () => open({ type: 'onchain', data: onchainData })
+              : undefined
+          }
         />
       </div>
 

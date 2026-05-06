@@ -573,9 +573,19 @@ function _onchainAccent(overall?: string): ChipProps['accent'] {
   return 'gray';
 }
 
-export function MiniOnChainChip({ onClick }: { onClick?: () => void }) {
+export function MiniOnChainChip({
+  onClick,
+  onData,
+}: {
+  onClick?: () => void;
+  onData?: (snapshot: ReturnType<typeof useOnChain>['data']) => void;
+}) {
   const { data, loading, error } = useOnChain('BTC');
   const empty = !loading && (!data || !data.signals || Object.keys(data.signals || {}).length === 0);
+
+  React.useEffect(() => {
+    if (onData) onData(data);
+  }, [data, onData]);
 
   // Headline = exchange netflow signal (most actionable)
   const netflowSig = data?.signals?.exchange_netflow;
