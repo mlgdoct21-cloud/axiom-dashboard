@@ -403,7 +403,7 @@ function OvernightBody({ data }: { data: OvernightMarkets }) {
             )}
           </div>
           <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded p-2">
-            <div className="text-[9px] text-[#8888a0] uppercase tracking-wider">US Futures</div>
+            <div className="text-[9px] text-[#8888a0] uppercase tracking-wider">ABD Endeksleri</div>
             <div className={`text-[14px] font-bold font-mono ${pctColor(us?.avg)}`}>
               {us ? pctText(us.avg) : '—'}
             </div>
@@ -418,7 +418,7 @@ function OvernightBody({ data }: { data: OvernightMarkets }) {
 
       {renderRegion('Asya', '03:00 – 08:30 TRT kapanış', data.asia, asia)}
       {renderRegion('Avrupa', '10:00 TRT açılış', data.europe, eu)}
-      {renderRegion('US Futures', '24 saat işlem görür', data.us_futures, us)}
+      {renderRegion('ABD Endeksleri', 'Önceki kapanış bazlı', data.us_futures, us)}
     </div>
   );
 }
