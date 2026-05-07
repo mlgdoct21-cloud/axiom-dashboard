@@ -28,13 +28,13 @@ export async function getCachedCryptoReport(reportType: string, symbol: string) 
   }
 }
 
-export async function setCachedCryptoReport(reportType: string, symbol: string, data: any) {
+export async function setCachedCryptoReport(reportType: string, symbol: string, data: any, ttlHours: number = 6) {
   try {
     const db = getSupabase();
     const { error } = await (db as any)
       .from('crypto_reports_cache')
       .upsert(
-        { report_type: reportType, symbol, report_data: data, expires_at: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString() },
+        { report_type: reportType, symbol, report_data: data, expires_at: new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString() },
         { onConflict: 'symbol,report_type' }
       );
     if (error) console.error('[cache] write:', error.message, reportType, symbol);

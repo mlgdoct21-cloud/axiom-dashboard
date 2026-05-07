@@ -102,6 +102,6 @@ Her bölümü gerçekten doldurun. Kısa geçiştirmeyin. Toplam ~600-800 kelime
     cached: false,
   };
 
-  await setCachedCryptoReport('wp_full_v2', symbol, result);
+  await setCachedCryptoReport('wp_full_v2', symbol, result, 12);
   return NextResponse.json(result);
 }
