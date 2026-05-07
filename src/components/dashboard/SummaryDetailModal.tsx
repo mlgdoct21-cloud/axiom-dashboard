@@ -25,8 +25,14 @@ import type { OnChainSnapshot } from '@/lib/cryptoquant';
 // ─── Modal kind union ────────────────────────────────────────────────────
 
 export type ModalContent =
-  | { type: 'risk'; data: DailyDigestCard }
-  | { type: 'quant'; data: DailyDigestCard }
+  | {
+      type: 'risk';
+      data: DailyDigestCard;
+      vix?: { current?: number; status?: string; color?: string; change_pct?: number } | null;
+      overnight?: OvernightMarkets | null;
+      onchain?: OnChainSnapshot | null;
+      sectors?: SectorPerformance[] | null;
+    }
   | { type: 'portfolio'; data: DailyDigestCard }
   | { type: 'overnight'; data: OvernightMarkets }
   | { type: 'etf'; data: EtfFlows }
@@ -236,23 +242,482 @@ function OnChainBody({ data }: { data: import('@/lib/cryptoquant').OnChainSnapsh
   );
 }
 
+// ─── Sen Uyurken — verdict-augmented Overnight body ─────────────────────
+//
+// Üst banner kullanıcıya "şimdi ne yapmalıyım?" sorusunu yanıtlıyor:
+// • Asya + Avrupa + US futures'ı sentezleyip risk-on / risk-off / karışık verdict üretir
+// • TR trader perspektifinden BIST açılışı için sinyal yorumu ekler
+// • Her bölge için ortalama % değişim + en güçlü / en zayıf endeks vurgusu
+//
+function summarizeRegion(items?: IndexQuote[] | null) {
+  if (!items?.length) return null;
+  const valid = items.filter((q) => Number.isFinite(q.change_pct));
+  if (!valid.length) return null;
+  const avg = valid.reduce((s, q) => s + q.change_pct, 0) / valid.length;
+  const sorted = [...valid].sort((a, b) => b.change_pct - a.change_pct);
+  return { avg, best: sorted[0], worst: sorted[sorted.length - 1], count: valid.length };
+}
+
 function OvernightBody({ data }: { data: OvernightMarkets }) {
-  const renderRegion = (label: string, items: IndexQuote[]) => {
+  const asia = summarizeRegion(data.asia);
+  const eu = summarizeRegion(data.europe);
+  const us = summarizeRegion(data.us_futures);
+
+  // Verdict logic — üç bölgenin ortalama yönüne bakıyoruz.
+  const regionAvgs = [asia?.avg, eu?.avg, us?.avg].filter(
+    (v): v is number => v != null && Number.isFinite(v),
+  );
+  const overallAvg = regionAvgs.length
+    ? regionAvgs.reduce((s, v) => s + v, 0) / regionAvgs.length
+    : null;
+
+  let verdict: { label: string; tone: 'green' | 'yellow' | 'red'; emoji: string; action: string };
+  if (overallAvg == null) {
+    verdict = {
+      label: 'Veri Yetersiz',
+      tone: 'yellow',
+      emoji: '⚪',
+      action: 'Pazar verileri henüz toplanıyor. Açılış öncesi tekrar kontrol et.',
+    };
+  } else if (overallAvg >= 0.5) {
+    verdict = {
+      label: 'Risk-On Açılış',
+      tone: 'green',
+      emoji: '🟢',
+      action:
+        'BIST açılışı pozitif sinyal alıyor. Risk-on pozisyonlar için uygun ortam; agresif kâr realizasyonu yerine takipte kal.',
+    };
+  } else if (overallAvg <= -0.5) {
+    verdict = {
+      label: 'Risk-Off Uyarısı',
+      tone: 'red',
+      emoji: '🔴',
+      action:
+        'BIST açılışı için satıcılı sinyal. Pozisyon büyüklüğünü küçült, stop seviyelerini sıkılaştır, kripto pozisyonlarını gözden geçir.',
+    };
+  } else {
+    // Mixed: Asya pozitif Avrupa negatif veya tersi
+    const positive = regionAvgs.filter((v) => v > 0).length;
+    const negative = regionAvgs.filter((v) => v < 0).length;
+    if (positive > negative) {
+      verdict = {
+        label: 'Karışık → Hafif Pozitif',
+        tone: 'yellow',
+        emoji: '🟡',
+        action:
+          'Bölgeler arası ayrışma var. BIST için nötr-pozitif sinyal; sektör-spesifik fırsatları takip et, geniş pazar yönü için açılış candle\'ını bekle.',
+      };
+    } else if (negative > positive) {
+      verdict = {
+        label: 'Karışık → Hafif Negatif',
+        tone: 'yellow',
+        emoji: '🟡',
+        action:
+          'Bölgeler arası ayrışma var. BIST için temkinli açılış; defansif sektörlere yönel, leverage\'ı azalt.',
+      };
+    } else {
+      verdict = {
+        label: 'Yatay Açılış',
+        tone: 'yellow',
+        emoji: '🟡',
+        action:
+          'Pazarlar tedirgin ama yön belirsiz. Açılış 30 dk\'sını izle, yön netleşene kadar yeni pozisyon açma.',
+      };
+    }
+  }
+
+  const toneClass = {
+    green: 'border-[#26a69a]/40 bg-[#26a69a]/10 text-[#26a69a]',
+    yellow: 'border-[#fbbf24]/40 bg-[#fbbf24]/10 text-[#fbbf24]',
+    red: 'border-[#ef5350]/40 bg-[#ef5350]/10 text-[#ef5350]',
+  }[verdict.tone];
+
+  const renderRegion = (
+    label: string,
+    sub: string,
+    items: IndexQuote[] | undefined,
+    summary: ReturnType<typeof summarizeRegion>,
+  ) => {
     if (!items?.length) return null;
     return (
       <div>
-        <div className="text-[10px] text-[#8888a0] uppercase tracking-wider mb-1">{label}</div>
+        <div className="flex items-center justify-between mb-1.5">
+          <div>
+            <span className="text-[11px] text-[#e0e0e0] uppercase tracking-wider font-semibold">
+              {label}
+            </span>
+            <span className="text-[9px] text-[#555570] ml-2">{sub}</span>
+          </div>
+          {summary && (
+            <span className={`text-[10px] font-mono ${pctColor(summary.avg)}`}>
+              ort. {pctText(summary.avg)}
+            </span>
+          )}
+        </div>
         {items.map((q) => (
           <IndexRow key={q.symbol} q={q} />
         ))}
       </div>
     );
   };
+
   return (
     <div className="space-y-4">
-      {renderRegion('Asya', data.asia)}
-      {renderRegion('Avrupa', data.europe)}
-      {renderRegion('US Futures', data.us_futures)}
+      {/* Verdict banner */}
+      <div className={`rounded-lg border p-3 ${toneClass}`}>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-base">{verdict.emoji}</span>
+          <span className="text-[13px] font-bold uppercase tracking-wider">{verdict.label}</span>
+          {overallAvg != null && (
+            <span className="ml-auto text-[10px] font-mono opacity-80">
+              global ort. {pctText(overallAvg)}
+            </span>
+          )}
+        </div>
+        <p className="text-[12px] leading-relaxed text-[#e0e0e0]">{verdict.action}</p>
+      </div>
+
+      {/* Quick stats strip */}
+      {(asia || eu || us) && (
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded p-2">
+            <div className="text-[9px] text-[#8888a0] uppercase tracking-wider">Asya</div>
+            <div className={`text-[14px] font-bold font-mono ${pctColor(asia?.avg)}`}>
+              {asia ? pctText(asia.avg) : '—'}
+            </div>
+            {asia?.best && (
+              <div className="text-[9px] text-[#555570] truncate" title={asia.best.label}>
+                {asia.best.flag} {asia.best.label}
+              </div>
+            )}
+          </div>
+          <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded p-2">
+            <div className="text-[9px] text-[#8888a0] uppercase tracking-wider">Avrupa</div>
+            <div className={`text-[14px] font-bold font-mono ${pctColor(eu?.avg)}`}>
+              {eu ? pctText(eu.avg) : '—'}
+            </div>
+            {eu?.best && (
+              <div className="text-[9px] text-[#555570] truncate" title={eu.best.label}>
+                {eu.best.flag} {eu.best.label}
+              </div>
+            )}
+          </div>
+          <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded p-2">
+            <div className="text-[9px] text-[#8888a0] uppercase tracking-wider">US Futures</div>
+            <div className={`text-[14px] font-bold font-mono ${pctColor(us?.avg)}`}>
+              {us ? pctText(us.avg) : '—'}
+            </div>
+            {us?.best && (
+              <div className="text-[9px] text-[#555570] truncate" title={us.best.label}>
+                {us.best.flag} {us.best.label}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {renderRegion('Asya', '03:00 – 08:30 TRT kapanış', data.asia, asia)}
+      {renderRegion('Avrupa', '10:00 TRT açılış', data.europe, eu)}
+      {renderRegion('US Futures', '24 saat işlem görür', data.us_futures, us)}
+    </div>
+  );
+}
+
+// ─── Risk Radar — verdict + faktör kartları + aksiyon ───────────────────
+//
+// Risk Radar artık "Bugün dikkat: ..." tek paragrafı yerine:
+// • Üst verdict banner'ı (color → SAKIN / TETIKTE OL / YÜKSEK RISK)
+// • 4 faktör kartı (VIX, BTC netflow, funding, Asya en zayıf) sayısal değerlerle
+// • Aksiyon önerisi: pozisyon büyüklüğü, hedge, stop sıkılaştırma vb.
+// • Sektör baskısı (eski Kantitatif chip yerine — top/bottom sector)
+// • Acil haber sayısı + ilgili semboller
+//
+
+function asiaWorst(overnight?: OvernightMarkets | null): IndexQuote | null {
+  const items = overnight?.asia ?? [];
+  if (!items.length) return null;
+  const sorted = [...items].sort((a, b) => a.change_pct - b.change_pct);
+  return sorted[0]?.change_pct < 0 ? sorted[0] : null;
+}
+
+function FactorCard({
+  label,
+  value,
+  status,
+  tone,
+  hint,
+}: {
+  label: string;
+  value: string;
+  status: string;
+  tone: 'green' | 'yellow' | 'red' | 'gray';
+  hint?: string;
+}) {
+  const toneClass = {
+    green: 'border-[#26a69a]/30 bg-[#26a69a]/5',
+    yellow: 'border-[#fbbf24]/30 bg-[#fbbf24]/5',
+    red: 'border-[#ef5350]/30 bg-[#ef5350]/5',
+    gray: 'border-[#2a2a3e] bg-[#0f0f20]',
+  }[tone];
+  const statusClass = {
+    green: 'text-[#26a69a]',
+    yellow: 'text-[#fbbf24]',
+    red: 'text-[#ef5350]',
+    gray: 'text-[#8888a0]',
+  }[tone];
+  return (
+    <div className={`rounded border p-2.5 ${toneClass}`} title={hint}>
+      <div className="text-[9px] text-[#8888a0] uppercase tracking-wider">{label}</div>
+      <div className="text-[14px] font-bold font-mono text-[#e0e0e0] leading-tight mt-0.5">
+        {value}
+      </div>
+      <div className={`text-[10px] font-semibold mt-0.5 ${statusClass}`}>{status}</div>
+    </div>
+  );
+}
+
+function RiskRadarBody({
+  card,
+  vix,
+  overnight,
+  onchain,
+  sectors,
+}: {
+  card: DailyDigestCard;
+  vix?: { current?: number; status?: string; color?: string; change_pct?: number } | null;
+  overnight?: OvernightMarkets | null;
+  onchain?: OnChainSnapshot | null;
+  sectors?: SectorPerformance[] | null;
+}) {
+  const color = card.color ?? 'yellow';
+
+  // Verdict + action mapping based on card.color (backend already encodes severity)
+  let verdict: { label: string; emoji: string; action: string };
+  if (color === 'red') {
+    verdict = {
+      label: 'YÜKSEK RİSK',
+      emoji: '🔴',
+      action:
+        'Bugün için: Pozisyon büyüklüğünü %30-50 küçült, stop seviyelerini sıkılaştır, kaldıraçlı pozisyonları kapat. Yeni alım için açılış sonrası ilk 1 saati bekle.',
+    };
+  } else if (color === 'yellow') {
+    verdict = {
+      label: 'TETİKTE OL',
+      emoji: '🟡',
+      action:
+        'Bugün için: Mevcut pozisyonları koru ama yeni risk alma. Kâr realizasyonu için kısmi çıkış düşünebilir, stop\'ları breakeven\'a çek.',
+    };
+  } else if (color === 'green') {
+    verdict = {
+      label: 'PİYASA SAKİN',
+      emoji: '🟢',
+      action:
+        'Bugün için: Belirgin makro risk yok. Stratejine göre normal işlem yap, ancak haber akışını gün içinde takip et — sakin günler genelde sürpriz haberlerle bozulur.',
+    };
+  } else {
+    verdict = {
+      label: 'NÖTR',
+      emoji: '⚪',
+      action: 'Risk göstergeleri henüz net sinyal vermiyor. Mevcut planına sadık kal.',
+    };
+  }
+
+  const toneClass = {
+    red: 'border-[#ef5350]/40 bg-[#ef5350]/10',
+    yellow: 'border-[#fbbf24]/40 bg-[#fbbf24]/10',
+    green: 'border-[#26a69a]/40 bg-[#26a69a]/10',
+    blue: 'border-[#4fc3f7]/40 bg-[#4fc3f7]/10',
+  }[color];
+
+  // Factor data ──────────────────────────────────────────────────────────
+  // VIX
+  let vixCard: { value: string; status: string; tone: 'green' | 'yellow' | 'red' | 'gray' } = {
+    value: '—',
+    status: 'Veri yok',
+    tone: 'gray',
+  };
+  if (vix?.current != null) {
+    const v = vix.current;
+    vixCard.value = v.toFixed(1);
+    if (v >= 30) vixCard = { ...vixCard, status: 'YÜKSEK KORKU', tone: 'red' };
+    else if (v >= 20) vixCard = { ...vixCard, status: 'TEDİRGİN', tone: 'yellow' };
+    else vixCard = { ...vixCard, status: 'SAKİN', tone: 'green' };
+  }
+
+  // BTC netflow
+  let netflowCard: { value: string; status: string; tone: 'green' | 'yellow' | 'red' | 'gray' } = {
+    value: '—',
+    status: 'Veri yok',
+    tone: 'gray',
+  };
+  const netflow = onchain?.signals?.exchange_netflow;
+  if (netflow?.value_str) {
+    netflowCard.value = netflow.value_str;
+    const sig = netflow.signal;
+    if (sig === 'BEARISH') netflowCard = { ...netflowCard, status: 'BORSALARA GİRİŞ', tone: 'red' };
+    else if (sig === 'BULLISH')
+      netflowCard = { ...netflowCard, status: 'BİRİKİM (ÇIKIŞ)', tone: 'green' };
+    else netflowCard = { ...netflowCard, status: 'DENGELİ', tone: 'yellow' };
+  }
+
+  // Funding rate
+  let fundingCard: { value: string; status: string; tone: 'green' | 'yellow' | 'red' | 'gray' } = {
+    value: '—',
+    status: 'Veri yok',
+    tone: 'gray',
+  };
+  const funding = onchain?.signals?.funding_rates;
+  if (funding?.value_str) {
+    fundingCard.value = funding.value_str;
+    const sig = funding.signal;
+    if (sig === 'BEARISH')
+      fundingCard = { ...fundingCard, status: 'AŞIRI LONG (SQUEEZE)', tone: 'red' };
+    else if (sig === 'BULLISH')
+      fundingCard = { ...fundingCard, status: 'SHORT BASKIN', tone: 'yellow' };
+    else fundingCard = { ...fundingCard, status: 'DENGELİ', tone: 'green' };
+  }
+
+  // Asya en zayıf
+  const worst = asiaWorst(overnight);
+  let asiaCard: { value: string; status: string; tone: 'green' | 'yellow' | 'red' | 'gray' } = {
+    value: '—',
+    status: 'Veri yok',
+    tone: 'gray',
+  };
+  if (worst) {
+    asiaCard.value = pctText(worst.change_pct);
+    if (worst.change_pct <= -1.5)
+      asiaCard = { ...asiaCard, status: `${worst.label} ÇÖKTÜ`, tone: 'red' };
+    else if (worst.change_pct <= -0.5)
+      asiaCard = { ...asiaCard, status: `${worst.label} ZAYIF`, tone: 'yellow' };
+    else asiaCard = { ...asiaCard, status: `${worst.label} HAFİF`, tone: 'green' };
+  } else if (overnight?.asia?.length) {
+    asiaCard = { value: '✓', status: 'ASYA POZİTİF', tone: 'green' };
+  }
+
+  // Sektör baskısı (eski Kantitatif data)
+  const topSector = sectors && sectors.length > 0 ? sectors[0] : null;
+  const bottomSector =
+    sectors && sectors.length > 1 ? sectors[sectors.length - 1] : null;
+
+  return (
+    <div className="space-y-4">
+      {/* Verdict banner */}
+      <div className={`rounded-lg border p-3 ${toneClass}`}>
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-base">{verdict.emoji}</span>
+          <span className="text-[13px] font-bold uppercase tracking-wider text-[#e0e0e0]">
+            {verdict.label}
+          </span>
+          <span className="ml-auto text-[9px] text-[#8888a0] uppercase tracking-wider">
+            Risk Seviyesi
+          </span>
+        </div>
+        <p className="text-[12px] leading-relaxed text-[#e0e0e0]">{verdict.action}</p>
+      </div>
+
+      {/* Sentez paragrafı (eğer backend gönderiyorsa) */}
+      {card.analysis && (
+        <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded p-3">
+          <div className="text-[9px] text-[#8888a0] uppercase tracking-wider mb-1">
+            Sentez Özeti
+          </div>
+          <p className="text-[12px] text-[#e0e0e0] leading-relaxed">{card.analysis}</p>
+        </div>
+      )}
+
+      {/* 4 Faktör kartı */}
+      <div>
+        <div className="text-[10px] text-[#8888a0] uppercase tracking-wider mb-2">
+          Risk Faktörleri
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <FactorCard
+            label="VIX"
+            value={vixCard.value}
+            status={vixCard.status}
+            tone={vixCard.tone}
+            hint="VIX 20+ tedirgin, 30+ panik. Korku endeksi yükselince hisseler düşer."
+          />
+          <FactorCard
+            label="BTC Netflow"
+            value={netflowCard.value}
+            status={netflowCard.status}
+            tone={netflowCard.tone}
+            hint="Borsalara girişin yüksek olması satış baskısı, çıkışın yüksek olması birikim sinyalidir."
+          />
+          <FactorCard
+            label="Funding"
+            value={fundingCard.value}
+            status={fundingCard.status}
+            tone={fundingCard.tone}
+            hint="Pozitif değer aşırı long demek = squeeze riski. Negatif short baskınlığı."
+          />
+          <FactorCard
+            label="Asya En Zayıf"
+            value={asiaCard.value}
+            status={asiaCard.status}
+            tone={asiaCard.tone}
+            hint="Asya'daki düşüş genelde Avrupa ve US açılışına yansır."
+          />
+        </div>
+      </div>
+
+      {/* Sektör baskısı (US sektörler — eski Kantitatif data) */}
+      {(topSector || bottomSector) && (
+        <div>
+          <div className="text-[10px] text-[#8888a0] uppercase tracking-wider mb-2">
+            Sektör Baskısı (US, dün kapanış)
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {topSector && (
+              <div className="bg-[#0f0f20] border border-[#26a69a]/30 rounded p-2.5">
+                <div className="text-[9px] text-[#26a69a] uppercase tracking-wider">↑ Lider</div>
+                <div className="text-[12px] text-[#e0e0e0] mt-0.5 truncate">{topSector.sector}</div>
+                <div className={`text-[13px] font-mono font-bold ${pctColor(topSector.change_pct)}`}>
+                  {pctText(topSector.change_pct)}
+                </div>
+              </div>
+            )}
+            {bottomSector && bottomSector.sector !== topSector?.sector && (
+              <div className="bg-[#0f0f20] border border-[#ef5350]/30 rounded p-2.5">
+                <div className="text-[9px] text-[#ef5350] uppercase tracking-wider">↓ Baskı</div>
+                <div className="text-[12px] text-[#e0e0e0] mt-0.5 truncate">
+                  {bottomSector.sector}
+                </div>
+                <div
+                  className={`text-[13px] font-mono font-bold ${pctColor(bottomSector.change_pct)}`}
+                >
+                  {pctText(bottomSector.change_pct)}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Symbols */}
+      {card.symbols && card.symbols.length > 0 && (
+        <div>
+          <div className="text-[10px] text-[#8888a0] uppercase tracking-wider mb-2">
+            İlgili Semboller
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {card.symbols.map((s) => (
+              <span
+                key={s}
+                className="inline-block px-2 py-1 bg-[#0f0f20] border border-[#2a2a3e] text-[#ff9800] text-[11px] font-mono rounded"
+              >
+                {s}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="text-[10px] text-[#555570] pt-1">
+        Kaynaklar: VIX (CBOE) · BTC on-chain (CryptoQuant Pro) · Asya endeksleri (FMP) · Sektörler (FMP)
+      </div>
     </div>
   );
 }
@@ -1126,7 +1591,6 @@ function UpcomingReleases() {
 
 const TITLE_MAP: Record<ModalContent['type'], { icon: string; title: string }> = {
   risk:       { icon: '🔴', title: 'Axiom Risk Radar' },
-  quant:      { icon: '🟢', title: 'Axiom Kantitatif Analiz' },
   portfolio:  { icon: '🔵', title: 'Portföy Sinyal' },
   overnight:  { icon: '🌏', title: 'Sen Uyurken — Pazarlar' },
   etf:        { icon: '₿',  title: 'Spot ETF Akışları' },
@@ -1193,10 +1657,13 @@ export function SummaryDetailModal({
         {/* Body */}
         <div className="px-5 py-4 overflow-y-auto flex-1">
           {content.type === 'risk' && (
-            <DigestBody title="Risk" body={content.data.analysis} symbols={content.data.symbols} />
-          )}
-          {content.type === 'quant' && (
-            <DigestBody title="Quant" body={content.data.trigger} symbols={content.data.symbols} />
+            <RiskRadarBody
+              card={content.data}
+              vix={content.vix}
+              overnight={content.overnight}
+              onchain={content.onchain}
+              sectors={content.sectors}
+            />
           )}
           {content.type === 'portfolio' && (
             <DigestBody

@@ -1,13 +1,13 @@
 'use client';
 
 /**
- * Compact Dashboard Summary — 10 mini chip'lik kompakt grid.
- *   • 3 digest chip (Risk Radar / Kantitatif / Portföy Sinyal)
+ * Compact Dashboard Summary — kompakt mini chip grid.
+ *   • 2 digest chip (Risk Radar / Portföy Sinyal)   [Kantitatif kaldırıldı]
  *   • 6 FMP panel chip (Overnight, ETF, Calendar, Movers, Earnings, Sectors)
  *   • 1 Korku Barometresi (VIX + Crypto F&G)
+ *   • 1 Makro Pulse + 1 BTC On-Chain
  *
  * Kart tıklanınca tam içeriği gösteren modal açılır.
- * Toplam yükseklik ~140px (lg: 2 row × 5 col).
  */
 
 import React, { useState } from 'react';
@@ -17,7 +17,6 @@ import { useMacroLatest } from '@/hooks/useMacroLatest';
 import type { OnChainSnapshot } from '@/lib/cryptoquant';
 import {
   DigestRiskChip,
-  DigestQuantChip,
   DigestPortfolioChip,
   MiniOvernightChip,
   MiniEtfChip,
@@ -90,15 +89,16 @@ export function DashboardSummary() {
           card={digest?.risk_radar}
           loading={digestLoading && !digest}
           onClick={
-            digest?.risk_radar ? () => open({ type: 'risk', data: digest.risk_radar }) : undefined
-          }
-        />
-        <DigestQuantChip
-          card={digest?.quant_analysis}
-          loading={digestLoading && !digest}
-          onClick={
-            digest?.quant_analysis
-              ? () => open({ type: 'quant', data: digest.quant_analysis })
+            digest?.risk_radar
+              ? () =>
+                  open({
+                    type: 'risk',
+                    data: digest.risk_radar,
+                    vix: digest.vix ?? null,
+                    overnight: data?.overnight_markets ?? null,
+                    onchain: onchainData ?? null,
+                    sectors: data?.sector_performance ?? null,
+                  })
               : undefined
           }
         />

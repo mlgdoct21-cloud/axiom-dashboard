@@ -9,12 +9,11 @@ import { apiClient } from '@/lib/api';
 import NewsTab from '@/components/tabs/NewsTab';
 import FundamentalTab from '@/components/tabs/FundamentalTab';
 import TechnicalTab from '@/components/tabs/TechnicalTab';
-import CalculatorTab from '@/components/tabs/CalculatorTab';
 import PricingTab from '@/components/tabs/PricingTab';
 import CryptoIntelligencePage from '@/components/crypto/CryptoIntelligencePage';
 import LanguageSelector from '@/components/LanguageSelector';
 
-type TabType = 'news' | 'fundamental' | 'technical' | 'calculator' | 'pricing' | 'crypto';
+type TabType = 'news' | 'crypto' | 'fundamental' | 'technical' | 'pricing';
 
 export default function Home() {
   const t = useTranslations();
@@ -29,11 +28,10 @@ export default function Home() {
 
   const tabs: { id: TabType; label: string }[] = [
     { id: 'news', label: t('tabs.news') },
+    { id: 'crypto', label: '🔬 Crypto Intel' },
     { id: 'fundamental', label: t('tabs.fundamental') },
     { id: 'technical', label: t('tabs.technical') },
-    { id: 'calculator', label: t('tabs.calculator') },
     { id: 'pricing', label: t('tabs.pricing') },
-    { id: 'crypto', label: '🔬 Crypto Intel' },
   ];
 
   return (
@@ -87,11 +85,6 @@ export default function Home() {
         {activeTab === 'technical' && (
           <div className="h-full overflow-auto p-4">
             <TechnicalTab locale={locale} />
-          </div>
-        )}
-        {activeTab === 'calculator' && (
-          <div className="h-full overflow-auto p-4">
-            <CalculatorTab locale={locale} />
           </div>
         )}
         {activeTab === 'pricing' && (

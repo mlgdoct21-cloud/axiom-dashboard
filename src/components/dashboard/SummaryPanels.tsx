@@ -2,7 +2,8 @@
 
 /**
  * Compact mini-chip components for the dashboard summary.
- * 9 chip toplam: 3 digest + 6 FMP panel. Tek bir kompakt grid'de render edilir.
+ * Digest chip'leri (Risk Radar / Portföy Sinyal) + 6 FMP panel chip + makro/onchain.
+ * Kantitatif chip kaldırıldı (Day 28 part 5 — sektör verisi zaten ayrı chip'te).
  */
 
 import React from 'react';
@@ -150,23 +151,9 @@ export function DigestRiskChip({ card, loading, onClick }: { card?: DailyDigestC
   );
 }
 
-export function DigestQuantChip({ card, loading, onClick }: { card?: DailyDigestCard; loading?: boolean; onClick?: () => void }) {
-  const empty = !loading && (!card || (!card.trigger && !card.symbols?.length));
-  const symbols = card?.symbols?.slice(0, 3).join(' · ');
-  return (
-    <Chip
-      icon="🟢"
-      title="Kantitatif"
-      primary={card?.trigger}
-      secondary={symbols}
-      accent={colorAccent(card?.color)}
-      loading={loading}
-      empty={empty}
-      tooltip={card?.trigger}
-      onClick={onClick}
-    />
-  );
-}
+// DigestQuantChip removed (Day 28 part 5) — sektör verisi zaten MiniSectorChip'te,
+// earnings sayısı MiniEarningsChip'te. Kullanıcı geri-bildirimi: çıktı jenerik
+// ve aksiyon önermiyordu, sektör baskısı Risk Radar modal'ına entegre edildi.
 
 export function DigestPortfolioChip({ card, loading, onClick }: { card?: DailyDigestCard; loading?: boolean; onClick?: () => void }) {
   const empty = !loading && (!card || (!card.recommendation && !card.symbols?.length));

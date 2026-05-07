@@ -13,8 +13,11 @@ export interface DailyDigestCard {
 
 export interface DailyDigestData {
   risk_radar: DailyDigestCard;
-  quant_analysis: DailyDigestCard;
+  /** @deprecated Removed in favour of richer Risk Radar modal — kept optional for backward compat. */
+  quant_analysis?: DailyDigestCard;
   portfolio_signal: DailyDigestCard;
+  /** Bonus fields the backend may populate for richer Risk Radar modal. */
+  vix?: { current?: number; status?: string; color?: string; change_pct?: number } | null;
   last_updated: string;
   status?: 'ok' | 'degraded';
 }

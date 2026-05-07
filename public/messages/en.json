@@ -9,7 +9,6 @@
     "news": "News",
     "fundamental": "Fundamental",
     "technical": "Technical",
-    "calculator": "Calculator",
     "pricing": "Pricing"
   },
   "news": {
@@ -130,47 +129,52 @@
   },
   "pricing": {
     "title": "Pricing Plans",
-    "description": "Plans for every level of investor",
+    "description": "Transparent membership tiers built around investor discipline",
     "tier1": {
-      "name": "Starter",
-      "price": "Free",
-      "desc": "Start with real signals",
+      "name": "Free",
+      "price": "$0",
+      "period": "",
+      "desc": "Core tools to explore the markets",
       "features": [
-        "Unlimited signals",
-        "Fundamental Analysis (10 symbols)",
-        "Technical Analysis (5 indicators)",
-        "News summary (Daily)",
-        "Basic calculator"
+        "Daily macro briefing (5 min delayed)",
+        "Fundamental Analysis — 10 symbols/day",
+        "Technical Analysis — 5 indicators",
+        "News feed (daily summary)",
+        "Crypto Intel — 2 queries / 24 h",
+        "Community sentiment voting"
       ]
     },
     "tier2": {
-      "name": "Pro",
-      "price": "$9.99",
+      "name": "Premium",
+      "price": "$1.99",
       "period": "/month",
-      "desc": "For serious traders",
+      "desc": "Full access for active investors",
       "features": [
-        "Everything in Starter +",
-        "Fundamental Analysis (Unlimited)",
-        "Technical Analysis (9 indicators)",
-        "News summary (Real-time)",
-        "Advanced calculator",
-        "AI chart analysis",
-        "Portfolio tracking"
+        "Everything in Free +",
+        "Fundamental & Technical — unlimited symbols",
+        "9 indicators + AI chart commentary",
+        "Real-time news & macro briefing",
+        "Crypto Intel — 30 queries/day",
+        "Whitepaper AI analysis",
+        "Telegram bot instant alerts"
       ],
       "badge": "Most Popular"
     },
     "tier3": {
-      "name": "Enterprise",
-      "price": "Custom",
-      "desc": "For trading firms",
+      "name": "Advance",
+      "price": "$4.99",
+      "period": "/month",
+      "desc": "Real-time tier for professional traders",
       "features": [
-        "Everything in Pro +",
-        "API access",
-        "Custom integrations",
-        "Real-time data",
-        "Dedicated support",
-        "White-label option"
-      ]
+        "Everything in Premium +",
+        "Unlimited Crypto Intel & whitepaper queries",
+        "Real-time on-chain alerts",
+        "Custom thresholds & alarms",
+        "30-min data refresh cadence",
+        "Morning briefing 1 hour earlier",
+        "Trader-grade data & priority support"
+      ],
+      "badge": "Power"
     }
   },
   "footer": {

@@ -9,7 +9,6 @@
     "news": "Haberler",
     "fundamental": "Temel Analiz",
     "technical": "Teknik Analiz",
-    "calculator": "Hesapmakinesi",
     "pricing": "Fiyatlandırma"
   },
   "news": {
@@ -130,47 +129,52 @@
   },
   "pricing": {
     "title": "Fiyatlandırma Planları",
-    "description": "Tüm seviyelerdeki yatırımcılar için plan",
+    "description": "Yatırımcı disiplinine uygun, şeffaf üyelik kademeleri",
     "tier1": {
-      "name": "Başlangıç",
-      "price": "Ücretsiz",
-      "desc": "Gerçek sinyallerle başla",
+      "name": "Ücretsiz",
+      "price": "₺0",
+      "period": "",
+      "desc": "Piyasayı keşfetmek için temel araçlar",
       "features": [
-        "Sınırsız sinyaller",
-        "Temel Analiz (10 sembol)",
-        "Teknik Analiz (5 indikator)",
-        "Haber özeti (Günlük)",
-        "Temel hesapmakinesi"
+        "Günlük makro brifing (5 dk gecikmeli)",
+        "Temel Analiz — 10 sembol/gün",
+        "Teknik Analiz — 5 indikatör",
+        "Haber akışı (günlük özet)",
+        "Crypto Intel — 2 sorgu / 24 sa",
+        "Topluluk sentiment oylaması"
       ]
     },
     "tier2": {
-      "name": "Pro",
-      "price": "₺499",
-      "period": "/ay",
-      "desc": "Ciddi işlemciler için",
+      "name": "Premium",
+      "price": "$1.99",
+      "period": "/ay (≈90₺)",
+      "desc": "Aktif yatırımcılar için tam erişim",
       "features": [
-        "Başlangıçtaki her şey +",
-        "Temel Analiz (Sınırsız sembol)",
-        "Teknik Analiz (9 indikator)",
-        "Haber özeti (Gerçek zamanlı)",
-        "Gelişmiş hesapmakinesi",
-        "AI grafik analizi",
-        "Portföy takibi"
+        "Ücretsiz plandaki her şey +",
+        "Temel & Teknik Analiz — sınırsız sembol",
+        "9 teknik indikatör + AI grafik yorumu",
+        "Anlık haber özeti & makro brifing",
+        "Crypto Intel — 30 sorgu/gün",
+        "Whitepaper AI analizi",
+        "Telegram bot anlık bildirim"
       ],
       "badge": "En Popüler"
     },
     "tier3": {
-      "name": "Enterprise",
-      "price": "Özel",
-      "desc": "İşlem firmaları için",
+      "name": "Advance",
+      "price": "$4.99",
+      "period": "/ay (≈225₺)",
+      "desc": "Profesyonel trader'lar için gerçek zamanlı katman",
       "features": [
-        "Pro'daki her şey +",
-        "API erişimi",
-        "Özel entegrasyonlar",
-        "Gerçek zamanlı veriler",
-        "Özel destek",
-        "Beyaz etiket seçeneği"
-      ]
+        "Premium'daki her şey +",
+        "Sınırsız Crypto Intel & whitepaper sorgusu",
+        "Gerçek zamanlı zincir-üstü uyarılar",
+        "Eşik & alarm özelleştirmesi",
+        "30 dk yenilemeli veri yenileme",
+        "Sabah brifingi 1 saat erken",
+        "Trader-grade veri ve önceliklendirilmiş destek"
+      ],
+      "badge": "Power"
     }
   },
   "footer": {
