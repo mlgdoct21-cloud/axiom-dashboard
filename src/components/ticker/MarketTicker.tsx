@@ -65,11 +65,13 @@ export default function MarketTicker({ locale }: { locale: 'en' | 'tr' }) {
           animation-play-state: paused;
         }
       `}</style>
-      <div className="ticker-scroll flex gap-8 px-4 whitespace-nowrap">
-        {/* Render edilen içerik 2 KEZ sıralı: animasyon -50%'e gittiğinde
-            ikinci kopya birinci kopyanın yerine geçer → seamless. */}
+      {/* Parent flex'te gap YOK — kopyalar bitişik olmalı ki translateX(-50%)
+          tam olarak bir kopya genişliği olsun. Kopya içi gap her child'da
+          tutulur; kopya sonuna pr-8 ile ekleyerek bir sonraki kopyanın
+          ilk öğesi ile araya görsel boşluk konur. */}
+      <div className="ticker-scroll flex whitespace-nowrap pl-4">
         {[0, 1].map(copy => (
-          <div key={copy} className="flex gap-8 shrink-0">
+          <div key={copy} className="flex gap-8 pr-8 shrink-0">
             {cryptos.map(t => (
               <TickerItemComponent key={`${copy}-${t.symbol}`} item={t} />
             ))}
@@ -81,7 +83,6 @@ export default function MarketTicker({ locale }: { locale: 'en' | 'tr' }) {
             {mag7.map(t => (
               <TickerItemComponent key={`${copy}-mag7-${t.symbol}`} item={t} />
             ))}
-            {copy === 0 && <div className="w-px bg-[#2a2a3e]" />}
           </div>
         ))}
       </div>
