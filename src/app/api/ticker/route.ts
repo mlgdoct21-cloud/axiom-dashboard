@@ -52,10 +52,11 @@ const CG_ID_TO_SYMBOL: Record<string, string> = {
 
 const MAG7 = ['NVDA', 'TSLA', 'GOOGL', 'MSFT', 'AAPL', 'AMZN', 'META'];
 
-// US + Asya + UK indeksleri — FMP Premium /stable/quote açıyor
-const INDICES_FMP = ['^GSPC', '^IXIC', '^HSI', '^N225', '^FTSE'];
-// Avrupa + TR indeksleri — FMP "Special Endpoint" (Ultimate gerek), Yahoo chart fallback
-const INDICES_YAHOO = ['^GDAXI', '^FCHI', 'XU100.IS'];
+// 8 dünya endexi — sıralama: US → UK → Asya → Avrupa → TR.
+// NOT (2026-05-07): per-symbol /stable/quote ^GDAXI/^FCHI/XU100.IS için "Special
+// Endpoint" verirken /stable/batch-quote bulk endpoint hepsini açıyor — bu yüzden
+// tek call ile çekiyoruz (tek HTTP, daha az latency).
+const INDICES = ['^GSPC', '^IXIC', '^FTSE', '^HSI', '^N225', '^GDAXI', '^FCHI', 'XU100.IS'];
 
 const INDEX_DISPLAY_NAME: Record<string, string> = {
   '^GSPC': 'S&P 500',
@@ -138,65 +139,51 @@ async function fetchStocksTicker(symbols: string[]): Promise<TickerItem[]> {
   return fallback.filter(Boolean) as any[];
 }
 
-// Yahoo Finance chart endpoint — FMP'nin kapattığı sembol grubu için
-// (^GDAXI / ^FCHI / XU100.IS Premium plan'da Special Endpoint cevabı veriyor).
-// chart endpoint TradingView ve diğer public araçların kullandığı, Vercel'den
-// erişilebiliyor (lokal probe doğrulandı 2026-05-07).
-async function fetchYahooChartTicker(symbols: string[]): Promise<TickerItem[]> {
+// FMP /stable/batch-quote — ^GDAXI/^FCHI/XU100.IS gibi Premium-restricted
+// sembolleri açıyor (per-symbol /stable/quote bunlara "Special Endpoint" diyor
+// ama bulk endpoint serbest, 2026-05-07'de doğrulandı).
+async function fetchIndicesBulk(symbols: string[]): Promise<TickerItem[]> {
   if (symbols.length === 0) return [];
-  const ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36';
-  const results = await Promise.all(
-    symbols.map(async sym => {
-      try {
-        const res = await fetch(
-          `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=2d`,
-          { cache: 'no-store', headers: { 'User-Agent': ua }, signal: AbortSignal.timeout(6000) }
-        );
-        if (!res.ok) return null;
-        const json: any = await res.json();
-        const meta = json?.chart?.result?.[0]?.meta;
-        if (!meta) return null;
-        const price = meta.regularMarketPrice ?? meta.previousClose;
-        const prev = meta.chartPreviousClose ?? meta.previousClose;
-        if (!price || !prev || prev === 0) return null;
-        const changePercent = ((price - prev) / prev) * 100;
-        return {
-          symbol: sym,
-          price,
-          changePercent,
-          name: sym,
-          type: 'index' as const,
-        } satisfies TickerItem;
-      } catch {
-        return null;
-      }
-    })
-  );
-  return results.filter(Boolean) as TickerItem[];
+  const fmpKey = process.env.FMP_API_KEY;
+  if (!fmpKey) return [];
+  try {
+    const url = `https://financialmodelingprep.com/stable/batch-quote?symbols=${encodeURIComponent(symbols.join(','))}&apikey=${fmpKey}`;
+    const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(6000) });
+    if (!res.ok) return [];
+    const data: Array<{ symbol: string; price: number; changePercentage: number }> = await res.json();
+    if (!Array.isArray(data)) return [];
+    return data
+      .filter(it => it && it.price > 0)
+      .map(it => ({
+        symbol: it.symbol,
+        price: it.price,
+        changePercent: it.changePercentage ?? 0,
+        name: it.symbol,
+        type: 'index' as const,
+      }));
+  } catch {
+    return [];
+  }
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const [cryptos, stocks, indicesFmp, indicesYahoo] = await Promise.all([
+    const [cryptos, stocks, indices] = await Promise.all([
       fetchCoinGeckoTicker(),
       fetchStocksTicker(MAG7).then(items =>
         items.map(item => ({ ...item, type: 'stock' as const }))
       ),
-      fetchStocksTicker(INDICES_FMP).then(items =>
-        items.map(item => ({ ...item, type: 'index' as const }))
-      ),
-      fetchYahooChartTicker(INDICES_YAHOO),
+      fetchIndicesBulk(INDICES),
     ]);
 
-    // Indeksleri tutarlı sırayla birleştir: US → UK → Asya → Avrupa → TR
-    const indexOrder = ['^GSPC', '^IXIC', '^FTSE', '^HSI', '^N225', '^GDAXI', '^FCHI', 'XU100.IS'];
-    const allIndices = [...indicesFmp, ...indicesYahoo].sort(
-      (a, b) => indexOrder.indexOf(a.symbol) - indexOrder.indexOf(b.symbol),
+    // Tutarlı sırayla göster: US → UK → Asya → Avrupa → TR
+    const orderedIndices = [...indices].sort(
+      (a, b) => INDICES.indexOf(a.symbol) - INDICES.indexOf(b.symbol),
     );
 
     const tickers = [
       ...cryptos,
-      ...allIndices.map(i => ({
+      ...orderedIndices.map(i => ({
         ...i,
         name: INDEX_DISPLAY_NAME[i.symbol] ?? i.symbol,
       })),
