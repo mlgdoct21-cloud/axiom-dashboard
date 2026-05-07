@@ -50,49 +50,39 @@ export default function MarketTicker({ locale }: { locale: 'en' | 'tr' }) {
   return (
     <div className="bg-[#0f0f20] border-b border-[#2a2a3e] overflow-hidden py-2">
       <style>{`
+        /* İçerik iki kez render olduğu için 0 → -50% tam bir kopya genişliğine
+           denk gelir; loop sonunda ikinci kopya birinci kopyanın başlangıç
+           pozisyonuna oturduğundan jump/duraksama olmadan dönüyor. */
         @keyframes scroll {
-          0% { transform: translateX(100%); }
-          100% { transform: translateX(-100%); }
+          0%   { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
         }
         .ticker-scroll {
-          animation: scroll 60s linear infinite;
+          animation: scroll 90s linear infinite;
+          will-change: transform;
         }
         .ticker-scroll:hover {
           animation-play-state: paused;
         }
       `}</style>
       <div className="ticker-scroll flex gap-8 px-4 whitespace-nowrap">
-        {/* First set */}
-        {/* Cryptos */}
-        {cryptos.map(t => (
-          <TickerItemComponent key={`1-${t.symbol}`} item={t} />
-        ))}
-        <div className="w-px bg-[#2a2a3e]" />
-        {/* Indices */}
-        {indices.map(t => (
-          <TickerItemComponent key={`1-idx-${t.symbol}`} item={t} />
-        ))}
-        <div className="w-px bg-[#2a2a3e]" />
-        {/* Mag7 */}
-        {mag7.map(t => (
-          <TickerItemComponent key={`1-mag7-${t.symbol}`} item={t} />
-        ))}
-
-        {/* Duplicate for seamless loop */}
-        <div className="w-px bg-[#2a2a3e]" />
-        {/* Cryptos (repeat) */}
-        {cryptos.map(t => (
-          <TickerItemComponent key={`2-${t.symbol}`} item={t} />
-        ))}
-        <div className="w-px bg-[#2a2a3e]" />
-        {/* Indices (repeat) */}
-        {indices.map(t => (
-          <TickerItemComponent key={`2-idx-${t.symbol}`} item={t} />
-        ))}
-        <div className="w-px bg-[#2a2a3e]" />
-        {/* Mag7 (repeat) */}
-        {mag7.map(t => (
-          <TickerItemComponent key={`2-mag7-${t.symbol}`} item={t} />
+        {/* Render edilen içerik 2 KEZ sıralı: animasyon -50%'e gittiğinde
+            ikinci kopya birinci kopyanın yerine geçer → seamless. */}
+        {[0, 1].map(copy => (
+          <div key={copy} className="flex gap-8 shrink-0">
+            {cryptos.map(t => (
+              <TickerItemComponent key={`${copy}-${t.symbol}`} item={t} />
+            ))}
+            <div className="w-px bg-[#2a2a3e]" />
+            {indices.map(t => (
+              <TickerItemComponent key={`${copy}-idx-${t.symbol}`} item={t} />
+            ))}
+            <div className="w-px bg-[#2a2a3e]" />
+            {mag7.map(t => (
+              <TickerItemComponent key={`${copy}-mag7-${t.symbol}`} item={t} />
+            ))}
+            {copy === 0 && <div className="w-px bg-[#2a2a3e]" />}
+          </div>
         ))}
       </div>
     </div>

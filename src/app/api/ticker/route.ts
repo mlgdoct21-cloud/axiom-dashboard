@@ -51,7 +51,22 @@ const CG_ID_TO_SYMBOL: Record<string, string> = {
 };
 
 const MAG7 = ['NVDA', 'TSLA', 'GOOGL', 'MSFT', 'AAPL', 'AMZN', 'META'];
-const INDICES = ['^GSPC', '^IXIC'];
+
+// US + Asya + UK indeksleri — FMP Premium /stable/quote açıyor
+const INDICES_FMP = ['^GSPC', '^IXIC', '^HSI', '^N225', '^FTSE'];
+// Avrupa + TR indeksleri — FMP "Special Endpoint" (Ultimate gerek), Yahoo chart fallback
+const INDICES_YAHOO = ['^GDAXI', '^FCHI', 'XU100.IS'];
+
+const INDEX_DISPLAY_NAME: Record<string, string> = {
+  '^GSPC': 'S&P 500',
+  '^IXIC': 'NASDAQ',
+  '^HSI': 'Hang Seng',
+  '^N225': 'Nikkei 225',
+  '^FTSE': 'FTSE 100',
+  '^GDAXI': 'DAX',
+  '^FCHI': 'CAC 40',
+  'XU100.IS': 'BIST 100',
+};
 
 async function fetchCoinGeckoTicker(): Promise<TickerItem[]> {
   try {
@@ -123,23 +138,67 @@ async function fetchStocksTicker(symbols: string[]): Promise<TickerItem[]> {
   return fallback.filter(Boolean) as any[];
 }
 
+// Yahoo Finance chart endpoint — FMP'nin kapattığı sembol grubu için
+// (^GDAXI / ^FCHI / XU100.IS Premium plan'da Special Endpoint cevabı veriyor).
+// chart endpoint TradingView ve diğer public araçların kullandığı, Vercel'den
+// erişilebiliyor (lokal probe doğrulandı 2026-05-07).
+async function fetchYahooChartTicker(symbols: string[]): Promise<TickerItem[]> {
+  if (symbols.length === 0) return [];
+  const ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36';
+  const results = await Promise.all(
+    symbols.map(async sym => {
+      try {
+        const res = await fetch(
+          `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=2d`,
+          { cache: 'no-store', headers: { 'User-Agent': ua }, signal: AbortSignal.timeout(6000) }
+        );
+        if (!res.ok) return null;
+        const json: any = await res.json();
+        const meta = json?.chart?.result?.[0]?.meta;
+        if (!meta) return null;
+        const price = meta.regularMarketPrice ?? meta.previousClose;
+        const prev = meta.chartPreviousClose ?? meta.previousClose;
+        if (!price || !prev || prev === 0) return null;
+        const changePercent = ((price - prev) / prev) * 100;
+        return {
+          symbol: sym,
+          price,
+          changePercent,
+          name: sym,
+          type: 'index' as const,
+        } satisfies TickerItem;
+      } catch {
+        return null;
+      }
+    })
+  );
+  return results.filter(Boolean) as TickerItem[];
+}
+
 export async function GET(request: NextRequest) {
   try {
-    const [cryptos, stocks, indices] = await Promise.all([
+    const [cryptos, stocks, indicesFmp, indicesYahoo] = await Promise.all([
       fetchCoinGeckoTicker(),
       fetchStocksTicker(MAG7).then(items =>
         items.map(item => ({ ...item, type: 'stock' as const }))
       ),
-      fetchStocksTicker(INDICES).then(items =>
+      fetchStocksTicker(INDICES_FMP).then(items =>
         items.map(item => ({ ...item, type: 'index' as const }))
       ),
+      fetchYahooChartTicker(INDICES_YAHOO),
     ]);
+
+    // Indeksleri tutarlı sırayla birleştir: US → UK → Asya → Avrupa → TR
+    const indexOrder = ['^GSPC', '^IXIC', '^FTSE', '^HSI', '^N225', '^GDAXI', '^FCHI', 'XU100.IS'];
+    const allIndices = [...indicesFmp, ...indicesYahoo].sort(
+      (a, b) => indexOrder.indexOf(a.symbol) - indexOrder.indexOf(b.symbol),
+    );
 
     const tickers = [
       ...cryptos,
-      ...indices.map(i => ({
+      ...allIndices.map(i => ({
         ...i,
-        name: i.symbol === '^GSPC' ? 'S&P 500' : 'NASDAQ',
+        name: INDEX_DISPLAY_NAME[i.symbol] ?? i.symbol,
       })),
       ...stocks,
     ];
