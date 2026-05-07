@@ -58,7 +58,9 @@ export default function MarketTicker({ locale }: { locale: 'en' | 'tr' }) {
           100% { transform: translateX(-50%); }
         }
         .ticker-scroll {
-          animation: scroll 90s linear infinite;
+          /* 90s çok yavaştı (~10px/s); 45s ile yaklaşık 2× hız ve hâlâ
+             rahat okunabilir. */
+          animation: scroll 45s linear infinite;
           will-change: transform;
         }
         .ticker-scroll:hover {
