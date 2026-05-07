@@ -39,8 +39,9 @@ export async function GET(request: NextRequest) {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        // 5 dk cache (backend zaten cache veriyor, edge'de de tutalım)
-        'Cache-Control': 'public, max-age=300, stale-while-revalidate=600',
+        // Day 28 part 5: 5 dk cache → 30 sn — backend zaten dakikada bir refresh
+        // ediyor, browser/CDN'de uzun cache eski VIX/Europe verilerini sıkıştırıyordu.
+        'Cache-Control': 'public, max-age=30, stale-while-revalidate=120',
       },
     });
   } catch (error) {

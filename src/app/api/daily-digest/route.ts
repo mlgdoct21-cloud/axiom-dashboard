@@ -38,7 +38,8 @@ export async function GET(_request: NextRequest) {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Cache-Control': 'public, max-age=300',
+        // Day 28 part 5: 5 dk → 30 sn (browser cache eski VIX null'unu tutuyordu)
+        'Cache-Control': 'public, max-age=30, stale-while-revalidate=120',
       },
     });
   } catch (error) {
