@@ -98,17 +98,37 @@ export function ExchangePulsePanel({ data }: { data: OnChainSnapshot }) {
         <MetricRow metricKey="whale_ratio" sig={wr} />
         <MetricRow metricKey="stablecoin_inflow" sig={stb} />
       </div>
-      {nf && (
+      {(nf || wr || stb) && (
         <div className="mt-3 text-[11px] text-[#888] italic leading-snug border-t border-[#1a1a2e] pt-3">
-          {nf.signal === 'BULLISH'
-            ? 'Coin\'ler borsalardan cüzdanlara çekiliyor — orta vadeli olumlu.'
-            : nf.signal === 'BEARISH'
-              ? 'Borsalara coin geliyor — satış baskısı oluşabilir.'
-              : 'Akış dengeli, sinyal yok.'}
+          {pulseNarrative(nf, wr, stb)}
         </div>
       )}
     </PanelShell>
   );
+}
+
+// SSoT-driven narrative: 3 sinyalin signal alanını birleştirip dengeli özet üret.
+// Eski sürüm sadece netflow'a bakıyordu, stablecoin BULLISH olsa bile
+// "akış dengeli, sinyal yok" yazıyordu (Day 28 #9 fix).
+function pulseNarrative(
+  nf?: SignalEntry,
+  wr?: SignalEntry,
+  stb?: SignalEntry,
+): string {
+  const sigs = [nf, wr, stb].filter((s): s is SignalEntry => !!s);
+  if (sigs.length === 0) return '';
+  const bull = sigs.filter((s) => s.signal === 'BULLISH').map((s) => s.label_tr ?? '');
+  const bear = sigs.filter((s) => s.signal === 'BEARISH').map((s) => s.label_tr ?? '');
+  if (bull.length && bear.length) {
+    return `Karışık tablo — güç: ${bull[0]}; baskı: ${bear[0]}.`;
+  }
+  if (bull.length) {
+    return `Alıcılı denge: ${bull.join(' · ')}.`;
+  }
+  if (bear.length) {
+    return `Satıcılı baskı: ${bear.join(' · ')}.`;
+  }
+  return 'Akış dengeli, üç gösterge de nötr bölgede.';
 }
 
 // ── B. Balina Radarı (Whale Intelligence) ────────────────────────────────────

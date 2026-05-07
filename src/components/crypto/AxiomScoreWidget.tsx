@@ -205,8 +205,8 @@ export default function AxiomScoreWidget({ data, premium = true }: {
               ⓘ
             </button>
           </div>
-          <div className="text-[11px] text-[#888]">
-            {allBreakdown.length} sinyalin ağırlıklı toplamı, 0-100 ölçeğinde
+          <div className="text-[11px] text-[#888]" title="Skora katkı veren sinyaller (NEUTRAL/passive sinyaller skora dahil edilmez)">
+            Tüm aktif sinyallerin ağırlıklı toplamı ({allBreakdown.length} katkı), 0-100 ölçeğinde
           </div>
         </div>
         <div className="px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap"
