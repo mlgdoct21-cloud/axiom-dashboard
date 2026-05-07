@@ -43,8 +43,11 @@ interface NewsTabProps {
   locale: 'en' | 'tr';
 }
 
-// SSE bağlantısı canlı tutulamazsa (WAF/timeout) 2 dakikada bir yenile (fallback).
-const REFRESH_INTERVAL = 2 * 60 * 1000;
+// SSE bağlantısı canlı tutulamazsa (WAF/timeout) fallback polling.
+// Day 28 #10: 2dk → 30sn. Yayın akışı sırasında SSE down olursa kullanıcı
+// 2 dk haber bekleyemez. 30sn fallback breaking news'i max ~45s gecikmeyle
+// gösterir (15s crawler + 30s analyze + 30s fallback poll).
+const REFRESH_INTERVAL = 30 * 1000;
 
 // Ilk acilista kullanicinin takip listesi boşsa doldurulacak varsayılanlar:
 //   5 popüler kripto + Magnificent 7 ABD hisseleri.

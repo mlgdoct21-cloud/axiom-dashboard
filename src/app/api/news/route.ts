@@ -102,8 +102,11 @@ export async function GET(request: NextRequest) {
       ? allNews.filter((n: any) => n.category === categoryFilter).slice(0, requestedLimit)
       : allNews.slice(0, requestedLimit);
 
+    // Day 28 #10: 20s → 5s. SSE birincil kanal, /api/news fallback;
+    // fallback bile breaking news'i 20s gizliyor — yayın akışında kabul
+    // edilemez. 5s edge cache + stale-while-revalidate=15s.
     const cacheHeader = filtered.length > 0
-      ? 's-maxage=20, stale-while-revalidate=40'
+      ? 's-maxage=5, stale-while-revalidate=15'
       : 'no-store, no-cache, must-revalidate';
 
     return NextResponse.json(
