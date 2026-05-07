@@ -58,9 +58,8 @@ export default function MarketTicker({ locale }: { locale: 'en' | 'tr' }) {
           100% { transform: translateX(-50%); }
         }
         .ticker-scroll {
-          /* 90s → 45s → 30s; 30s'de yaklaşık 30px/s, kullanıcı tempoyu
-             beğendi (Bloomberg/CNBC ticker hızına yakın). */
-          animation: scroll 30s linear infinite;
+          /* 90s → 45s → 30s → 15s; ~60px/s, hızlı tempo. */
+          animation: scroll 15s linear infinite;
           will-change: transform;
         }
         .ticker-scroll:hover {
