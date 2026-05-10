@@ -20,6 +20,7 @@ import type { DailyDigestCard } from '@/hooks/useDailyDigest';
 import type { MacroRelease } from '@/hooks/useMacroLatest';
 import { useMacroUpcoming } from '@/hooks/useMacroLatest';
 import { sectorLabelTr } from '@/lib/macro-sector-labels';
+import MacroStoryCard from '@/components/macro/MacroStoryCard';
 import type { OnChainSnapshot } from '@/lib/cryptoquant';
 
 // ─── Modal kind union ────────────────────────────────────────────────────
@@ -1425,7 +1426,12 @@ function MacroBody({ data, core }: { data: MacroRelease; core: MacroRelease | nu
         />
       )}
 
-      {data.narrative_md ? (
+      {/* Storyteller card — CPI ve NFP için tier'lı 4-7 paragraf hikaye +
+          inline [SRC] kaynak chip'leri + Premium/Advance upgrade CTA. Diğer
+          event_type'lar için aşağıdaki narrative_md fallback'i kalır. */}
+      {['CPI', 'NFP'].includes((data.event_type || '').toUpperCase()) ? (
+        <MacroStoryCard eventId={data.event_id} />
+      ) : data.narrative_md ? (
         <p className="text-sm text-[#e0e0e0] leading-relaxed whitespace-pre-line">
           {data.narrative_md}
         </p>
