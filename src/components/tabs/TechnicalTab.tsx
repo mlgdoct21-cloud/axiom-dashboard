@@ -50,6 +50,139 @@ const SUPPORTED_INDICATORS = new Set([
   'rsi', 'sma', 'ema', 'macd', 'bollinger', 'stochastic', 'atr', 'volume', 'fibonacci', 'sr'
 ]);
 
+interface IndicatorInfo {
+  name: string;
+  whatIs: string;
+  howRead: string;
+  caution: string;
+}
+
+const INDICATOR_INFO_TR: Record<string, IndicatorInfo> = {
+  rsi: {
+    name: 'RSI — Göreceli Güç Endeksi',
+    whatIs: 'Son 14 günlük kazanç ve kayıpların oranını 0-100 arası ölçer. Momentum göstergesidir.',
+    howRead: 'RSI > 70: aşırı alım, geri çekilme riski. RSI < 30: aşırı satım, tepki alımı potansiyeli. 50 etrafında: nötr trend.',
+    caution: 'Güçlü trendde RSI uzun süre 70 üstünde veya 30 altında kalabilir. Tek başına dönüş sinyali değildir.',
+  },
+  macd: {
+    name: 'MACD — Hareketli Ortalama Yakınsama/Iraksaması',
+    whatIs: '12 ve 26 günlük üstel ortalamaların farkı. Trend yönü ve momentum değişimi gösterir.',
+    howRead: 'MACD sinyal çizgisini yukarı keserse alım, aşağı keserse satım sinyali. Histogram pozitife geçti = boğa momentum, negatif = ayı.',
+    caution: 'Yatay/sıkışık piyasada sık yanlış sinyal üretir. Trend olmayan ortamda güvenilmez.',
+  },
+  bollinger: {
+    name: 'Bollinger Bantları',
+    whatIs: '20 günlük ortalama + 2 standart sapmalı üst/alt bant. Volatilite ölçer.',
+    howRead: 'Fiyat üst banda değdi → kısa vadeli aşırı alım. Alt banda değdi → aşırı satım. Bantlar daraldı (squeeze) → büyük hareket yakın.',
+    caution: 'Trendli piyasada fiyat banda yapışık kalabilir. Squeeze sonrası yön kestiremez, sadece volatilite artışını söyler.',
+  },
+  stochastic: {
+    name: 'Stokastik Osilatör',
+    whatIs: 'Kapanış fiyatının son N gündeki yüksek-düşük aralığındaki konumunu 0-100 arası ölçer.',
+    howRead: '%K > 80: aşırı alım. < 20: aşırı satım. %K çizgisi %D\'yi yukarı keserse alım sinyali, aşağı keserse satım.',
+    caution: 'Aşırı bölgede uzun süre kalabilir. RSI veya hacim ile birlikte teyit edilmeli.',
+  },
+  atr: {
+    name: 'ATR — Ortalama Gerçek Aralık',
+    whatIs: 'Son N gündeki ortalama gerçek volatilite. Fiyat hareketinin büyüklüğünü gösterir, yön bildirmez.',
+    howRead: 'Yüksek ATR → yüksek volatilite, stop-loss geniş tutulmalı. Düşük ATR → sakin piyasa, dar stop-loss yeterli.',
+    caution: 'Yön kararı için kullanılmaz. Stop-loss ve pozisyon büyüklüğü hesabı içindir.',
+  },
+  sma: {
+    name: 'SMA — Basit Hareketli Ortalama',
+    whatIs: 'Son N günün kapanışlarının basit ortalaması. Trend yönünü gösterir.',
+    howRead: 'Fiyat SMA üstündeyse boğa trendi, altındaysa ayı. Kısa SMA uzunu yukarı keserse "golden cross", aşağı keserse "death cross".',
+    caution: 'Gecikmeli sinyal — büyük hareketlerin başında geç kalır. Yatay piyasada yanlış sinyal.',
+  },
+  ema: {
+    name: 'EMA — Üstel Hareketli Ortalama',
+    whatIs: 'SMA\'ya benzer ama son fiyatlara daha fazla ağırlık verir; daha hızlı tepki gösterir.',
+    howRead: 'Fiyat EMA üstünde = boğa, altında = ayı. EMA kesişimleri SMA\'dan erken sinyal verir. 50 ve 200 günlük EMA trend için kritik.',
+    caution: 'Hızlı tepki = daha çok yalancı sinyal. Kısa periyot EMA yatay piyasada sık ters döner.',
+  },
+  volume: {
+    name: 'Hacim',
+    whatIs: 'Belirli periyotta işlem gören toplam miktar. Fiyat hareketinin "ciddiyetini" gösterir.',
+    howRead: 'Yükseliş + yüksek hacim = güçlü alım. Düşük hacimli yükseliş = zayıf, dönebilir. Ortalamanın çok üstünde hacim = trend dönüşü olabilir.',
+    caution: 'Tek başına yön sinyali değildir. Fiyat hareketiyle birlikte yorumlanır.',
+  },
+  fibonacci: {
+    name: 'Fibonacci Geri Çekilme Seviyeleri',
+    whatIs: 'Bir hareket sonrası muhtemel destek/direnç seviyelerini %23.6, %38.2, %50, %61.8, %78.6 oranlarıyla işaretler.',
+    howRead: '%38.2 ve %61.8 en sık çalışan seviyeler. Fiyat bu seviyelerde tepki verirse trend devam edebilir; kırarsa trend bozulur.',
+    caution: 'Başlangıç/bitiş noktası analist seçimine bağlı — subjektif. Tek başına işlem aracı değildir.',
+  },
+  sr: {
+    name: 'Destek/Direnç',
+    whatIs: 'Geçmişte fiyatın birden çok kez tepki verdiği seviyeler. Alım/satım baskısı yoğun bölgeler.',
+    howRead: 'Fiyat desteğe yaklaşırsa alım fırsatı, dirence yaklaşırsa satım baskısı. Seviye kırılırsa rol değiştirir (destek dirence, direnç desteğe).',
+    caution: 'Yatay piyasada belirgin, güçlü trendde zayıflar. Hacim teyitli kırılım daha güvenilir.',
+  },
+};
+
+const INDICATOR_INFO_EN: Record<string, IndicatorInfo> = {
+  rsi: {
+    name: 'RSI — Relative Strength Index',
+    whatIs: 'Measures the speed and magnitude of price changes on a 0-100 scale over 14 days. Momentum indicator.',
+    howRead: 'RSI > 70: overbought, pullback likely. RSI < 30: oversold, bounce potential. Around 50: neutral trend.',
+    caution: 'In strong trends, RSI can stay above 70 or below 30 for extended periods. Not a standalone reversal signal.',
+  },
+  macd: {
+    name: 'MACD — Moving Average Convergence Divergence',
+    whatIs: 'Difference between 12 and 26-day exponential moving averages. Shows trend direction and momentum shifts.',
+    howRead: 'MACD crosses above signal line → buy signal. Crosses below → sell. Histogram positive = bullish momentum, negative = bearish.',
+    caution: 'Generates many false signals in sideways markets. Unreliable when no trend is present.',
+  },
+  bollinger: {
+    name: 'Bollinger Bands',
+    whatIs: '20-day moving average with upper/lower bands at 2 standard deviations. Measures volatility.',
+    howRead: 'Price touches upper band → short-term overbought. Touches lower band → oversold. Bands tighten (squeeze) → big move coming.',
+    caution: 'In strong trends, price can hug a band for long periods. Squeeze indicates volatility increase, not direction.',
+  },
+  stochastic: {
+    name: 'Stochastic Oscillator',
+    whatIs: 'Measures closing price position within recent N-day high-low range on a 0-100 scale.',
+    howRead: '%K > 80: overbought. < 20: oversold. %K crosses above %D → buy signal; below → sell signal.',
+    caution: 'Can stay in overbought/oversold zones for extended periods. Confirm with RSI or volume.',
+  },
+  atr: {
+    name: 'ATR — Average True Range',
+    whatIs: 'Average true volatility over N days. Shows magnitude of price moves; does not indicate direction.',
+    howRead: 'High ATR → high volatility, use wider stop-loss. Low ATR → calm market, tighter stops work.',
+    caution: 'Not a directional signal. Used for stop-loss placement and position sizing only.',
+  },
+  sma: {
+    name: 'SMA — Simple Moving Average',
+    whatIs: 'Plain average of last N closing prices. Indicates trend direction.',
+    howRead: 'Price above SMA = bullish trend, below = bearish. Short SMA crossing above long = "golden cross" (bullish); below = "death cross" (bearish).',
+    caution: 'Lagging signal — late on big moves. False signals in sideways markets.',
+  },
+  ema: {
+    name: 'EMA — Exponential Moving Average',
+    whatIs: 'Similar to SMA but weights recent prices more heavily; reacts faster.',
+    howRead: 'Price above EMA = bullish, below = bearish. EMA crossovers signal earlier than SMA. 50 and 200-day EMA are key trend filters.',
+    caution: 'Faster reaction = more false signals. Short-period EMA whipsaws in sideways markets.',
+  },
+  volume: {
+    name: 'Volume',
+    whatIs: 'Total quantity traded over a period. Indicates the conviction behind price moves.',
+    howRead: 'Rally on high volume = strong buying. Rally on weak volume = fragile, may reverse. Volume spike vs average = potential trend change.',
+    caution: 'Not a directional signal alone. Always interpreted alongside price action.',
+  },
+  fibonacci: {
+    name: 'Fibonacci Retracement',
+    whatIs: 'Marks potential support/resistance at 23.6%, 38.2%, 50%, 61.8%, 78.6% of a prior move.',
+    howRead: '38.2% and 61.8% are the most reliable levels. Bounce at these levels = trend may continue; break = trend reversal risk.',
+    caution: 'Start/end point selection is subjective. Not a standalone trading tool.',
+  },
+  sr: {
+    name: 'Support/Resistance',
+    whatIs: 'Price levels where the market has repeatedly reacted in the past. Zones of concentrated buying/selling pressure.',
+    howRead: 'Price near support = buying opportunity; near resistance = selling pressure. Broken levels reverse roles (support becomes resistance, vice versa).',
+    caution: 'Clear in sideways markets, weaker in strong trends. Volume-confirmed breakouts are more reliable.',
+  },
+};
+
 const TIMEFRAMES: { id: string; label: string; resolution: Resolution }[] = [
   { id: '5m', label: '5M', resolution: '5' },
   { id: '15m', label: '15M', resolution: '15' },
@@ -96,6 +229,7 @@ export default function TechnicalTab({ locale }: TechnicalTabProps) {
   const [selectedSymbolDisplay, setSelectedSymbolDisplay] = useState('AAPL');
   const [selectedTimeframe, setSelectedTimeframe] = useState('1day');
   const [selectedIndicators, setSelectedIndicators] = useState<string[]>(['rsi', 'sma']);
+  const [infoIndicator, setInfoIndicator] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState('');
   const [marketCategory, setMarketCategory] = useState<MarketCategory>('us');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -624,25 +758,38 @@ export default function TechnicalTab({ locale }: TechnicalTabProps) {
           {INDICATORS.map(indicator => {
             const isSupported = SUPPORTED_INDICATORS.has(indicator);
             const isSelected = selectedIndicators.includes(indicator);
+            const hasInfo = (locale === 'tr' ? INDICATOR_INFO_TR : INDICATOR_INFO_EN)[indicator];
             return (
-              <button
-                key={indicator}
-                onClick={() => toggleIndicator(indicator)}
-                className={`relative px-4 py-3 rounded-lg font-medium text-sm transition-smooth border ${
-                  isSelected
-                    ? isSupported
-                      ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-500/30'
-                      : 'bg-slate-600 border-slate-500 text-slate-300'
-                    : 'bg-slate-700 border-slate-600 text-slate-300 hover:border-slate-500'
-                }`}
-              >
-                {t(`indicators.${indicator}`)}
+              <div key={indicator} className="relative">
+                <button
+                  onClick={() => toggleIndicator(indicator)}
+                  className={`w-full px-4 py-3 rounded-lg font-medium text-sm transition-smooth border ${
+                    isSelected
+                      ? isSupported
+                        ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-500/30'
+                        : 'bg-slate-600 border-slate-500 text-slate-300'
+                      : 'bg-slate-700 border-slate-600 text-slate-300 hover:border-slate-500'
+                  }`}
+                >
+                  {t(`indicators.${indicator}`)}
+                </button>
                 {!isSupported && (
-                  <span className="absolute -top-1 -right-1 text-[9px] bg-yellow-600 text-white px-1 rounded">
+                  <span className="absolute -top-1 -left-1 text-[9px] bg-yellow-600 text-white px-1 rounded pointer-events-none">
                     {locale === 'tr' ? 'Yakında' : 'Soon'}
                   </span>
                 )}
-              </button>
+                {hasInfo && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setInfoIndicator(indicator); }}
+                    title={locale === 'tr' ? 'Bu indikatör ne anlama gelir?' : 'What does this indicator mean?'}
+                    aria-label={locale === 'tr' ? 'Bilgi' : 'Info'}
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-cyan-500/20 hover:bg-cyan-500/40 border border-cyan-400/50 text-cyan-300 text-[10px] font-bold flex items-center justify-center transition shadow"
+                  >
+                    ⓘ
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>
@@ -694,6 +841,60 @@ export default function TechnicalTab({ locale }: TechnicalTabProps) {
             : '📊 Live chart powered by Yahoo Finance (stocks/forex) and Binance (crypto). 600+ cryptos and thousands of stocks supported.'}
         </p>
       </div>
+
+      {/* Indicator info modal */}
+      {infoIndicator && (() => {
+        const info = (locale === 'tr' ? INDICATOR_INFO_TR : INDICATOR_INFO_EN)[infoIndicator];
+        if (!info) return null;
+        return (
+          <div
+            onClick={() => setInfoIndicator(null)}
+            className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bg-slate-900 border border-cyan-500/40 rounded-xl shadow-2xl max-w-lg w-full p-6 space-y-4"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <h3 className="text-lg font-bold text-cyan-300">{info.name}</h3>
+                <button
+                  onClick={() => setInfoIndicator(null)}
+                  className="text-slate-400 hover:text-white text-2xl leading-none px-1"
+                  aria-label={locale === 'tr' ? 'Kapat' : 'Close'}
+                >
+                  ×
+                </button>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
+                  {locale === 'tr' ? 'Nedir?' : 'What is it?'}
+                </div>
+                <p className="text-sm text-slate-200 leading-relaxed">{info.whatIs}</p>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
+                  {locale === 'tr' ? 'Nasıl yorumlanır?' : 'How to interpret'}
+                </div>
+                <p className="text-sm text-slate-200 leading-relaxed">{info.howRead}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <div className="text-xs uppercase tracking-wider text-amber-300 font-semibold mb-1">
+                  ⚠ {locale === 'tr' ? 'Dikkat' : 'Caution'}
+                </div>
+                <p className="text-sm text-amber-100 leading-relaxed">{info.caution}</p>
+              </div>
+              <button
+                onClick={() => setInfoIndicator(null)}
+                className="w-full mt-2 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-sm transition"
+              >
+                {locale === 'tr' ? 'Anladım' : 'Got it'}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
