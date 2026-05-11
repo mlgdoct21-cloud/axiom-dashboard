@@ -3,6 +3,46 @@
 import { useEffect, useState } from 'react';
 
 const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'axiom_finansal_bot';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+interface TrackRecord {
+  hit_rate_pct: number | null;
+  total_validated: number;
+  status: 'ok' | 'insufficient_data';
+  min_required?: number;
+}
+
+function TrackRecordBadge({ eventType }: { eventType: string }) {
+  const [data, setData] = useState<TrackRecord | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_URL}/macro/track-record?event_type=${encodeURIComponent(eventType)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelled || !j) return;
+        setData(j.aggregate as TrackRecord);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [eventType]);
+  if (!data || data.status !== 'ok' || data.hit_rate_pct === null) return null;
+  const color =
+    data.hit_rate_pct >= 65
+      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+      : data.hit_rate_pct >= 50
+        ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+        : 'bg-red-500/15 text-red-300 border-red-500/30';
+  return (
+    <span
+      title={`${data.total_validated} valide edilmiş yorum üzerinden`}
+      className={`text-[9px] px-1.5 py-0.5 rounded-full border ${color}`}
+    >
+      ✅ %{data.hit_rate_pct} isabet
+    </span>
+  );
+}
 
 interface SourceMeta {
   name: string;
@@ -238,6 +278,7 @@ export default function MacroStoryCard({ eventId }: { eventId: string }) {
         <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${tierBadge.classes}`}>
           {tierBadge.label}
         </span>
+        <TrackRecordBadge eventType={data.event_type} />
         {data.released_at && (
           <span className="text-[10px] text-[#888] ml-auto">
             📅{' '}
