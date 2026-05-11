@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 
+const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'axiom_finansal_bot';
+
 interface SourceMeta {
   name: string;
   url: string;
@@ -142,7 +144,9 @@ function UpgradeCtaBlock({ cta }: { cta: UpgradeCta }) {
       </div>
       <p className="text-[11px] text-[#a0a0b8] leading-relaxed">{cta.reason}</p>
       <a
-        href="/pricing"
+        href={`https://t.me/${BOT_USERNAME}?start=upgrade_${cta.target_tier}`}
+        target="_blank"
+        rel="noopener noreferrer"
         className={`inline-block mt-2 text-[10px] font-semibold px-2.5 py-1 rounded-full transition ${
           isAdvance
             ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
