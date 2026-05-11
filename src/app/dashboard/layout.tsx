@@ -3,15 +3,28 @@
 import { Header } from '@/components/Header';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, Suspense } from 'react';
 
 const AUTH_KEY = process.env.NEXT_PUBLIC_AUTH_STORAGE_KEY || 'axiom_auth';
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+function LoadingSplash() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#141425]">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#4fc3f7]"></div>
+    </div>
+  );
+}
+
+/**
+ * Auth gate + Stripe post-checkout login_token bridge.
+ *
+ * Wrapped in Suspense by the default export — useSearchParams() forces
+ * dynamic rendering at the boundary where it's called, so isolating it here
+ * keeps the rest of the dashboard layout statically renderable. Without the
+ * Suspense wrap the build fails: "useSearchParams() should be wrapped in a
+ * suspense boundary at page /dashboard/crypto."
+ */
+function AuthGate({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
@@ -74,11 +87,7 @@ export default function DashboardLayout({
   }, [isAuthenticated, isLoading, router, exchanging]);
 
   if (isLoading || exchanging) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#141425]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#4fc3f7]"></div>
-      </div>
-    );
+    return <LoadingSplash />;
   }
 
   if (!isAuthenticated) {
@@ -92,5 +101,17 @@ export default function DashboardLayout({
         {children}
       </main>
     </div>
+  );
+}
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <Suspense fallback={<LoadingSplash />}>
+      <AuthGate>{children}</AuthGate>
+    </Suspense>
   );
 }
