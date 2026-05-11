@@ -42,7 +42,7 @@ export function useAuth() {
         // After registration, login to get tokens
         const auth = await apiClient.login(telegramId);
         setIsAuthenticated(true);
-        router.push('/dashboard');
+        router.push('/tr');
         return auth;
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Registration failed';
@@ -64,7 +64,7 @@ export function useAuth() {
         const currentUser = await apiClient.getCurrentUser();
         setUser(currentUser);
         setIsAuthenticated(true);
-        router.push('/dashboard');
+        router.push('/tr');
         return auth;
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Login failed';

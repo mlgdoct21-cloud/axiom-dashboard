@@ -22,7 +22,7 @@ export default function LoginPage() {
       }
 
       await apiClient.login(telegramId);
-      router.push('/dashboard');
+      router.push('/tr');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed';
       setError(message);

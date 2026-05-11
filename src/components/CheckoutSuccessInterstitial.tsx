@@ -72,16 +72,15 @@ export default function CheckoutSuccessInterstitial() {
             if (cancelled) return;
             setReadyTier(data.local_tier);
             setPhase('ready');
-            // Auto-dismiss after a brief celebration moment, refresh router so
-            // useAuth/useEffect hooks re-fetch user with new tier.
+            // Auto-dismiss after a brief celebration moment. Navigate to /tr
+            // (rich CryptoPanic-style dashboard) since the basic /dashboard
+            // route is just the auth-bridge waystation for the success_url
+            // landing — the user expects the watchlist + macro chips after
+            // paying, not the bare news cards. router.refresh() so useAuth
+            // re-fetches the user with the new tier.
             setTimeout(() => {
               if (cancelled) return;
-              // Clean URL — drop ?upgrade and ?session_id so a refresh doesn't
-              // re-open this modal. Keep any other params intact.
-              const url = new URL(window.location.href);
-              url.searchParams.delete('upgrade');
-              url.searchParams.delete('session_id');
-              router.replace(url.pathname + (url.search || ''));
+              router.replace('/tr');
               router.refresh();
             }, 1500);
             return;

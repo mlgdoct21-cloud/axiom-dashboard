@@ -1,11 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { redirect, useSearchParams } from 'next/navigation';
-import { useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useLocale } from 'next-intl';
-import { apiClient } from '@/lib/api';
 import NewsTab from '@/components/tabs/NewsTab';
 import FundamentalTab from '@/components/tabs/FundamentalTab';
 import TechnicalTab from '@/components/tabs/TechnicalTab';
@@ -15,22 +13,19 @@ import LanguageSelector from '@/components/LanguageSelector';
 
 type TabType = 'news' | 'crypto' | 'fundamental' | 'technical' | 'pricing';
 
+// Note: this is now the canonical landing for authenticated users. The
+// previous version auto-redirected to /dashboard, which dropped paying
+// users on the basic news-cards page and hid the rich CryptoPanic-style
+// layout (DashboardSummary chips + watchlist + 3-column news). Both routes
+// still exist; /dashboard remains as a subpath host for /portfolio etc.
 export default function Home() {
   const t = useTranslations();
   const locale = useLocale() as 'en' | 'tr';
   const [activeTab, setActiveTab] = useState<TabType>('news');
   const searchParams = useSearchParams();
   // Telegram story-push deep-link uses ?event=<event_id> to auto-open the
-  // macro modal on DashboardSummary. Skip the /dashboard redirect when this
-  // param is present so authenticated users land on the page that actually
-  // hosts the MiniMacroChip + SummaryDetailModal.
+  // macro modal on DashboardSummary. The handler lives inside NewsTab.
   const hasDeepLinkedEvent = !!searchParams.get('event');
-
-  useEffect(() => {
-    if (apiClient.isAuthenticated() && !hasDeepLinkedEvent) {
-      redirect('/dashboard');
-    }
-  }, [hasDeepLinkedEvent]);
 
   const tabs: { id: TabType; label: string }[] = [
     { id: 'news', label: t('tabs.news') },

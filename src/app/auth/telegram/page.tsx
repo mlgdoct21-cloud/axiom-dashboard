@@ -49,8 +49,11 @@ function TelegramAuthContent() {
           localStorage.setItem(AUTH_KEY, JSON.stringify(data));
         }
         setStatus('success');
-        // Tiny delay so the success state is visible
-        setTimeout(() => router.push('/dashboard'), 700);
+        // Tiny delay so the success state is visible. Land on /tr (rich
+        // CryptoPanic-style dashboard) rather than the basic /dashboard
+        // news-cards page — that route was the old default but bypasses
+        // DashboardSummary chips + watchlist that paying users expect.
+        setTimeout(() => router.push('/tr'), 700);
       } catch (e: any) {
         if (cancelled) return;
         setStatus('error');
