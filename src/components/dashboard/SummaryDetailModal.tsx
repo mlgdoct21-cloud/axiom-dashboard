@@ -1426,10 +1426,14 @@ function MacroBody({ data, core }: { data: MacroRelease; core: MacroRelease | nu
         />
       )}
 
-      {/* Storyteller card — CPI/NFP/PCE/PPI için tier'lı 4-7 paragraf hikaye +
-          inline [SRC] kaynak chip'leri + Premium/Advance upgrade CTA. Diğer
-          event_type'lar için aşağıdaki narrative_md fallback'i kalır. */}
-      {['CPI', 'NFP', 'PCE', 'PPI'].includes((data.event_type || '').toUpperCase()) ? (
+      {/* Storyteller card — ABD makro (CPI/NFP/PCE/PPI/FOMC) + TR makro
+          (TÜFE/PPK/İşsizlik) için tier'lı paragraflı hikaye + inline [SRC]
+          chip'leri + Premium/Advance upgrade CTA. Diğer event_type'lar için
+          aşağıdaki narrative_md fallback'i kalır. */}
+      {['CPI', 'NFP', 'PCE', 'PPI', 'FOMC_STATEMENT',
+        'TR_TUFE', 'TR_POLICY_RATE', 'TR_UNEMPLOYMENT'].includes(
+        (data.event_type || '').toUpperCase()
+      ) ? (
         <MacroStoryCard eventId={data.event_id} />
       ) : data.narrative_md ? (
         <p className="text-sm text-[#e0e0e0] leading-relaxed whitespace-pre-line">
