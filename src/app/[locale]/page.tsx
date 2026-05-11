@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { redirect } from 'next/navigation';
+import { redirect, useSearchParams } from 'next/navigation';
 import { useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { useLocale } from 'next-intl';
@@ -19,12 +19,18 @@ export default function Home() {
   const t = useTranslations();
   const locale = useLocale() as 'en' | 'tr';
   const [activeTab, setActiveTab] = useState<TabType>('news');
+  const searchParams = useSearchParams();
+  // Telegram story-push deep-link uses ?event=<event_id> to auto-open the
+  // macro modal on DashboardSummary. Skip the /dashboard redirect when this
+  // param is present so authenticated users land on the page that actually
+  // hosts the MiniMacroChip + SummaryDetailModal.
+  const hasDeepLinkedEvent = !!searchParams.get('event');
 
   useEffect(() => {
-    if (apiClient.isAuthenticated()) {
+    if (apiClient.isAuthenticated() && !hasDeepLinkedEvent) {
       redirect('/dashboard');
     }
-  }, []);
+  }, [hasDeepLinkedEvent]);
 
   const tabs: { id: TabType; label: string }[] = [
     { id: 'news', label: t('tabs.news') },

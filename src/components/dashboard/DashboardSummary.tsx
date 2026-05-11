@@ -10,7 +10,8 @@
  * Kart tıklanınca tam içeriği gösteren modal açılır.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useDailyDigest } from '@/hooks/useDailyDigest';
 import { useDashboardSummary } from '@/hooks/useDashboardSummary';
 import { useMacroLatest } from '@/hooks/useMacroLatest';
@@ -55,6 +56,32 @@ export function DashboardSummary() {
   // onClick handler'ları: chip → modal aç
   const open = (c: ModalContent) => setModal(c);
   const close = () => setModal(null);
+
+  // Telegram story-push deep-link: /tr?event=fred:CPI:2026-03-01 → fetch the
+  // release by event_id and auto-open the macro modal. Runs once on mount;
+  // gated by searchParams.get('event') so chip clicks remain the primary path.
+  const searchParams = useSearchParams();
+  const deepLinkEventId = searchParams.get('event');
+  useEffect(() => {
+    if (!deepLinkEventId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/macro/release/${encodeURIComponent(deepLinkEventId)}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled || !json?.release) return;
+        setModal({
+          type: 'macro',
+          data: json.release,
+          core: json.core_release ?? null,
+        });
+      } catch (e) {
+        console.warn('[deep-link] macro release fetch failed:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [deepLinkEventId]);
 
   return (
     <div className="space-y-1.5">
