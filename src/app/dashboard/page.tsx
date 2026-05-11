@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { NewsCard } from '@/components/NewsCard';
+import CheckoutSuccessInterstitial from '@/components/CheckoutSuccessInterstitial';
 import { apiClient, NewsResponse } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -51,6 +52,11 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      {/* Stripe post-checkout interstitial — full-screen overlay that polls
+          /billing/checkout-status until the webhook flips users.tier. Renders
+          null when ?upgrade=success is absent, so harmless on every other load. */}
+      <CheckoutSuccessInterstitial />
+
       {/* Welcome Section */}
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-200 dark:border-blue-800 p-6">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
