@@ -29,8 +29,9 @@ export default function MarketTicker({ locale }: { locale: 'en' | 'tr' }) {
     };
 
     loadTickers();
-    // Refresh every 5 seconds
-    const interval = setInterval(loadTickers, 5000);
+    // 30s polling — 5s'lik refresh layout reflow'a sebep oluyordu (animasyon mid-flight'ta data
+    // değişince DOM widthleri kayıp atlama oluşturuyor).
+    const interval = setInterval(loadTickers, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -42,51 +43,60 @@ export default function MarketTicker({ locale }: { locale: 'en' | 'tr' }) {
     );
   }
 
-  // Group by type
-  const cryptos = tickers.filter(t => t.type === 'crypto').slice(0, 8);
-  const indices = tickers.filter(t => t.type === 'index');
-  const mag7 = tickers.filter(t => t.type === 'stock');
+  // Grup sırası: BTC/ETH → 12 endeks → Mag7. Tek liste — sub-section divider yok
+  // (boş kripto gibi durumlarda kenarda bulutsu divider duruyordu).
+  const ordered: TickerItem[] = [
+    ...tickers.filter(t => t.type === 'crypto'),
+    ...tickers.filter(t => t.type === 'index'),
+    ...tickers.filter(t => t.type === 'stock'),
+  ];
+
+  if (ordered.length === 0) {
+    return (
+      <div className="bg-[#0f0f20] border-b border-[#2a2a3e] px-4 py-2 text-xs text-[#555570]">
+        {locale === 'tr' ? 'Veri çekilemedi' : 'No data'}
+      </div>
+    );
+  }
 
   return (
     <div className="bg-[#0f0f20] border-b border-[#2a2a3e] overflow-hidden py-2">
       <style>{`
-        /* İçerik iki kez render olduğu için 0 → -50% tam bir kopya genişliğine
-           denk gelir; loop sonunda ikinci kopya birinci kopyanın başlangıç
-           pozisyonuna oturduğundan jump/duraksama olmadan dönüyor. */
-        @keyframes scroll {
-          0%   { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
+        /* Seamless marquee: tek "track" element içinde iki bitişik kopya.
+           translateX(-50%) tam bir kopyalık offset → loop kapanışında ikinci
+           kopya birinci kopyanın başlangıç pozisyonuna oturur, görsel jump yok.
+           ÖNEMLİ: track'in kendisinde padding/margin/border OLMAMALI;
+           translateX yüzdesi padding-content-border'ı dahil eder, asymmetric
+           olur. Sol/sağ pad gerekirse dış wrapper'a koy. */
+        @keyframes axiom-ticker-scroll {
+          from { transform: translate3d(0, 0, 0); }
+          to   { transform: translate3d(-50%, 0, 0); }
         }
-        .ticker-scroll {
-          /* 90s → 45s → 30s → 15s; ~60px/s, hızlı tempo. */
-          animation: scroll 15s linear infinite;
+        .axiom-ticker-track {
+          display: flex;
+          width: max-content;
+          animation: axiom-ticker-scroll 60s linear infinite;
           will-change: transform;
         }
-        .ticker-scroll:hover {
+        .axiom-ticker-track:hover {
           animation-play-state: paused;
         }
       `}</style>
-      {/* Parent flex'te gap YOK — kopyalar bitişik olmalı ki translateX(-50%)
-          tam olarak bir kopya genişliği olsun. Kopya içi gap her child'da
-          tutulur; kopya sonuna pr-8 ile ekleyerek bir sonraki kopyanın
-          ilk öğesi ile araya görsel boşluk konur. */}
-      <div className="ticker-scroll flex whitespace-nowrap pl-4">
-        {[0, 1].map(copy => (
-          <div key={copy} className="flex gap-8 pr-8 shrink-0">
-            {cryptos.map(t => (
-              <TickerItemComponent key={`${copy}-${t.symbol}`} item={t} />
-            ))}
-            <div className="w-px bg-[#2a2a3e]" />
-            {indices.map(t => (
-              <TickerItemComponent key={`${copy}-idx-${t.symbol}`} item={t} />
-            ))}
-            <div className="w-px bg-[#2a2a3e]" />
-            {mag7.map(t => (
-              <TickerItemComponent key={`${copy}-mag7-${t.symbol}`} item={t} />
-            ))}
-          </div>
-        ))}
+      <div className="axiom-ticker-track" aria-hidden>
+        {/* İki bitişik kopya → seamless loop */}
+        <TickerCopy items={ordered} />
+        <TickerCopy items={ordered} />
       </div>
+    </div>
+  );
+}
+
+function TickerCopy({ items }: { items: TickerItem[] }) {
+  return (
+    <div className="flex shrink-0">
+      {items.map((t, i) => (
+        <TickerItemComponent key={`${t.type}-${t.symbol}-${i}`} item={t} />
+      ))}
     </div>
   );
 }
@@ -101,16 +111,21 @@ function TickerItemComponent({ item }: { item: TickerItem }) {
       : item.name;
 
   return (
-    <div className="flex items-center gap-2 whitespace-nowrap">
-      <span className="text-xs font-medium text-[#e0e0e0]">{displayName}</span>
-      <span className="text-xs font-mono text-[#c0c0d0]">
-        ${item.price.toLocaleString('en-US', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })}
+    <div className="flex items-center gap-2 whitespace-nowrap px-4">
+      <span className="text-sm font-medium text-[#e0e0e0]">{displayName}</span>
+      <span className="text-sm font-mono text-[#c0c0d0]">
+        {item.type === 'crypto' || item.type === 'stock'
+          ? `$${item.price.toLocaleString('en-US', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}`
+          : item.price.toLocaleString('en-US', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
       </span>
       <span
-        className={`text-xs font-medium ${
+        className={`text-sm font-medium ${
           isPositive ? 'text-[#26a69a]' : 'text-[#ef5350]'
         }`}
       >

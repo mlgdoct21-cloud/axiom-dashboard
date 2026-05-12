@@ -19,53 +19,49 @@ interface TickerItem {
   type: 'crypto' | 'index' | 'stock';
 }
 
-// Top 20 cryptos — CoinGecko IDs
-const TOP_CRYPTO_IDS = [
-  'bitcoin', 'ethereum', 'binancecoin', 'ripple', 'solana',
-  'cardano', 'dogecoin', 'avalanche-2', 'polkadot', 'chainlink',
-  'matic-network', 'shiba-inu', 'litecoin', 'bitcoin-cash', 'stellar',
-  'uniswap', 'cosmos', 'internet-computer', 'vechain', 'arbitrum',
-];
+// Ticker yalnızca BTC + ETH gösterir; diğer kriptolar dashboard içinde başka
+// yerlerde (Top Cryptos, watchlist, On-Chain) zaten var. Tek-satır banner asıl
+// değeri "BTC/ETH spot + dünya endeksleri" gut check.
+const TOP_CRYPTO_IDS = ['bitcoin', 'ethereum'];
 
 const CG_ID_TO_SYMBOL: Record<string, string> = {
   'bitcoin': 'BTCUSDT',
   'ethereum': 'ETHUSDT',
-  'binancecoin': 'BNBUSDT',
-  'ripple': 'XRPUSDT',
-  'solana': 'SOLUSDT',
-  'cardano': 'ADAUSDT',
-  'dogecoin': 'DOGEUSDT',
-  'avalanche-2': 'AVAXUSDT',
-  'polkadot': 'DOTUSDT',
-  'chainlink': 'LINKUSDT',
-  'matic-network': 'MATICUSDT',
-  'shiba-inu': 'SHIBUSDT',
-  'litecoin': 'LTCUSDT',
-  'bitcoin-cash': 'BCHUSDT',
-  'stellar': 'XLMUSDT',
-  'uniswap': 'UNIUSDT',
-  'cosmos': 'ATOMUSDT',
-  'internet-computer': 'ICPUSDT',
-  'vechain': 'VETUSDT',
-  'arbitrum': 'ARBUSDT',
 };
 
 const MAG7 = ['NVDA', 'TSLA', 'GOOGL', 'MSFT', 'AAPL', 'AMZN', 'META'];
 
-// 8 dünya endexi — sıralama: US → UK → Asya → Avrupa → TR.
-// NOT (2026-05-07): per-symbol /stable/quote ^GDAXI/^FCHI/XU100.IS için "Special
-// Endpoint" verirken /stable/batch-quote bulk endpoint hepsini açıyor — bu yüzden
-// tek call ile çekiyoruz (tek HTTP, daha az latency).
-const INDICES = ['^GSPC', '^IXIC', '^FTSE', '^HSI', '^N225', '^GDAXI', '^FCHI', 'XU100.IS'];
+// 12 dünya endeksi — sıralama: US → Asya → Avrupa → TR.
+// NOT (2026-05-12): FMP Starter $29 plan Asya/Avrupa endekslerini 402 reddediyor
+// (Ultimate $139 gerek). Bu yüzden FMP batch-quote'a önce dener, 402/boş dönerse
+// Yahoo Finance fallback (`query1.finance.yahoo.com/v8/finance/chart/...`).
+const INDICES = [
+  '^GSPC',     // S&P 500
+  '^IXIC',     // NASDAQ
+  '^DJI',      // Dow Jones
+  '^N225',     // Nikkei 225 (Tokyo)
+  '^HSI',      // Hang Seng (Hong Kong)
+  '^AXJO',     // ASX 200 (Sydney)
+  '^KS11',     // KOSPI (Seoul)
+  '^FTSE',     // FTSE 100 (London)
+  '^GDAXI',    // DAX (Frankfurt)
+  '^FCHI',     // CAC 40 (Paris)
+  '^STOXX50E', // STOXX 50 (Euro broad)
+  'XU100.IS',  // BIST 100 (İstanbul)
+];
 
 const INDEX_DISPLAY_NAME: Record<string, string> = {
   '^GSPC': 'S&P 500',
   '^IXIC': 'NASDAQ',
+  '^DJI': 'DOW',
+  '^N225': 'Nikkei',
   '^HSI': 'Hang Seng',
-  '^N225': 'Nikkei 225',
+  '^AXJO': 'ASX 200',
+  '^KS11': 'KOSPI',
   '^FTSE': 'FTSE 100',
   '^GDAXI': 'DAX',
   '^FCHI': 'CAC 40',
+  '^STOXX50E': 'STOXX 50',
   'XU100.IS': 'BIST 100',
 };
 
@@ -139,31 +135,81 @@ async function fetchStocksTicker(symbols: string[]): Promise<TickerItem[]> {
   return fallback.filter(Boolean) as any[];
 }
 
-// FMP /stable/batch-quote — ^GDAXI/^FCHI/XU100.IS gibi Premium-restricted
-// sembolleri açıyor (per-symbol /stable/quote bunlara "Special Endpoint" diyor
-// ama bulk endpoint serbest, 2026-05-07'de doğrulandı).
+// Yahoo Finance v8 chart endpoint — public, key gerekmiyor; Asya/Avrupa
+// endekslerini açıyor (^N225/^HSI/^GDAXI/^FCHI vb. FMP Starter'da 402 dönüyor).
+// Vercel serverless'tan erişilebilir; Railway'de yfinance lib bloklu olabilir
+// ama bu doğrudan HTTPS fetch, server-side runtime'a bağımlılığı yok.
+async function fetchYahooQuote(symbol: string): Promise<TickerItem | null> {
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=2d`;
+    const res = await fetch(url, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
+      headers: { 'User-Agent': 'Mozilla/5.0 AxiomDashboard/1.0' },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const result = data?.chart?.result?.[0];
+    if (!result) return null;
+    const meta = result.meta;
+    const price = meta?.regularMarketPrice;
+    const prevClose = meta?.chartPreviousClose ?? meta?.previousClose;
+    if (typeof price !== 'number' || typeof prevClose !== 'number' || prevClose <= 0) return null;
+    const changePercent = ((price - prevClose) / prevClose) * 100;
+    return {
+      symbol,
+      price,
+      changePercent,
+      name: symbol,
+      type: 'index' as const,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// FMP /stable/batch-quote — Starter $29 planında US endekslerini (^GSPC/^IXIC/^DJI)
+// karşılıyor; Asya/Avrupa için 402 dönüyor (Ultimate $139 gerek). Bu yüzden:
+// 1) FMP batch-quote'a tek call dene — dönen sembollerle başla
+// 2) Eksik sembolleri Yahoo Finance fallback ile paralel doldur
 async function fetchIndicesBulk(symbols: string[]): Promise<TickerItem[]> {
   if (symbols.length === 0) return [];
+
   const fmpKey = process.env.FMP_API_KEY;
-  if (!fmpKey) return [];
-  try {
-    const url = `https://financialmodelingprep.com/stable/batch-quote?symbols=${encodeURIComponent(symbols.join(','))}&apikey=${fmpKey}`;
-    const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(6000) });
-    if (!res.ok) return [];
-    const data: Array<{ symbol: string; price: number; changePercentage: number }> = await res.json();
-    if (!Array.isArray(data)) return [];
-    return data
-      .filter(it => it && it.price > 0)
-      .map(it => ({
-        symbol: it.symbol,
-        price: it.price,
-        changePercent: it.changePercentage ?? 0,
-        name: it.symbol,
-        type: 'index' as const,
-      }));
-  } catch {
-    return [];
+  const fmpResolved = new Map<string, TickerItem>();
+
+  if (fmpKey) {
+    try {
+      const url = `https://financialmodelingprep.com/stable/batch-quote?symbols=${encodeURIComponent(symbols.join(','))}&apikey=${fmpKey}`;
+      const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(6000) });
+      if (res.ok) {
+        const data: Array<{ symbol: string; price: number; changePercentage: number }> = await res.json();
+        if (Array.isArray(data)) {
+          for (const it of data) {
+            if (it && it.price > 0) {
+              fmpResolved.set(it.symbol, {
+                symbol: it.symbol,
+                price: it.price,
+                changePercent: it.changePercentage ?? 0,
+                name: it.symbol,
+                type: 'index' as const,
+              });
+            }
+          }
+        }
+      }
+    } catch {
+      // sessizce Yahoo fallback'ine düş
+    }
   }
+
+  // FMP'den dönmeyen sembolleri Yahoo'dan paralel çek
+  const missing = symbols.filter(s => !fmpResolved.has(s));
+  const yahooResults = missing.length > 0
+    ? (await Promise.all(missing.map(fetchYahooQuote))).filter((x): x is TickerItem => x !== null)
+    : [];
+
+  return [...fmpResolved.values(), ...yahooResults];
 }
 
 export async function GET(request: NextRequest) {

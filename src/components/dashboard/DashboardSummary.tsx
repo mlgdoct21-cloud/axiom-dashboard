@@ -19,7 +19,6 @@ import type { OnChainSnapshot } from '@/lib/cryptoquant';
 import {
   DigestRiskChip,
   DigestPortfolioChip,
-  MiniOvernightChip,
   MiniEtfChip,
   MiniCalChip,
   MiniMoversChip,
@@ -138,15 +137,10 @@ export function DashboardSummary() {
               : undefined
           }
         />
-        <MiniOvernightChip
-          data={data?.overnight_markets}
-          loading={loading && !data}
-          onClick={
-            data?.overnight_markets
-              ? () => open({ type: 'overnight', data: data.overnight_markets })
-              : undefined
-          }
-        />
+        {/* MiniOvernightChip 2026-05-12 itibarıyla gizlendi: FMP Starter plan
+            Asya/Avrupa endekslerini 402 reddediyor; veri üst ticker tape'e
+            taşındı (12 endeks + Yahoo fallback). Modal/types intact, ileride
+            FMP Ultimate'a çıkılırsa veya alternatif kaynakla geri açılabilir. */}
         <MiniEtfChip
           data={data?.etf_flows}
           loading={loading && !data}
