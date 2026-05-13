@@ -195,13 +195,16 @@ class ApiClient {
         const data = await res.json();
         if (!data?.access_token) return null;
 
-        // Persist new access token (preserve refresh_token + user)
+        // Persist new access token + rotated refresh token (if backend sent one).
+        // Sliding-window: yeni refresh_token TTL'i sıfırdan başlar, kullanıcı
+        // 30 gün içinde tek refresh yaparsa oturum süresiz uzar.
         if (typeof window !== 'undefined') {
           const raw = localStorage.getItem(this.authKey);
           if (raw) {
             try {
               const parsed = JSON.parse(raw);
               parsed.access_token = data.access_token;
+              if (data.refresh_token) parsed.refresh_token = data.refresh_token;
               localStorage.setItem(this.authKey, JSON.stringify(parsed));
             } catch {
               /* corrupt entry — leave alone, next request will fail cleanly */

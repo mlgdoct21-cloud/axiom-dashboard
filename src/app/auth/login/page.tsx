@@ -42,7 +42,12 @@ function LoginPageInner() {
         if (!res.ok) return;
         const data = await res.json();
         if (!data?.access_token) return;
-        const merged = { ...parsed, access_token: data.access_token };
+        // Rotated refresh_token (varsa) kaydet — sliding-window oturum.
+        const merged = {
+          ...parsed,
+          access_token: data.access_token,
+          ...(data.refresh_token ? { refresh_token: data.refresh_token } : {}),
+        };
         localStorage.setItem(AUTH_KEY, JSON.stringify(merged));
 
         if (cancelled) return;
