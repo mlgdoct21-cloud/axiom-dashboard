@@ -1,6 +1,25 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import CryptoIntelStoryCard, { type IntelTier } from './CryptoIntelStoryCard';
+
+const AUTH_KEY = process.env.NEXT_PUBLIC_AUTH_STORAGE_KEY || 'axiom_auth';
+
+/** localStorage'dan user tier'ı oku — free/null ise story card render edilmez,
+ *  premium → Premium narrative + action box, advance → Advance narrative + action box.
+ *  Backend `axiom_auth` JSON içinde `user.tier` saklı (lib/api.ts şeması). */
+function readUserTier(): 'free' | 'premium' | 'advance' | null {
+  if (typeof window === 'undefined') return null;
+  const raw = localStorage.getItem(AUTH_KEY);
+  if (!raw) return null;
+  try {
+    const t = JSON.parse(raw)?.user?.tier;
+    if (t === 'premium' || t === 'advance' || t === 'free') return t;
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 // ── Types matching backend payloads ──────────────────────────────────────
 
@@ -85,6 +104,16 @@ export default function MarketHealthCard() {
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
   const [tab, setTab]             = useState<'overview' | 'erc20' | 'stable'>('overview');
+  const [userTier, setUserTier]   = useState<'free' | 'premium' | 'advance' | null>(null);
+
+  // Tier mount'ta bir kez oku. Storyteller card sadece premium/advance için
+  // render edilir; free kullanıcı sadece numeric tab'ları görür (mevcut UX).
+  useEffect(() => {
+    setUserTier(readUserTier());
+  }, []);
+
+  const intelTier: IntelTier | null =
+    userTier === 'advance' ? 'advance' : userTier === 'premium' ? 'premium' : null;
 
   useEffect(() => {
     async function load() {
@@ -172,6 +201,9 @@ export default function MarketHealthCard() {
       <div className="p-5">
         {tab === 'overview' && altseason && (
           <div className="space-y-4">
+            {intelTier && (
+              <CryptoIntelStoryCard tab="overview" tier={intelTier} />
+            )}
             <div className="text-center">
               <div className="text-[10px] uppercase tracking-wider text-[#888] mb-1">
                 Alt Sezon Skoru
@@ -228,6 +260,9 @@ export default function MarketHealthCard() {
 
         {tab === 'erc20' && erc20 && (
           <div className="space-y-3">
+            {intelTier && (
+              <CryptoIntelStoryCard tab="erc20" tier={intelTier} />
+            )}
             <div className="flex items-center justify-between gap-3 px-3 py-2.5 bg-[#1a1a2e] rounded-lg">
               <div className="text-xs text-[#c0c0d0]">9 DeFi Token Toplam</div>
               <div className="text-sm font-bold" style={{
@@ -281,6 +316,9 @@ export default function MarketHealthCard() {
 
         {tab === 'stable' && stable && (
           <div className="space-y-3">
+            {intelTier && (
+              <CryptoIntelStoryCard tab="stable" tier={intelTier} />
+            )}
             {/* Big number */}
             <div className="bg-[#1a1a2e] rounded-lg p-4 text-center">
               <div className="text-[10px] uppercase tracking-wider text-[#888] mb-1">
