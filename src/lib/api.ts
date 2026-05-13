@@ -163,25 +163,90 @@ class ApiClient {
     }
   }
 
+  private getRefreshToken(): string | null {
+    if (typeof window === 'undefined') return null;
+    const auth = localStorage.getItem(this.authKey);
+    if (!auth) return null;
+    try {
+      const parsed = JSON.parse(auth);
+      return parsed.refresh_token ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Tek bir refresh in-flight olsun — concurrent 401'lerde duplicate refresh
+   *  isteği patlamayı önler. Promise döner: success → new access_token, fail → null. */
+  private _refreshInFlight: Promise<string | null> | null = null;
+
+  private async tryRefresh(): Promise<string | null> {
+    if (this._refreshInFlight) return this._refreshInFlight;
+    const refreshToken = this.getRefreshToken();
+    if (!refreshToken) return null;
+
+    this._refreshInFlight = (async () => {
+      try {
+        const res = await fetch(`${this.baseUrl}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (!data?.access_token) return null;
+
+        // Persist new access token (preserve refresh_token + user)
+        if (typeof window !== 'undefined') {
+          const raw = localStorage.getItem(this.authKey);
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              parsed.access_token = data.access_token;
+              localStorage.setItem(this.authKey, JSON.stringify(parsed));
+            } catch {
+              /* corrupt entry — leave alone, next request will fail cleanly */
+            }
+          }
+        }
+        return data.access_token as string;
+      } catch {
+        return null;
+      } finally {
+        this._refreshInFlight = null;
+      }
+    })();
+    return this._refreshInFlight;
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    const headers: any = {
-      'Content-Type': 'application/json',
-      ...options.headers,
+    const buildHeaders = (token: string | null) => {
+      const h: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(options.headers as Record<string, string> | undefined),
+      };
+      if (token) h['Authorization'] = `Bearer ${token}`;
+      return h;
     };
 
-    const token = this.getToken();
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
+    let token = this.getToken();
+    let response = await fetch(url, { ...options, headers: buildHeaders(token) });
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
+    // Auto-refresh on 401 — access token expired, but refresh_token may still
+    // be valid (7 gün). Single retry only; if refresh fails, original 401 stands.
+    if (response.status === 401 && this.getRefreshToken()) {
+      const newToken = await this.tryRefresh();
+      if (newToken) {
+        token = newToken;
+        response = await fetch(url, { ...options, headers: buildHeaders(token) });
+      } else if (typeof window !== 'undefined') {
+        // Refresh failed → clear stale auth so UI can prompt re-login
+        localStorage.removeItem(this.authKey);
+      }
+    }
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
