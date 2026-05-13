@@ -65,8 +65,18 @@ const TIER_META: Record<UpgradeTier, {
 };
 
 function hasAuthToken(): boolean {
+  // axiom_auth JSON içinde access_token saklı (lib/api.ts şeması).
+  // Eskiden bare 'auth_token' okunuyordu → her zaman false → giriş yapmış
+  // kullanıcılara bile "Zaten Abonem · Giriş Yap" gösteriyordu (2026-05-13 bug).
   if (typeof window === 'undefined') return false;
-  return !!(localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token'));
+  const AUTH_KEY = process.env.NEXT_PUBLIC_AUTH_STORAGE_KEY || 'axiom_auth';
+  const raw = localStorage.getItem(AUTH_KEY);
+  if (!raw) return false;
+  try {
+    return !!JSON.parse(raw)?.access_token;
+  } catch {
+    return false;
+  }
 }
 
 export default function InlineUpgradeModal({

@@ -214,10 +214,19 @@ export default function MacroStoryCard({ eventId }: { eventId: string }) {
     setLoading(true);
     setData(null);
 
-    const authToken =
-      typeof window !== 'undefined'
-        ? localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token')
-        : null;
+    // axiom_auth JSON içinde access_token saklı (lib/api.ts ile aynı şema).
+    // Eskiden bare 'auth_token' okunuyordu → her zaman null → backend kullanıcıyı
+    // anonim sanıp free tier story + upgrade_cta döndürüyordu (2026-05-13 bug).
+    const AUTH_KEY = process.env.NEXT_PUBLIC_AUTH_STORAGE_KEY || 'axiom_auth';
+    let authToken: string | null = null;
+    if (typeof window !== 'undefined') {
+      const raw = localStorage.getItem(AUTH_KEY);
+      if (raw) {
+        try {
+          authToken = JSON.parse(raw)?.access_token ?? null;
+        } catch { /* corrupt — leave authToken null */ }
+      }
+    }
     const headers: Record<string, string> = {};
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
 
