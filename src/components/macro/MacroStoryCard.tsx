@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import InlineUpgradeModal from '@/components/ui/InlineUpgradeModal';
 
-const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'axiom_finansal_bot';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
 interface TrackRecord {
@@ -166,6 +166,7 @@ function StoryBody({ story }: { story: StoryPayload }) {
 function UpgradeCtaBlock({ cta }: { cta: UpgradeCta }) {
   const targetBadge = TIER_BADGE[cta.target_tier];
   const isAdvance = cta.target_tier === 'advance';
+  const [showUpgrade, setShowUpgrade] = useState(false);
   return (
     <div
       className={`mt-4 p-3 rounded-lg border ${
@@ -183,10 +184,9 @@ function UpgradeCtaBlock({ cta }: { cta: UpgradeCta }) {
         </span>
       </div>
       <p className="text-[11px] text-[#a0a0b8] leading-relaxed">{cta.reason}</p>
-      <a
-        href={`https://t.me/${BOT_USERNAME}?start=upgrade_${cta.target_tier}`}
-        target="_blank"
-        rel="noopener noreferrer"
+      <button
+        type="button"
+        onClick={() => setShowUpgrade(true)}
         className={`inline-block mt-2 text-[10px] font-semibold px-2.5 py-1 rounded-full transition ${
           isAdvance
             ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
@@ -194,7 +194,13 @@ function UpgradeCtaBlock({ cta }: { cta: UpgradeCta }) {
         }`}
       >
         {isAdvance ? '🚀 Advance ile devam' : '💎 Premium ile devam'}
-      </a>
+      </button>
+      <InlineUpgradeModal
+        open={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        targetTier={cta.target_tier}
+        reason={cta.reason}
+      />
     </div>
   );
 }

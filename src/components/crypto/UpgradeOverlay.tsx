@@ -1,8 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { QuotaPayload } from '@/hooks/useFeatureQuota';
-
-const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'axiom_finansal_bot';
+import InlineUpgradeModal from '@/components/ui/InlineUpgradeModal';
 
 const TAB_LABELS: Record<string, { emoji: string; tr: string }> = {
   crypto_overview: { emoji: '📄', tr: 'Whitepaper' },
@@ -11,7 +11,7 @@ const TAB_LABELS: Record<string, { emoji: string; tr: string }> = {
 
 export default function UpgradeOverlay({ quota }: { quota: QuotaPayload }) {
   const tab = TAB_LABELS[quota.command] ?? { emoji: '🔒', tr: quota.command };
-  const upgradeUrl = `https://t.me/${BOT_USERNAME}?start=upgrade_premium`;
+  const [showUpgrade, setShowUpgrade] = useState(false);
 
   return (
     <div className="bg-gradient-to-br from-[#0d0d1a] to-[#111125] border border-[#a78bfa]/30 rounded-xl p-6 sm:p-8 text-center max-w-2xl mx-auto">
@@ -57,17 +57,22 @@ export default function UpgradeOverlay({ quota }: { quota: QuotaPayload }) {
         </div>
       </div>
 
-      <a
-        href={upgradeUrl}
-        target="_blank"
-        rel="noopener noreferrer"
+      <button
+        type="button"
+        onClick={() => setShowUpgrade(true)}
         className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-[#a78bfa] to-[#4fc3f7] hover:opacity-90 text-white font-semibold rounded-xl transition shadow-lg shadow-[#a78bfa]/20"
       >
-        💎 Yükselt — Telegram'da Devam Et
-      </a>
+        💎 Yükselt
+      </button>
       <p className="text-[10px] text-[#555] mt-3">
-        Telegram bot'u açılır, /upgrade akışında plan seçip Stripe ile ödeyebilirsin
+        Premium veya Advance plan seç — abonelik anında devreye girer
       </p>
+      <InlineUpgradeModal
+        open={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        targetTier="premium"
+        reason={`${tab.emoji} ${tab.tr} için bugünkü ücretsiz hakkın doldu (${quota.used}/${quota.limit}). Premium ile sınırsız erişim açılır; Advance ek olarak gerçek zamanlı uyarılar ve daha hızlı veri sunar.`}
+      />
     </div>
   );
 }
