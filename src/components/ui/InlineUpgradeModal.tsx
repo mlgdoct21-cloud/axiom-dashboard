@@ -188,7 +188,7 @@ export default function InlineUpgradeModal({
                   href={loginHref}
                   className="block w-full text-center px-4 py-2.5 rounded-lg font-semibold text-[13px] bg-[#1f1f3a] hover:bg-[#26264a] text-[#e0e0f0] border border-[#3a3a5a] transition"
                 >
-                  🔑 Zaten Abonem · Giriş Yap
+                  🔑 Zaten Aboneyim · Giriş Yap
                 </a>
                 <a
                   href={telegramHref}
