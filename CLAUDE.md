@@ -209,3 +209,37 @@ This is a professional financial dashboard targeting Turkish traders. Built with
 
 **Last Updated:** April 17, 2026  
 **Status:** Phase 1 ✅ | Phase 2 ⚒️ | Production Ready 🚀
+
+
+---
+
+## 🤖 Claude Davranış Kuralları
+
+### ⚠️ ZORUNLU: Sistem Soruları İçin Kaynak Doğrulama
+
+Claude, AXIOM sisteminin mevcut durumu, aktif özellikleri veya kod davranışı hakkındaki HER soruyu yanıtlamadan önce project_knowledge_search ile ilgili session dosyasını veya kaynak kodu referansını kontrol ETMEK ZORUNDADIR.
+
+**Bu kural şu soru tiplerini kapsar:**
+- X özelliği çalışıyor mu? → kodu kontrol et
+- Y verisi için bildirim gidecek mi? → ilgili servis dosyasını kontrol et
+- Z event_type destekleniyor mu? → _SUPPORTED_EVENT_TYPES veya ilgili listeyi kontrol et
+- Hangi tier hangi veriyi alıyor? → broadcaster/storyteller kodunu kontrol et
+- X bağlı mı / aktif mi? → session dosyasından doğrula
+
+**YASAK davranışlar:**
+- Hafızadan / eğitim verisinden cevap vermek
+- Evet eminim demek ama kaynağı kontrol etmemek
+- Kısmi bilgiyle yetinip eksik kalan kısmı kontrol etmemek
+- Bir özelliğin listede olduğunu varsaymak, kodu okumadan
+
+**DOĞRU akış:**
+1. Soruyu al
+2. project_knowledge_search ile ilgili session/kod referansını bul
+3. Bulduğun kaynaktan doğrula
+4. Kaynağı belirterek cevap ver
+5. Kaynak bulamazsan emin değilim, kodu kontrol etmem gerekiyor de
+
+**Genel Prensipler:**
+- Kod her zaman hafızadan önce gelir
+- Sanırım, muhtemelen, büyük ihtimalle ifadelerini kullanıyorsan — dur ve kontrol et
+- Kullanıcı emin misin diye sormak zorunda kalmamalı
