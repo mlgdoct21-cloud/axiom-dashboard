@@ -36,6 +36,10 @@ export interface EtfFlowAggregate {
   source?: string;
   /** ISO 8601 UTC timestamp of when the cached row was written */
   scraped_at?: string | null;
+  /** Trading day the flow applies to (YYYY-MM-DD, UTC midnight) — derived from
+   *  raw_data.scraped_date in the backend, distinguishes data-date from
+   *  scrape-clock for the UI freshness label. */
+  data_date?: string | null;
   /** Computed age in hours from scraped_at to now */
   age_hours?: number | null;
   /** True if scraped_at <= 25h old */

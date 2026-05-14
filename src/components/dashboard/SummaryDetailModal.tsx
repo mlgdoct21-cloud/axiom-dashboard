@@ -83,14 +83,37 @@ function flagFor(country?: string): string {
   return map[country || ''] || '🌍';
 }
 
-function formatEtfFreshness(scrapedAt?: string | null, ageHours?: number | null, isStale?: boolean | null) {
+function formatEtfFreshness(
+  scrapedAt?: string | null,
+  ageHours?: number | null,
+  isStale?: boolean | null,
+  dataDate?: string | null,
+) {
   if (!scrapedAt) return null;
   const d = new Date(scrapedAt);
   if (isNaN(d.getTime())) return null;
 
-  const dateLine = d.toLocaleString('tr-TR', {
+  const scrapeStr = d.toLocaleString('tr-TR', {
     day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC',
   }) + ' UTC';
+
+  // dateLine prefers the trading day the flow applies to (data_date), falling
+  // back to the scrape clock when the backend didn't supply it. ETF flows
+  // settle on prior US trading day, so data_date is what the user expects to
+  // see as the "as-of date" — scrape clock alone misled users into reading
+  // the headline as today's flow.
+  let dateLine = scrapeStr;
+  let titleSuffix = '';
+  if (dataDate) {
+    const dd = new Date(dataDate + 'T00:00:00Z');
+    if (!isNaN(dd.getTime())) {
+      const trDay = dd.toLocaleDateString('tr-TR', {
+        day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC',
+      });
+      dateLine = `${trDay} için`;
+      titleSuffix = ` • alındı: ${scrapeStr}`;
+    }
+  }
 
   const hours = ageHours ?? Math.floor((Date.now() - d.getTime()) / 3_600_000);
   let label: string;
@@ -109,7 +132,7 @@ function formatEtfFreshness(scrapedAt?: string | null, ageHours?: number | null,
     label = 'Az önce';
     cls = 'text-[#26a69a] border-[#26a69a]/40 bg-[#26a69a]/10';
   }
-  return { label, cls, dateLine, title: `Veri tarihi: ${dateLine}` };
+  return { label, cls, dateLine, title: `Veri tarihi: ${dateLine}${titleSuffix}` };
 }
 
 // ─── Per-type renderers ──────────────────────────────────────────────────
@@ -751,7 +774,7 @@ function EtfBody({ data }: { data: EtfFlows }) {
       coinAbs >= 1000 ? coinAbs.toFixed(0) : coinAbs >= 100 ? coinAbs.toFixed(1) : coinAbs.toFixed(2);
     const coinSigned = flowUsd >= 0 ? `+${coinFormatted} ${coin}` : `-${coinFormatted} ${coin}`;
 
-    const freshness = formatEtfFreshness(agg.scraped_at, agg.age_hours, agg.is_stale);
+    const freshness = formatEtfFreshness(agg.scraped_at, agg.age_hours, agg.is_stale, agg.data_date);
 
     return (
       <div className="bg-[#0f0f20] border border-[#2a2a3e] rounded p-4 mb-3">
