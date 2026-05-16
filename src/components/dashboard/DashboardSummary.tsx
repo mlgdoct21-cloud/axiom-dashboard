@@ -29,6 +29,7 @@ import {
   MiniOnChainChip,
 } from './SummaryPanels';
 import { SummaryDetailModal, type ModalContent } from './SummaryDetailModal';
+import CorporateSynthesisCard from '@/components/corporate/CorporateSynthesisCard';
 
 export function DashboardSummary() {
   const { digest, loading: digestLoading, error: digestError } = useDailyDigest(true);
@@ -209,6 +210,9 @@ export function DashboardSummary() {
           }
         />
       </div>
+
+      {/* Haftalık AXIOM Kurumsal Sentez (Mahfi/İş Yatırım/ARK sentezi) */}
+      <CorporateSynthesisCard />
 
       {/* Detail modal */}
       <SummaryDetailModal content={modal} onClose={close} />
