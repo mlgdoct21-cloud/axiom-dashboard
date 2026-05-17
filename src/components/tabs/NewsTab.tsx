@@ -281,7 +281,7 @@ export default function NewsTab({ locale }: NewsTabProps) {
       <MarketTicker locale={locale} />
 
       {/* Dashboard Summary — 3-row modular layout (digest + 6 FMP panels) */}
-      <div className="px-4 pt-4 pb-2 border-b border-[#2a2a3e]">
+      <div className="px-4 pt-1.5 pb-1.5 border-b border-[#2a2a3e]">
         <DashboardSummary />
       </div>
 

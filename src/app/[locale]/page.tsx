@@ -38,7 +38,9 @@ export default function Home() {
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-[#0d0d1a]">
       {/* Row 1: Logo + Language */}
-      <nav className="flex items-center justify-between px-4 py-2 border-b border-[#2a2a3e] bg-[#141425]">
+      <nav className="relative overflow-hidden flex items-center justify-between px-4 py-1.5 border-b border-[#2a2a3e] bg-[#141425]">
+        {/* Atom logosundan kopup sayfanın en sağına ışık izi bırakarak süzülen elektron */}
+        <span className="axiom-electron-fly" aria-hidden="true" />
         <div className="flex items-center gap-3">
           {/* Atom Logo */}
           <svg width="36" height="36" viewBox="0 0 100 100" fill="none">
@@ -56,7 +58,7 @@ export default function Home() {
       </nav>
 
       {/* Row 2: Tabs */}
-      <div className="flex gap-1 px-4 py-2 border-b border-[#2a2a3e] bg-[#141425] overflow-x-auto scrollbar-none">
+      <div className="flex gap-1 px-4 py-1.5 border-b border-[#2a2a3e] bg-[#141425] overflow-x-auto scrollbar-none">
         {tabs.map((tab) => (
           <button
             key={tab.id}

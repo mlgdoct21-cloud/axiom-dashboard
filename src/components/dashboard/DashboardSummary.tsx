@@ -27,9 +27,10 @@ import {
   MiniVixChip,
   MiniMacroChip,
   MiniOnChainChip,
+  MiniCorporateChip,
 } from './SummaryPanels';
 import { SummaryDetailModal, type ModalContent } from './SummaryDetailModal';
-import CorporateSynthesisCard from '@/components/corporate/CorporateSynthesisCard';
+import type { CorporateResponse } from '@/hooks/useCorporateSynthesis';
 
 export function DashboardSummary() {
   const { digest, loading: digestLoading, error: digestError } = useDailyDigest(true);
@@ -37,6 +38,7 @@ export function DashboardSummary() {
   const { data: macroData, loading: macroLoading } = useMacroLatest(true);
   const [modal, setModal] = useState<ModalContent | null>(null);
   const [onchainData, setOnchainData] = useState<OnChainSnapshot | null>(null);
+  const [corpData, setCorpData] = useState<CorporateResponse | null>(null);
 
   const ageText = (() => {
     if (!data?.last_updated) return '';
@@ -84,7 +86,7 @@ export function DashboardSummary() {
   }, [deepLinkEventId]);
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
@@ -110,7 +112,7 @@ export function DashboardSummary() {
         </button>
       </div>
 
-      {/* 11-chip compact grid (6 col × 2 row at lg, last slot empty) */}
+      {/* 11-chip compact grid (6 col × 2 row at lg) — son chip: Kurumsal Sentez */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5">
         <DigestRiskChip
           card={digest?.risk_radar}
@@ -209,10 +211,15 @@ export function DashboardSummary() {
               : undefined
           }
         />
+        <MiniCorporateChip
+          onData={setCorpData}
+          onClick={
+            corpData && !corpData.error
+              ? () => open({ type: 'corporate', data: corpData })
+              : undefined
+          }
+        />
       </div>
-
-      {/* Haftalık AXIOM Kurumsal Sentez (Mahfi/İş Yatırım/ARK sentezi) */}
-      <CorporateSynthesisCard />
 
       {/* Detail modal */}
       <SummaryDetailModal content={modal} onClose={close} />

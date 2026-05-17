@@ -21,6 +21,11 @@ import type { DailyDigestCard } from '@/hooks/useDailyDigest';
 import type { MacroRelease } from '@/hooks/useMacroLatest';
 import { useMacroUpcoming } from '@/hooks/useMacroLatest';
 import { useOnChain } from '@/hooks/useOnChain';
+import {
+  useCorporateSynthesis,
+  type CorporateResponse,
+  type FullSynthesis,
+} from '@/hooks/useCorporateSynthesis';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -93,7 +98,7 @@ export function Chip({ icon, title, primary, secondary, tertiary, accent = 'gray
       type={interactive ? 'button' : undefined}
       onClick={onClick}
       title={tooltip}
-      className={`text-left w-full bg-[#1a1a2e] border border-[#2a2a3e] border-l-[3px] ${border} rounded px-2.5 py-2 min-h-[80px] flex flex-col justify-center transition-all ${
+      className={`text-left w-full bg-[#1a1a2e] border border-[#2a2a3e] border-l-[3px] ${border} rounded px-2.5 py-1.5 min-h-[52px] flex flex-col justify-center transition-all ${
         interactive
           ? 'hover:bg-[#1f1f3a] hover:border-[#4fc3f7]/40 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#4fc3f7]/50'
           : 'cursor-default'
@@ -620,6 +625,87 @@ export function MiniOnChainChip({
       empty={empty}
       tooltip={data?.overall_tr || 'BTC on-chain sinyaller (CryptoQuant)'}
       onClick={onClick}
+    />
+  );
+}
+
+// ─── AXIOM Kurumsal Sentez Mini Chip ─────────────────────────────────────
+// Eskiden inline tam kart idi; dikeyde çok yer kapladığı için diğer 10
+// kalemle tutarlı compact chip'e dönüştürüldü. Tıklanınca tam içerik
+// (locked teaser + upgrade veya tam synthesis_md) SummaryDetailModal'da açılır.
+// Veriyi onData ile parent'a kaldırır → modal aynı objeyi kullanır, tek fetch.
+
+function _firstSynthLine(md: string): string {
+  for (const raw of md.split('\n')) {
+    const t = raw.trim();
+    if (!t || t === '---') continue;
+    if (t.startsWith('## ')) continue;
+    return t.startsWith('- ') ? t.slice(2) : t;
+  }
+  return md.trim().slice(0, 90);
+}
+
+export function MiniCorporateChip({
+  onClick,
+  onData,
+}: {
+  onClick?: () => void;
+  onData?: (data: CorporateResponse | null) => void;
+}) {
+  const { data, loading } = useCorporateSynthesis();
+
+  React.useEffect(() => {
+    if (onData) onData(data);
+  }, [data, onData]);
+
+  const week = data?.week_start ? `Hafta ${data.week_start}` : undefined;
+
+  // synthesis === null → henüz üretilmedi (boş durum, ama tıklanınca modal
+  // açıklamayı gösterir — onClick yine de bağlı kalır).
+  if (data && !data.error && data.synthesis === null) {
+    return (
+      <Chip
+        icon="🏛️"
+        title="Kurumsal Sentez"
+        primary="Henüz üretilmedi"
+        secondary="Her Pazartesi 08:30"
+        accent="gray"
+        loading={loading}
+        onClick={onClick}
+        tooltip="Haftalık AXIOM kurumsal makro sentez"
+      />
+    );
+  }
+
+  if (data?.locked) {
+    return (
+      <Chip
+        icon="🏛️"
+        title="Kurumsal Sentez"
+        primary={<span>🔒 Premium&apos;a özel</span>}
+        secondary={week || 'Haftalık kurumsal makro sentez'}
+        accent="yellow"
+        loading={loading}
+        onClick={onClick}
+        tooltip="Tam haftalık kurumsal sentez Premium/Advance üyelere açıktır"
+      />
+    );
+  }
+
+  const full = data?.synthesis as FullSynthesis | undefined;
+  const preview = full?.synthesis_md ? _firstSynthLine(full.synthesis_md) : null;
+
+  return (
+    <Chip
+      icon="🏛️"
+      title="Kurumsal Sentez"
+      primary={preview}
+      secondary={week}
+      accent="blue"
+      loading={loading}
+      empty={!loading && !preview}
+      onClick={onClick}
+      tooltip={preview || 'Haftalık AXIOM kurumsal makro sentez'}
     />
   );
 }

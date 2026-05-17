@@ -60,7 +60,7 @@ export default function MarketTicker({ locale }: { locale: 'en' | 'tr' }) {
   }
 
   return (
-    <div className="bg-[#0f0f20] border-b border-[#2a2a3e] overflow-hidden py-2">
+    <div className="bg-[#0f0f20] border-b border-[#2a2a3e] overflow-hidden py-1.5">
       <style>{`
         /* Seamless marquee: tek "track" element içinde iki bitişik kopya.
            translateX(-50%) tam bir kopyalık offset → loop kapanışında ikinci

@@ -22,6 +22,8 @@ import { useMacroUpcoming } from '@/hooks/useMacroLatest';
 import { sectorLabelTr } from '@/lib/macro-sector-labels';
 import MacroStoryCard from '@/components/macro/MacroStoryCard';
 import type { OnChainSnapshot } from '@/lib/cryptoquant';
+import { CorporateSynthesisBody } from '@/components/corporate/CorporateSynthesisCard';
+import type { CorporateResponse } from '@/hooks/useCorporateSynthesis';
 
 // ─── Modal kind union ────────────────────────────────────────────────────
 
@@ -43,7 +45,8 @@ export type ModalContent =
   | { type: 'sectors'; data: SectorPerformance[] }
   | { type: 'vix'; data: FearIndices }
   | { type: 'macro'; data: MacroRelease; core?: MacroRelease | null }
-  | { type: 'onchain'; data: OnChainSnapshot };
+  | { type: 'onchain'; data: OnChainSnapshot }
+  | { type: 'corporate'; data: CorporateResponse };
 
 // ─── Helpers (paylaşılan) ────────────────────────────────────────────────
 
@@ -1647,6 +1650,7 @@ const TITLE_MAP: Record<ModalContent['type'], { icon: string; title: string }> =
   vix:        { icon: '🌡️', title: 'VIX Volatilite Endeksi + Kripto F&G' },
   macro:      { icon: '🌐', title: 'Makro Pulse — Son Release' },
   onchain:    { icon: '🔗', title: 'BTC On-Chain Sinyaller' },
+  corporate:  { icon: '🏛️', title: 'AXIOM Kurumsal Sentez' },
 };
 
 export function SummaryDetailModal({
@@ -1727,6 +1731,7 @@ export function SummaryDetailModal({
           {content.type === 'vix' && <FearBody data={content.data} />}
           {content.type === 'macro' && <MacroBody data={content.data} core={content.core ?? null} />}
           {content.type === 'onchain' && <OnChainBody data={content.data} />}
+          {content.type === 'corporate' && <CorporateSynthesisBody data={content.data} />}
         </div>
 
         {/* Footer */}
