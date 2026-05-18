@@ -29,10 +29,13 @@ export async function GET(request: NextRequest) {
   if (authHeader) headers['Authorization'] = authHeader;
 
   try {
+    // Tier-gated by Authorization — Next.js Data Cache keys by URL, NOT by
+    // request headers, so `next: { revalidate }` would serve a cached free/
+    // locked teaser to authed callers. Backend tier-gates per request.
     const response = await fetch(url, {
       method: 'GET',
       headers,
-      next: { revalidate: 60 },
+      cache: 'no-store',
     });
 
     if (!response.ok) {
@@ -48,8 +51,8 @@ export async function GET(request: NextRequest) {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        // Tier-bağımlı — kısa tarayıcı cache, edge SWR.
-        'Cache-Control': 'private, max-age=60, stale-while-revalidate=120',
+        // Tier-bağımlı auth yanıtı — hiçbir katmanda cache'leme.
+        'Cache-Control': 'no-store',
       },
     });
   } catch (error) {
