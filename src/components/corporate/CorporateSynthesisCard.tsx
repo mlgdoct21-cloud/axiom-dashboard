@@ -13,10 +13,11 @@
 
 import { useState } from 'react';
 import InlineUpgradeModal from '@/components/ui/InlineUpgradeModal';
-import type {
-  CorporateResponse,
-  FullSynthesis,
-  LockedSynthesis,
+import {
+  formatCorporateWeek,
+  type CorporateResponse,
+  type FullSynthesis,
+  type LockedSynthesis,
 } from '@/hooks/useCorporateSynthesis';
 
 const TIER_BADGE: Record<string, { label: string; classes: string }> = {
@@ -74,8 +75,18 @@ export function CorporateSynthesisBody({ data }: { data: CorporateResponse | nul
     );
   }
 
-  const weekLine = data.week_start ? (
-    <p className="text-[11px] text-slate-500 mb-2">Hafta: {data.week_start}</p>
+  const weekRange = formatCorporateWeek(data.week_start);
+  const fullForDate = !data.locked ? (data.synthesis as FullSynthesis | null) : null;
+  const publishedLabel = fullForDate?.generated_at
+    ? new Date(fullForDate.generated_at).toLocaleDateString('tr-TR', {
+        day: 'numeric', month: 'short',
+      })
+    : null;
+  const weekLine = weekRange ? (
+    <p className="text-[11px] text-slate-500 mb-2">
+      📅 {weekRange} haftası
+      {publishedLabel ? ` · ${publishedLabel} yayın` : ''}
+    </p>
   ) : null;
 
   if (data.locked) {

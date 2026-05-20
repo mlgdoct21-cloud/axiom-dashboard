@@ -23,6 +23,7 @@ import { useMacroUpcoming } from '@/hooks/useMacroLatest';
 import { useOnChain } from '@/hooks/useOnChain';
 import {
   useCorporateSynthesis,
+  formatCorporateWeek,
   type CorporateResponse,
   type FullSynthesis,
 } from '@/hooks/useCorporateSynthesis';
@@ -658,7 +659,8 @@ export function MiniCorporateChip({
     if (onData) onData(data);
   }, [data, onData]);
 
-  const week = data?.week_start ? `Hafta ${data.week_start}` : undefined;
+  const weekRange = formatCorporateWeek(data?.week_start);
+  const week = weekRange ? `${weekRange} haftası` : undefined;
 
   // synthesis === null → henüz üretilmedi (boş durum, ama tıklanınca modal
   // açıklamayı gösterir — onClick yine de bağlı kalır).

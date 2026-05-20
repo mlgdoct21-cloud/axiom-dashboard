@@ -32,6 +32,35 @@ export interface CorporateResponse {
   error?: string;
 }
 
+const _MONTHS_TR = [
+  'Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz',
+  'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara',
+];
+
+/**
+ * "2026-05-11" → "11-17 May 2026" (Pzt–Paz aralığı).
+ * week_start her zaman Pazartesi olduğu için +6 gün Pazar.
+ * Cron Pzt 08:30 koşumu az önce biten haftayı işler — kart kullanıcıya
+ * "Hafta 2026-05-11" diye tek tarih göstermek yerine analiz penceresinin
+ * tamamını söylesin diye eklendi.
+ */
+export function formatCorporateWeek(
+  weekStartIso: string | null | undefined,
+): string | undefined {
+  if (!weekStartIso) return undefined;
+  const start = new Date(`${weekStartIso}T00:00:00Z`);
+  if (Number.isNaN(start.getTime())) return undefined;
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 6);
+  const sMonth = _MONTHS_TR[start.getUTCMonth()];
+  const eMonth = _MONTHS_TR[end.getUTCMonth()];
+  const year = end.getUTCFullYear();
+  if (start.getUTCMonth() === end.getUTCMonth()) {
+    return `${start.getUTCDate()}-${end.getUTCDate()} ${sMonth} ${year}`;
+  }
+  return `${start.getUTCDate()} ${sMonth} – ${end.getUTCDate()} ${eMonth} ${year}`;
+}
+
 export function useCorporateSynthesis() {
   const [data, setData] = useState<CorporateResponse | null>(null);
   const [loading, setLoading] = useState(true);
