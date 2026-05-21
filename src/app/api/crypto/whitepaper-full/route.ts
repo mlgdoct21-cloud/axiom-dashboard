@@ -91,7 +91,7 @@ Her bölümü gerçekten doldurun. Kısa geçiştirmeyin. Toplam ~600-800 kelime
   const content = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 
   if (!content) {
-    return NextResponse.json({ error: 'Gemini boş yanıt döndü' }, { status: 500 });
+    return NextResponse.json({ error: 'AXIOM AI boş yanıt döndü' }, { status: 500 });
   }
 
   const result = {

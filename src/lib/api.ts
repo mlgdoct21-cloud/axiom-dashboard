@@ -10,6 +10,13 @@ const API_URL =
   (typeof window !== 'undefined' && window.location.hostname !== 'localhost'
     ? 'https://vivacious-growth-production-4875.up.railway.app/api/v1'
     : 'http://localhost:8000/api/v1');
+// Opsiyon Akademisi endpoint'leri Railway'e (henüz) push'lanmadıysa lokal backend
+// kullanılabilir. Production'da NEXT_PUBLIC_ACADEMY_API_URL set'lenmediği için
+// otomatik API_URL'e (Railway) düşer — tek base'e dönülür, hiçbir kod değişikliği
+// gerekmez. Lokal dev'de `.env.development.local` içine bu değişken yazılırsa
+// sadece /academy/* çağrıları o URL'e gider, geri kalan (news, macro, ticker)
+// normal API_URL'i kullanır.
+const ACADEMY_API_URL = process.env.NEXT_PUBLIC_ACADEMY_API_URL || API_URL;
 const AUTH_KEY = process.env.NEXT_PUBLIC_AUTH_STORAGE_KEY || 'axiom_auth';
 
 export type UserTier = 'free' | 'premium' | 'advance';
@@ -142,6 +149,143 @@ export interface SignalStats {
   most_traded_symbol: string | null;
 }
 
+// --- Opsiyon Akademisi (Faz 1) types ---
+
+export interface AcademyWorkedExample {
+  asset?: string;
+  symbol?: string;
+  scenario?: string;
+  spekulasyon_karsiti?: string;
+}
+
+export interface AcademyQuizOption {
+  text: string;
+}
+
+export interface AcademyQuiz {
+  question: string;
+  options: AcademyQuizOption[];
+}
+
+export interface AcademyLesson {
+  id: string;
+  slug: string;
+  title: string;
+  learning_objective?: string;
+  body?: string;
+  worked_examples?: AcademyWorkedExample[];
+  horology_link?: string | null;
+  horology_note?: string | null;
+  quiz?: AcademyQuiz | null;
+  glossary_refs?: string[];
+  locked: boolean;
+  tier_hint?: string;
+}
+
+export interface AcademyModule {
+  id: string;
+  slug: string;
+  title: string;
+  tagline?: string;
+  summary?: string;
+  tier_required: 'free' | 'premium' | 'advance';
+  duration_min?: number;
+  locked: boolean;
+  lessons: AcademyLesson[];
+}
+
+export interface AcademyScenarioCard {
+  id: string;
+  market_view: string;
+  suggested_strategy: string;
+  why: string;
+  max_gain: string;
+  max_loss: string;
+  horology_note?: string;
+}
+
+export interface AcademyCurriculum {
+  metadata: Record<string, unknown>;
+  user_tier: string;
+  modules: AcademyModule[];
+  scenario_cards: AcademyScenarioCard[];
+}
+
+export interface AcademyLessonResponse {
+  module_id: string;
+  module_title: string;
+  lesson: AcademyLesson;
+}
+
+export interface AcademyGlossaryEntry {
+  slug: string;
+  tr?: string;
+  intuition?: string;
+  one_liner?: string;
+  metaphor?: string;
+  in_finance?: string;
+  pitfall?: string;
+  horology?: string;
+  use_case?: string;
+}
+
+export type AcademyGlossary = Record<string, AcademyGlossaryEntry[] | Record<string, unknown>>;
+
+export interface AcademyGlossarySearchResponse {
+  query: string;
+  results: (AcademyGlossaryEntry & { section: string })[];
+}
+
+export interface AcademyThetaWheelSpec {
+  description: string;
+  parameters_displayed: { label: string; visual: string }[];
+  user_interaction: string[];
+  brand_voice?: string;
+}
+
+export interface AcademyLiveContext {
+  btc_dvol: number | null;
+  btc_note: string | null;
+  eth_dvol: number | null;
+  eth_note: string | null;
+  vix: number | null;
+  vix_note: string | null;
+  generated_at: string;
+  stale: boolean;
+}
+
+export interface AcademyModuleProgress {
+  module_id: string;
+  total: number;
+  completed: number;
+  percent: number;
+}
+
+export interface AcademyLessonProgress {
+  lesson_id: string;
+  quiz_score: number | null;
+  attempts: number;
+  completed_at: string | null;
+  updated_at: string | null;
+}
+
+export interface AcademyProgressSummary {
+  user_id: number;
+  lessons: AcademyLessonProgress[];
+  modules: AcademyModuleProgress[];
+  total_lessons: number;
+  total_completed: number;
+}
+
+export interface AcademyProgressSubmitResponse {
+  progress: AcademyProgressSummary;
+  quiz: {
+    correct: boolean;
+    feedback: string;
+    correct_option_index: number;
+  } | null;
+}
+
 class ApiClient {
   private baseUrl: string;
   private authKey: string;
@@ -225,7 +369,10 @@ class ApiClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
+    // Academy endpoint'leri için (varsa) ayrı base — bkz. ACADEMY_API_URL.
+    // Lokal dev'de /tr Railway'i, /akademi lokal backend'i kullanabilsin diye.
+    const base = endpoint.startsWith('/academy') ? ACADEMY_API_URL : this.baseUrl;
+    const url = `${base}${endpoint}`;
     const buildHeaders = (token: string | null) => {
       const h: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -576,6 +723,52 @@ class ApiClient {
         body: JSON.stringify({ position_id: positionId }),
       }
     );
+  }
+
+  // --- Opsiyon Akademisi (Faz 1) ---
+
+  async getAcademyCurriculum(): Promise<AcademyCurriculum> {
+    return this.request<AcademyCurriculum>('/academy/curriculum');
+  }
+
+  async getAcademyLesson(lessonId: string): Promise<AcademyLessonResponse> {
+    return this.request<AcademyLessonResponse>(`/academy/lessons/${lessonId}`);
+  }
+
+  async getAcademyGlossary(): Promise<AcademyGlossary> {
+    return this.request<AcademyGlossary>('/academy/glossary');
+  }
+
+  async searchAcademyGlossary(q: string): Promise<AcademyGlossarySearchResponse> {
+    return this.request<AcademyGlossarySearchResponse>(
+      `/academy/glossary/search?q=${encodeURIComponent(q)}`,
+    );
+  }
+
+  async getAcademyScenarioCards(): Promise<{ cards: AcademyScenarioCard[] }> {
+    return this.request<{ cards: AcademyScenarioCard[] }>('/academy/scenario-cards');
+  }
+
+  async getAcademyThetaWheel(): Promise<AcademyThetaWheelSpec> {
+    return this.request<AcademyThetaWheelSpec>('/academy/theta-wheel');
+  }
+
+  async submitAcademyProgress(
+    lessonId: string,
+    quizChoice: number | null,
+  ): Promise<AcademyProgressSubmitResponse> {
+    return this.request<AcademyProgressSubmitResponse>('/academy/progress', {
+      method: 'POST',
+      body: JSON.stringify({ lesson_id: lessonId, quiz_choice: quizChoice }),
+    });
+  }
+
+  async getAcademyProgress(): Promise<AcademyProgressSummary> {
+    return this.request<AcademyProgressSummary>('/academy/progress');
+  }
+
+  async getAcademyLiveContext(): Promise<AcademyLiveContext> {
+    return this.request<AcademyLiveContext>('/academy/context');
   }
 
   isAuthenticated(): boolean {

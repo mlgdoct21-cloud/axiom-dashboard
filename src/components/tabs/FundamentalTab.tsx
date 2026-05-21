@@ -433,7 +433,7 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
           <div className="flex flex-wrap items-center gap-3">
             <div>
               <h1 className="text-xl font-bold text-white">Temel Analiz</h1>
-              <p className="text-xs text-[#555570]">5 Analist · Veri Hattı · Gemini 2.0 Flash</p>
+              <p className="text-xs text-[#555570]">5 Analist · Veri Hattı · AXIOM AI</p>
             </div>
 
             {/* Market toggle */}

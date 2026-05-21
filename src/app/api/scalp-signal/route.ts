@@ -292,7 +292,7 @@ Return the JSON now. No markdown fences, no extra text.`;
 export async function POST(request: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({ error: 'Gemini API key not configured' }, { status: 500 });
+    return NextResponse.json({ error: 'AXIOM AI service not configured' }, { status: 500 });
   }
 
   try {

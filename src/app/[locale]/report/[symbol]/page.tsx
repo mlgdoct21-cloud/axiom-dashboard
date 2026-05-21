@@ -172,7 +172,7 @@ export default function ReportPage() {
     ? {
         title: 'Insider Raporu',
         loading: 'Rapor oluşturuluyor...',
-        loadingSub: 'FMP verileri + Gemini AI analizi (~15 sn)',
+        loadingSub: 'FMP verileri + AXIOM AI analizi (~15 sn)',
         errorTitle: 'Rapor alınamadı',
         retry: 'Tekrar Dene',
         price: 'Fiyat',
@@ -189,7 +189,7 @@ export default function ReportPage() {
     : {
         title: 'Insider Report',
         loading: 'Generating report...',
-        loadingSub: 'FMP data + Gemini AI analysis (~15 sec)',
+        loadingSub: 'FMP data + AXIOM AI analysis (~15 sec)',
         errorTitle: 'Failed to load report',
         retry: 'Retry',
         price: 'Price',

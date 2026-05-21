@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: 'Gemini API key not configured' },
+      { error: 'AXIOM AI service not configured' },
       { status: 500 }
     );
   }

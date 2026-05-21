@@ -713,7 +713,7 @@ export default function AxiomFundamentalDashboard({
               <span>{corporate.dataCompleteness.peers > 0 ? '✓' : '✗'} Peers</span>
               <span>{corporate.dataCompleteness.analyst ? '✓' : '✗'} Analist</span>
               <span>{corporate.dataCompleteness.insider ? '✓' : '—'} Insider</span>
-              <span>{corporate.dataCompleteness.llmSynthesis ? '✓ Gemini sentezi' : '— Heuristik fallback'}</span>
+              <span>{corporate.dataCompleteness.llmSynthesis ? '✓ AXIOM sentezi' : '— Heuristik fallback'}</span>
             </div>
           </div>
         </Section>

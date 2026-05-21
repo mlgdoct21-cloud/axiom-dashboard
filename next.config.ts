@@ -21,7 +21,9 @@ const cspDirectives = [
   // browser's CSP blocked it ("Load failed"), JWT was never persisted,
   // user bounced to /auth/login. The CORS allow-list on the backend was
   // also wrong but THAT bug was masked behind this CSP one.
-  "connect-src 'self' https://generativelanguage.googleapis.com https://api.coingecko.com https://api.binance.com https://api.ethplorer.io https://api.github.com https://*.supabase.co https://api.telegram.org https://*.up.railway.app",
+  // Dev modda lokal backend (uvicorn :8000) için ek connect-src whitelist.
+  // Production'da NODE_ENV='production' → bu kısım dahil edilmez.
+  `connect-src 'self' https://generativelanguage.googleapis.com https://api.coingecko.com https://api.binance.com https://api.ethplorer.io https://api.github.com https://*.supabase.co https://api.telegram.org https://*.up.railway.app${isDev ? " http://localhost:8000 ws://localhost:3000" : ""}`,
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
