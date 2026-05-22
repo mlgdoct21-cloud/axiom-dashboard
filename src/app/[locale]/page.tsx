@@ -11,6 +11,7 @@ import PricingTab from '@/components/tabs/PricingTab';
 import CryptoIntelligencePage from '@/components/crypto/CryptoIntelligencePage';
 import AcademyClient from '@/components/academy/AcademyClient';
 import LanguageSelector from '@/components/LanguageSelector';
+import AuthControl from '@/components/AuthControl';
 
 type TabType = 'news' | 'crypto' | 'fundamental' | 'technical' | 'academy' | 'pricing';
 
@@ -82,6 +83,7 @@ export default function Home() {
             </svg>
           </a>
           <LanguageSelector />
+          <AuthControl />
         </div>
       </nav>
 
