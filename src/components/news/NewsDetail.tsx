@@ -54,8 +54,6 @@ function displaySymbol(sym: string): string {
   return sym.replace('BINANCE:', '').replace('OANDA:', '').replace('_', '/').replace('USDT', '');
 }
 
-const FALLBACK_DELAY = 10_000;
-
 export default function NewsDetail({
   item,
   votes,
@@ -124,11 +122,10 @@ export default function NewsDetail({
     setFallbackLoading(false);
   }, [item?.id]);
 
-  // Start fallback timer when item is unanalyzed
+  // Analiz edilmemiş haber açıldığında içeriği HEMEN üret (gecikme yok).
   useEffect(() => {
     if (!item || item.analyzed) return;
-    const timer = setTimeout(() => triggerFallback(item), FALLBACK_DELAY);
-    return () => clearTimeout(timer);
+    triggerFallback(item);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item?.id, item?.analyzed]);
 
