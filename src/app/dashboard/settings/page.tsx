@@ -4,7 +4,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { apiClient, type QuotaHistoryItem } from '@/lib/api';
 import { useState, useEffect } from 'react';
 
-const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'AxiomAnaliz_Bot';
+// Hardcoded: Vercel'deki NEXT_PUBLIC_BOT_USERNAME eski/yanlış değer taşıyıp
+// override ediyordu. Bot username stabil — env'e bağlamak yerine sabitlendi.
+const BOT_USERNAME = 'AxiomAnaliz_Bot';
 const UPGRADE_DEEP_LINK = `https://t.me/${BOT_USERNAME}?start=upgrade_premium`;
 
 const TIER_LABEL: Record<string, string> = {

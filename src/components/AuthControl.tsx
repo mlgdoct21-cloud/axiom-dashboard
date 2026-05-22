@@ -2,7 +2,8 @@
 
 import { useAuth } from '@/hooks/useAuth';
 
-const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'AxiomAnaliz_Bot';
+// Hardcoded: Vercel env eski değer taşıyıp override ediyordu — bkz settings/page.
+const BOT_USERNAME = 'AxiomAnaliz_Bot';
 const LOGIN_DEEP_LINK = `https://t.me/${BOT_USERNAME}?start=login`;
 
 const TIER_BADGE: Record<string, { label: string; cls: string }> = {

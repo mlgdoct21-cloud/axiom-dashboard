@@ -14,7 +14,8 @@ import GlossaryView from './GlossaryView';
 import ScenarioGrid from './ScenarioGrid';
 import LiveContextBadge from './LiveContextBadge';
 
-const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'AxiomAnaliz_Bot';
+// Hardcoded: Vercel env eski değer taşıyıp override ediyordu — bkz settings/page.
+const BOT_USERNAME = 'AxiomAnaliz_Bot';
 const UPGRADE_LINK = `https://t.me/${BOT_USERNAME}?start=upgrade_premium`;
 const LOGIN_LINK = `https://t.me/${BOT_USERNAME}?start=login`;
 

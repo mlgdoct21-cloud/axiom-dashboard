@@ -19,7 +19,8 @@
 
 import { useEffect } from 'react';
 
-const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'AxiomAnaliz_Bot';
+// Hardcoded: Vercel env eski değer taşıyıp override ediyordu — bkz settings/page.
+const BOT_USERNAME = 'AxiomAnaliz_Bot';
 
 export type UpgradeTier = 'premium' | 'advance';
 
