@@ -384,9 +384,9 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
     setDone(false); setError(null); setActiveTab(0);
     if (esRef.current) { esRef.current.close(); esRef.current = null; }
 
-    // Cache-bust query param when forced; backend itself doesn't read it but it
-    // forces the browser/edge to issue a fresh request.
-    const bust = force ? `&t=${Date.now()}` : '';
+    // force=1 → backend Supabase cache'ini atlar ve ajanları yeniden çalıştırıp
+    // sonucu üzerine yazar. &t= ayrıca tarayıcı/edge cache'ini de kırar.
+    const bust = force ? `&force=1&t=${Date.now()}` : '';
     const es = new EventSource(`/api/stock/deep-analysis/stream?symbol=${encodeURIComponent(sym)}${bust}`);
     esRef.current = es;
     es.addEventListener('status',   e => setStatus(JSON.parse((e as MessageEvent).data).message || ''));

@@ -1,10 +1,18 @@
 import { NextRequest } from 'next/server';
 import YahooFinance from 'yahoo-finance2';
 import { extractLatestReportedQuarter, type LatestReportedQuarter } from '@/lib/earnings-detect';
+import { getCachedCryptoReport, setCachedCryptoReport } from '@/lib/crypto-cache';
 
 const yahooFinance = new YahooFinance({ suppressNotices: ['ripHistorical'] as any });
 
 export const runtime = 'nodejs';
+
+// 5-ajan analizinin Supabase cache'i. Aynı sembol için TTL içinde tekrar
+// istek gelirse Gemini yeniden çalışmaz; kayıtlı sonuç anında stream edilir.
+// report_type 'fundamental_agents' ile crypto_reports_cache tablosu paylaşılır.
+// TTL kısa tutuldu: ajanlar canlı fiyata duyarlı (entry/stop/teknik) — 15 dk.
+const AGENT_CACHE_REPORT_TYPE = 'fundamental_agents';
+const AGENT_CACHE_TTL_HOURS = 0.25; // 15 dakika
 
 // ─── Gemini helper (robust, fallback-aware) ──────────────────────────────────
 // maxOutputTokens 4000'e çıkarıldı: 5 ajanın da karmaşık JSON dönmesi gerekiyor,
@@ -869,6 +877,9 @@ export async function GET(req: NextRequest) {
   const symbol = req.nextUrl.searchParams.get('symbol')?.toUpperCase();
   if (!symbol) return new Response('Symbol required', { status: 400 });
 
+  // "Yeniden Çalıştır" → cache'i atla ve üzerine yaz.
+  const force = req.nextUrl.searchParams.get('force') === '1';
+
   const encoder = new TextEncoder();
   let ctrl!: ReadableStreamDefaultController<Uint8Array>;
 
@@ -884,6 +895,22 @@ export async function GET(req: NextRequest) {
     };
 
     try {
+      // ── Cache hit: kayıtlı analizi anında stream et (Gemini'yi atla) ──
+      if (!force) {
+        const cached = await getCachedCryptoReport(AGENT_CACHE_REPORT_TYPE, symbol);
+        if (cached?.raw_data && cached?.agent_5) {
+          send('status', { message: 'Kayıtlı analiz önbellekten yüklendi' });
+          send('raw_data', cached.raw_data);
+          send('agent_1', cached.agent_1);
+          send('agent_2', cached.agent_2);
+          send('agent_3', cached.agent_3);
+          send('agent_4', cached.agent_4);
+          send('agent_5', cached.agent_5);
+          send('done', { cached: true, generated_at: cached.generated_at });
+          return;
+        }
+      }
+
       send('status', { message: 'FMP Institutional\'den finansal veriler çekiliyor...' });
       const d = await fetchStockData(symbol);
       if (!d) {
@@ -897,10 +924,11 @@ export async function GET(req: NextRequest) {
         ohlc, revenueTrend, cashflowData, fibonacci,
         quarterlyTrend, latestReportedQuarter, ...metrics
       } = d;
-      send('raw_data', {
+      const rawData = {
         metrics, revenueTrend, cashflowData, fibonacci,
         quarterlyTrend, latestReportedQuarter,
-      });
+      };
+      send('raw_data', rawData);
 
       send('status', { message: 'Analistlerimiz verileri inceliyor...' });
 
@@ -917,6 +945,21 @@ export async function GET(req: NextRequest) {
       const a5 = await callGemini(promptPortfolio(d, a1, a2, a3, a4));
       send('agent_5', a5 ?? { error: 'Sentez oluşturulamadı' });
       send('done', {});
+
+      // ── Cache write: sadece tüm ajanlar başarılıysa sakla (hata cache'leme) ──
+      const anyError = !a5 || [a1, a2, a3, a4, a5].some((a: any) => !a || a.error);
+      if (!anyError) {
+        await setCachedCryptoReport(
+          AGENT_CACHE_REPORT_TYPE,
+          symbol,
+          {
+            raw_data: rawData,
+            agent_1: a1, agent_2: a2, agent_3: a3, agent_4: a4, agent_5: a5,
+            generated_at: new Date().toISOString(),
+          },
+          AGENT_CACHE_TTL_HOURS,
+        );
+      }
     } catch (e) {
       send('error', { message: String(e) });
     } finally {
