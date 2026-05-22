@@ -365,6 +365,41 @@ class ApiClient {
     return this._refreshInFlight;
   }
 
+  /** Decode a JWT's `exp` (epoch seconds) WITHOUT verifying the signature.
+   *  Client-side heuristic only — used to decide proactive refresh, never to
+   *  establish trust (the backend always re-verifies). */
+  private _decodeExp(token: string): number | null {
+    try {
+      const part = token.split('.')[1];
+      if (!part) return null;
+      const json = JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/')));
+      return typeof json.exp === 'number' ? json.exp : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Returns a valid (non-expired) access token, proactively refreshing via the
+   *  refresh_token when the current access token is expired or within 60s of it.
+   *  Returns null when there is no token; returns the (possibly stale) token if
+   *  refresh is impossible so the caller can still attempt and surface a 401.
+   *
+   *  Raw-fetch content hooks (corporate synthesis, macro/intel story, quota)
+   *  bypass `request()` and therefore miss its 401 auto-refresh. They must call
+   *  this first so the Bearer they forward is fresh — otherwise the 24h access
+   *  token silently expires and the backend serves locked/free content even
+   *  though the user still holds a valid 30-day refresh token. */
+  async getValidAccessToken(): Promise<string | null> {
+    const token = this.getToken();
+    if (!token) return null;
+    const exp = this._decodeExp(token);
+    const now = Math.floor(Date.now() / 1000);
+    if (exp && exp - now > 60) return token; // still valid, >60s headroom
+    if (!this.getRefreshToken()) return token; // can't refresh — return as-is
+    const refreshed = await this.tryRefresh();
+    return refreshed ?? token;
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -462,9 +497,26 @@ class ApiClient {
   }
 
   async getCurrentUser(): Promise<UserResponse> {
-    return this.request<UserResponse>('/users/me', {
+    const user = await this.request<UserResponse>('/users/me', {
       method: 'GET',
     });
+    // Keep the stored `user` object fresh so client-side tier gates (e.g.
+    // MarketHealthCard.readUserTier) reflect the CURRENT tier without forcing
+    // a re-login. The login response snapshots tier at login time; if the user
+    // is upgraded afterwards that snapshot goes stale until this overwrites it.
+    if (typeof window !== 'undefined' && user) {
+      try {
+        const raw = localStorage.getItem(this.authKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          parsed.user = user;
+          localStorage.setItem(this.authKey, JSON.stringify(parsed));
+        }
+      } catch {
+        /* corrupt entry — leave alone */
+      }
+    }
+    return user;
   }
 
   // User Methods

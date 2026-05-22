@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-
-const AUTH_KEY = process.env.NEXT_PUBLIC_AUTH_STORAGE_KEY || 'axiom_auth';
+import { apiClient } from '@/lib/api';
 
 export type QuotaStatus = 'pending' | 'allowed' | 'paywall' | 'error';
 
@@ -13,18 +12,6 @@ export interface QuotaPayload {
   tier: string;
   command: string;
   remaining: number | null;
-}
-
-function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem(AUTH_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed.access_token ?? null;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -43,7 +30,7 @@ export function useFeatureQuota(command: string) {
     setStatus('pending');
     setError(null);
 
-    const token = getAccessToken();
+    const token = await apiClient.getValidAccessToken();
     if (!token) {
       // Not logged in — backend would 401, but the dashboard layout
       // should already have redirected to /auth/login. Surface error

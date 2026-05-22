@@ -14,8 +14,7 @@
  */
 
 import { useEffect, useState } from 'react';
-
-const AUTH_KEY = process.env.NEXT_PUBLIC_AUTH_STORAGE_KEY || 'axiom_auth';
+import { apiClient } from '@/lib/api';
 
 export type IntelTab = 'overview' | 'erc20' | 'stable';
 export type IntelTier = 'premium' | 'advance';
@@ -45,17 +44,6 @@ const SIGN_STYLE: Record<string, string> = {
   '✗': 'text-[#ff4757]',
   '⚠': 'text-[#fbbf24]',
 };
-
-function getAuthToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  const raw = localStorage.getItem(AUTH_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw)?.access_token ?? null;
-  } catch {
-    return null;
-  }
-}
 
 function formatAge(iso: string | null): { text: string; stale: boolean } {
   if (!iso) return { text: '?', stale: true };
@@ -90,30 +78,29 @@ export default function CryptoIntelStoryCard({
     setNotReady(false);
     setData(null);
 
-    const token = getAuthToken();
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    (async () => {
+      const token = await apiClient.getValidAccessToken();
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    fetch(`/api/market/intel-story?tab=${tab}&tier=${tier}`, { headers, cache: 'no-store' })
-      .then(async (r) => {
+      try {
+        const r = await fetch(
+          `/api/market/intel-story?tab=${tab}&tier=${tier}`,
+          { headers, cache: 'no-store' },
+        );
         if (cancelled) return;
-        if (r.status === 204) {
-          setNotReady(true);
-          return;
-        }
-        if (!r.ok) {
+        if (r.status === 204 || !r.ok) {
           setNotReady(true);
           return;
         }
         const json: IntelStoryResponse = await r.json();
-        setData(json);
-      })
-      .catch(() => {
+        if (!cancelled) setData(json);
+      } catch {
         if (!cancelled) setNotReady(true);
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;

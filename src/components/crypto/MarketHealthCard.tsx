@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import CryptoIntelStoryCard, { type IntelTier } from './CryptoIntelStoryCard';
+import { apiClient } from '@/lib/api';
 
 const AUTH_KEY = process.env.NEXT_PUBLIC_AUTH_STORAGE_KEY || 'axiom_auth';
 
@@ -106,10 +107,28 @@ export default function MarketHealthCard() {
   const [tab, setTab]             = useState<'overview' | 'erc20' | 'stable'>('overview');
   const [userTier, setUserTier]   = useState<'free' | 'premium' | 'advance' | null>(null);
 
-  // Tier mount'ta bir kez oku. Storyteller card sadece premium/advance için
-  // render edilir; free kullanıcı sadece numeric tab'ları görür (mevcut UX).
+  // Tier: önce saklı değerle anlık gate (optimistic), sonra /users/me'den
+  // GÜNCEL tier ile düzelt. Saklı user.tier login anında snapshot'lanır ve
+  // upgrade sonrası bayatlar — bu refetch olmadan advance'e geçen kullanıcı
+  // re-login yapana dek eski (free/premium) hikâyeyi görür. getCurrentUser
+  // ayrıca access token'ı auto-refresh eder + taze user'ı localStorage'a yazar.
   useEffect(() => {
+    let cancelled = false;
     setUserTier(readUserTier());
+    (async () => {
+      try {
+        const u = await apiClient.getCurrentUser();
+        const t = u?.tier;
+        if (!cancelled && (t === 'free' || t === 'premium' || t === 'advance')) {
+          setUserTier(t);
+        }
+      } catch {
+        /* taze tier alınamadı — optimistic saklı değerle devam */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const intelTier: IntelTier | null =

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import InlineUpgradeModal from '@/components/ui/InlineUpgradeModal';
+import { apiClient } from '@/lib/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
@@ -214,36 +215,28 @@ export default function MacroStoryCard({ eventId }: { eventId: string }) {
     setLoading(true);
     setData(null);
 
-    // axiom_auth JSON içinde access_token saklı (lib/api.ts ile aynı şema).
-    // Eskiden bare 'auth_token' okunuyordu → her zaman null → backend kullanıcıyı
-    // anonim sanıp free tier story + upgrade_cta döndürüyordu (2026-05-13 bug).
-    const AUTH_KEY = process.env.NEXT_PUBLIC_AUTH_STORAGE_KEY || 'axiom_auth';
-    let authToken: string | null = null;
-    if (typeof window !== 'undefined') {
-      const raw = localStorage.getItem(AUTH_KEY);
-      if (raw) {
-        try {
-          authToken = JSON.parse(raw)?.access_token ?? null;
-        } catch { /* corrupt — leave authToken null */ }
-      }
-    }
-    const headers: Record<string, string> = {};
-    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+    (async () => {
+      // getValidAccessToken proactively refreshes an expired 24h access token
+      // via the 30-day refresh_token. Without it the backend treats the user as
+      // anonymous and returns free-tier story + upgrade_cta once the token
+      // expires (regression class of the 2026-05-13 wrong-key bug).
+      const authToken = await apiClient.getValidAccessToken();
+      const headers: Record<string, string> = {};
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
 
-    fetch(`/api/macro/story/${encodeURIComponent(eventId)}?_=${Date.now()}`, {
-      cache: 'no-store',
-      headers,
-    })
-      .then(async (r) => {
+      try {
+        const r = await fetch(
+          `/api/macro/story/${encodeURIComponent(eventId)}?_=${Date.now()}`,
+          { cache: 'no-store', headers },
+        );
         const j = await r.json().catch(() => ({ error: 'fetch_failed' }));
         if (!cancelled) setData(j);
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setData({ error: 'fetch_failed' });
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;

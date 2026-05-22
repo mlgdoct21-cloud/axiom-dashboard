@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { apiClient } from '@/lib/api';
 
-const AUTH_KEY = process.env.NEXT_PUBLIC_AUTH_STORAGE_KEY || 'axiom_auth';
 const CACHE_TTL_MS = 30_000;
 
 export interface QuotaCommandStatus {
@@ -17,18 +17,6 @@ export interface QuotaSummary {
   tier: 'free' | 'premium' | 'advance';
   quotas: Record<string, QuotaCommandStatus>;
   reset_at: string | null;
-}
-
-function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem(AUTH_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed.access_token ?? null;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -47,7 +35,7 @@ export function useQuotaSummary() {
   const pathname = usePathname();
 
   const fetchSummary = useCallback(async (force = false) => {
-    const token = getAccessToken();
+    const token = await apiClient.getValidAccessToken();
     if (!token) {
       setSummary(null);
       return;

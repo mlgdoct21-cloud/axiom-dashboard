@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { apiClient } from '@/lib/api';
 
 export interface FullSynthesis {
   event_id: string;
@@ -69,32 +70,29 @@ export function useCorporateSynthesis() {
     // loading initial state'i zaten true; effect [] deps ile bir kez koşar →
     // burada setLoading(true) gereksiz (cascading render lint kuralı).
     let cancelled = false;
-    const AUTH_KEY = process.env.NEXT_PUBLIC_AUTH_STORAGE_KEY || 'axiom_auth';
-    let authToken: string | null = null;
-    if (typeof window !== 'undefined') {
-      const raw = localStorage.getItem(AUTH_KEY);
-      if (raw) {
-        try {
-          authToken = JSON.parse(raw)?.access_token ?? null;
-        } catch {
-          /* corrupt — anon */
-        }
-      }
-    }
-    const headers: Record<string, string> = {};
-    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
 
-    fetch(`/api/corporate/latest?_=${Date.now()}`, { cache: 'no-store', headers })
-      .then(async (r) => {
+    (async () => {
+      // Proactively refresh an expired access token — this hook bypasses
+      // apiClient.request() so it must guarantee a fresh Bearer itself, else
+      // the backend tier-gates to free/locked after the 24h token expires.
+      const authToken = await apiClient.getValidAccessToken();
+      const headers: Record<string, string> = {};
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+      try {
+        const r = await fetch(`/api/corporate/latest?_=${Date.now()}`, {
+          cache: 'no-store',
+          headers,
+        });
         const j = await r.json().catch(() => ({ error: 'fetch_failed' }));
         if (!cancelled) setData(j);
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setData({ error: 'fetch_failed' } as CorporateResponse);
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
