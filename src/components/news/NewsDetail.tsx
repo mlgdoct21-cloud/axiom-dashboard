@@ -16,6 +16,9 @@ interface NewsDetailProps {
   // Empty state için: tüm haber listesi + seçim handler'ı
   allNews?: NewsItem[];
   onSelectNews?: (id: string) => void;
+  // Günlük ücretsiz okuma hakkı dolduysa: özet+analiz yerine kilit overlay.
+  locked?: boolean;
+  onUpgrade?: () => void;
 }
 
 interface PriceSnapshot {
@@ -62,6 +65,8 @@ export default function NewsDetail({
   favorites = [],
   allNews,
   onSelectNews,
+  locked = false,
+  onUpgrade,
 }: NewsDetailProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [priceSnapshots, setPriceSnapshots] = useState<Record<string, PriceSnapshot>>({});
@@ -264,6 +269,29 @@ export default function NewsDetail({
 
         {/* Main Content Area — AI Özet + Oy */}
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+          {locked ? (
+            /* Günlük ücretsiz okuma hakkı doldu — özet+analiz yerine kilit. */
+            <div className="p-6 bg-gradient-to-b from-[#1a0f2e] to-[#0f0f20] border border-[#4a2a6e] rounded text-center flex flex-col items-center gap-3">
+              <span className="text-3xl">🔒</span>
+              <div className="text-[#e0e0e0] font-semibold text-sm">
+                {locale === 'tr'
+                  ? 'Bugünkü ücretsiz haber okuma hakkın doldu'
+                  : "You've reached today's free article limit"}
+              </div>
+              <p className="text-[#a0a0b8] text-xs leading-relaxed max-w-sm">
+                {locale === 'tr'
+                  ? 'Günde 5 haberin AI özetini ve AXIOM pazar analizini ücretsiz okuyabilirsin. Sınırsız erişim için Premium\'a geç — ya da yarın hakların yenilenir.'
+                  : 'You can read the AI summary and AXIOM market analysis of 5 articles per day for free. Upgrade to Premium for unlimited access — or your quota resets tomorrow.'}
+              </p>
+              <button
+                onClick={() => onUpgrade?.()}
+                className="mt-1 px-5 py-2 rounded-lg bg-[#a78bfa] text-[#0e0e1a] font-semibold text-sm hover:bg-[#a78bfa]/90 transition"
+              >
+                {locale === 'tr' ? '💎 Premium ile sınırsız oku' : '💎 Read unlimited with Premium'}
+              </button>
+            </div>
+          ) : (
+          <>
           {/* AI Özet Panel (Ana Fokus) — Otomatik Yükleniyor */}
           <div className="p-4 bg-[#0f1a2e] border border-[#2a4a6e] rounded">
             <div className="text-[11px] text-[#4fc3f7] uppercase mb-3 font-semibold tracking-wider flex items-center gap-2">
@@ -341,6 +369,8 @@ export default function NewsDetail({
               </p>
             )}
           </div>
+          </>
+          )}
 
           {/* Orijinal Haber Linki */}
           {item.url && item.url !== '#' && (

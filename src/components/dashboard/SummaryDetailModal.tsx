@@ -5,7 +5,9 @@
  * ESC ile veya backdrop tıklanınca kapanır.
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import InlineUpgradeModal from '@/components/ui/InlineUpgradeModal';
 import type {
   OvernightMarkets,
   EtfFlows,
@@ -277,6 +279,52 @@ function OnChainBody({ data }: { data: import('@/lib/cryptoquant').OnChainSnapsh
 
       <div className="text-[10px] text-[#555570]">
         Kaynak: CryptoQuant · Güncellenme: {data?.fetched_at ? new Date(data.fetched_at).toLocaleString('tr-TR') : '—'}
+      </div>
+    </div>
+  );
+}
+
+// Free/anonim için on-chain detay kilidi: headline skoru teaser göster,
+// CryptoQuant Pro sinyal tablosunu kilitle (yargı/premium katman).
+function OnChainLocked({
+  data,
+  onUpgrade,
+}: {
+  data: import('@/lib/cryptoquant').OnChainSnapshot;
+  onUpgrade: () => void;
+}) {
+  const score = data?.axiom_score;
+  const zone = data?.score_zone_tr ?? data?.score_zone ?? null;
+  return (
+    <div className="space-y-4">
+      {/* Teaser: skor başlığı görünür */}
+      <div className="flex items-center justify-between p-3 bg-[#0f0f20] border border-[#2a2a3e] rounded">
+        <div>
+          <div className="text-[10px] text-[#8888a0] uppercase tracking-wider mb-0.5">Axiom Skor</div>
+          <div className="text-2xl font-bold text-[#e0e0e0] font-mono">
+            {score != null ? score.toFixed(0) : '—'}
+            <span className="text-[12px] text-[#8888a0] font-normal ml-2">/ 100</span>
+          </div>
+        </div>
+        {zone && <div className="text-[12px] font-semibold text-[#ff9800]">{zone}</div>}
+      </div>
+
+      {/* Kilit */}
+      <div className="p-6 bg-gradient-to-b from-[#1a0f2e] to-[#0f0f20] border border-[#4a2a6e] rounded text-center flex flex-col items-center gap-3">
+        <span className="text-3xl">🔒</span>
+        <div className="text-[#e0e0e0] font-semibold text-sm">
+          BTC On-Chain sinyalleri Premium
+        </div>
+        <p className="text-[#a0a0b8] text-xs leading-relaxed max-w-sm">
+          Borsa net akışı, balina oranı, MVRV, NUPL, funding ve 15+ CryptoQuant Pro
+          sinyalinin AXIOM yorumu Premium üyelere açık. Skor özeti ücretsiz.
+        </p>
+        <button
+          onClick={onUpgrade}
+          className="mt-1 px-5 py-2 rounded-lg bg-[#a78bfa] text-[#0e0e1a] font-semibold text-sm hover:bg-[#a78bfa]/90 transition"
+        >
+          💎 Premium ile sinyalleri aç
+        </button>
       </div>
     </div>
   );
@@ -1386,7 +1434,29 @@ function MetricsTable({ headline, core }: { headline: MacroRelease; core: MacroR
   );
 }
 
-function MacroBody({ data, core }: { data: MacroRelease; core: MacroRelease | null }) {
+// Free/anonim için makro yorum kilidi: ham veriler (metrik/tarihçe/piyasa
+// tepkisi/takvim) görünür kalır, AXIOM yorumu + sektör etkisi + ton kilitli.
+function MacroLocked({ onUpgrade }: { onUpgrade: () => void }) {
+  return (
+    <div className="p-6 bg-gradient-to-b from-[#1a0f2e] to-[#0f0f20] border border-[#4a2a6e] rounded text-center flex flex-col items-center gap-3">
+      <span className="text-3xl">🔒</span>
+      <div className="text-[#e0e0e0] font-semibold text-sm">Makro yorum + sektör etkisi Premium</div>
+      <p className="text-[#a0a0b8] text-xs leading-relaxed max-w-sm">
+        Verinin AXIOM yorumu, sektör etkisi (olumlu/olumsuz) ve şahin/güvercin
+        piyasa tonu Premium üyelere açık. Ham veriler (önceki/beklenti/gelen,
+        tarihçe, piyasa tepkisi, takvim) ücretsiz.
+      </p>
+      <button
+        onClick={onUpgrade}
+        className="mt-1 px-5 py-2 rounded-lg bg-[#a78bfa] text-[#0e0e1a] font-semibold text-sm hover:bg-[#a78bfa]/90 transition"
+      >
+        💎 Premium ile yorumu aç
+      </button>
+    </div>
+  );
+}
+
+function MacroBody({ data, core, isPaid, onUpgrade }: { data: MacroRelease; core: MacroRelease | null; isPaid: boolean; onUpgrade: () => void }) {
   const sentiment = data.sentiment_score;
   const tone = (() => {
     if (sentiment == null) return { label: 'Bilinmiyor', color: 'text-[#8888a0]', dot: 'bg-[#555570]' };
@@ -1452,78 +1522,84 @@ function MacroBody({ data, core }: { data: MacroRelease; core: MacroRelease | nu
         />
       )}
 
-      {/* Storyteller card — ABD makro (CPI/NFP/PCE/PPI/FOMC) + TR makro
-          (TÜFE/PPK/İşsizlik) için tier'lı paragraflı hikaye + inline [SRC]
-          chip'leri + Premium/Advance upgrade CTA. Diğer event_type'lar için
-          aşağıdaki narrative_md fallback'i kalır. */}
-      {['CPI', 'NFP', 'PCE', 'PPI', 'FOMC_STATEMENT',
-        'TR_TUFE', 'TR_POLICY_RATE', 'TR_UNEMPLOYMENT'].includes(
-        (data.event_type || '').toUpperCase()
-      ) ? (
-        <MacroStoryCard eventId={data.event_id} />
-      ) : data.narrative_md ? (
-        <p className="text-sm text-[#e0e0e0] leading-relaxed whitespace-pre-line">
-          {data.narrative_md}
-        </p>
-      ) : (
-        <p className="text-[12px] text-[#555570] italic">Henüz narrative üretilmedi.</p>
-      )}
+      {isPaid ? (
+        <>
+          {/* Storyteller card — ABD makro (CPI/NFP/PCE/PPI/FOMC) + TR makro
+              (TÜFE/PPK/İşsizlik) için tier'lı paragraflı hikaye + inline [SRC]
+              chip'leri + Premium/Advance upgrade CTA. Diğer event_type'lar için
+              aşağıdaki narrative_md fallback'i kalır. */}
+          {['CPI', 'NFP', 'PCE', 'PPI', 'FOMC_STATEMENT',
+            'TR_TUFE', 'TR_POLICY_RATE', 'TR_UNEMPLOYMENT'].includes(
+            (data.event_type || '').toUpperCase()
+          ) ? (
+            <MacroStoryCard eventId={data.event_id} />
+          ) : data.narrative_md ? (
+            <p className="text-sm text-[#e0e0e0] leading-relaxed whitespace-pre-line">
+              {data.narrative_md}
+            </p>
+          ) : (
+            <p className="text-[12px] text-[#555570] italic">Henüz narrative üretilmedi.</p>
+          )}
 
-      {hasSectors && (
-        <div className="space-y-1.5">
-          {sectorsPos.length > 0 && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[10px] text-[#8888a0] uppercase tracking-wider mr-1">Olumlu</span>
-              {sectorsPos.map((s) => (
-                <span
-                  key={`pos-${s}`}
-                  className="px-2 py-0.5 rounded text-[11px] bg-[#0f1f15] border border-[#26a69a]/40 text-[#26a69a]"
-                  data-testid="macro-sector-pos"
-                >
-                  ↑ {sectorLabelTr(s)}
-                </span>
-              ))}
+          {hasSectors && (
+            <div className="space-y-1.5">
+              {sectorsPos.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-[#8888a0] uppercase tracking-wider mr-1">Olumlu</span>
+                  {sectorsPos.map((s) => (
+                    <span
+                      key={`pos-${s}`}
+                      className="px-2 py-0.5 rounded text-[11px] bg-[#0f1f15] border border-[#26a69a]/40 text-[#26a69a]"
+                      data-testid="macro-sector-pos"
+                    >
+                      ↑ {sectorLabelTr(s)}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {sectorsNeg.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-[#8888a0] uppercase tracking-wider mr-1">Olumsuz</span>
+                  {sectorsNeg.map((s) => (
+                    <span
+                      key={`neg-${s}`}
+                      className="px-2 py-0.5 rounded text-[11px] bg-[#1f0f10] border border-[#ef5350]/40 text-[#ef5350]"
+                      data-testid="macro-sector-neg"
+                    >
+                      ↓ {sectorLabelTr(s)}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
-          {sectorsNeg.length > 0 && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[10px] text-[#8888a0] uppercase tracking-wider mr-1">Olumsuz</span>
-              {sectorsNeg.map((s) => (
-                <span
-                  key={`neg-${s}`}
-                  className="px-2 py-0.5 rounded text-[11px] bg-[#1f0f10] border border-[#ef5350]/40 text-[#ef5350]"
-                  data-testid="macro-sector-neg"
-                >
-                  ↓ {sectorLabelTr(s)}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
-      <div className="space-y-1.5">
-        <div className="flex items-center gap-2 text-[11px]">
-          <span className={`w-2 h-2 rounded-full ${tone.dot}`} />
-          <span className="text-[#8888a0]">Piyasa tonu:</span>
-          <span className={`font-semibold ${tone.color}`}>{tone.label}</span>
-          {sentiment != null && (
-            <span className="text-[#555570] font-mono ml-1">({sentiment.toFixed(2)})</span>
-          )}
-        </div>
-        {sentiment != null && (
-          <div className="flex items-center gap-2" data-testid="macro-gauge">
-            <span className="text-[9px] text-[#555570]">Şahin</span>
-            <div className="flex-1 h-1.5 rounded-full bg-[#0f0f20] border border-[#2a2a3e] overflow-hidden">
-              <div
-                className={`h-full ${gaugeColor}`}
-                style={{ width: `${Math.max(0, Math.min(1, sentiment)) * 100}%` }}
-              />
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-[11px]">
+              <span className={`w-2 h-2 rounded-full ${tone.dot}`} />
+              <span className="text-[#8888a0]">Piyasa tonu:</span>
+              <span className={`font-semibold ${tone.color}`}>{tone.label}</span>
+              {sentiment != null && (
+                <span className="text-[#555570] font-mono ml-1">({sentiment.toFixed(2)})</span>
+              )}
             </div>
-            <span className="text-[9px] text-[#555570]">Güvercin</span>
+            {sentiment != null && (
+              <div className="flex items-center gap-2" data-testid="macro-gauge">
+                <span className="text-[9px] text-[#555570]">Şahin</span>
+                <div className="flex-1 h-1.5 rounded-full bg-[#0f0f20] border border-[#2a2a3e] overflow-hidden">
+                  <div
+                    className={`h-full ${gaugeColor}`}
+                    style={{ width: `${Math.max(0, Math.min(1, sentiment)) * 100}%` }}
+                  />
+                </div>
+                <span className="text-[9px] text-[#555570]">Güvercin</span>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      ) : (
+        <MacroLocked onUpgrade={onUpgrade} />
+      )}
 
       {!isPctEvent && (data.actual_value != null || data.prior_value != null) && (
         <div className="grid grid-cols-2 gap-2">
@@ -1660,6 +1736,11 @@ export function SummaryDetailModal({
   content: ModalContent | null;
   onClose: () => void;
 }) {
+  const { user } = useAuth();
+  const tier = (user?.tier || 'free').toLowerCase();
+  const isPaid = tier === 'premium' || tier === 'advance';
+  const [showUpgrade, setShowUpgrade] = useState(false);
+
   // ESC ile kapat
   useEffect(() => {
     if (!content) return;
@@ -1729,8 +1810,20 @@ export function SummaryDetailModal({
           {content.type === 'earnings' && <EarningsBody data={content.data} />}
           {content.type === 'sectors' && <SectorsBody data={content.data} />}
           {content.type === 'vix' && <FearBody data={content.data} />}
-          {content.type === 'macro' && <MacroBody data={content.data} core={content.core ?? null} />}
-          {content.type === 'onchain' && <OnChainBody data={content.data} />}
+          {content.type === 'macro' && (
+            <MacroBody
+              data={content.data}
+              core={content.core ?? null}
+              isPaid={isPaid}
+              onUpgrade={() => setShowUpgrade(true)}
+            />
+          )}
+          {content.type === 'onchain' &&
+            (isPaid ? (
+              <OnChainBody data={content.data} />
+            ) : (
+              <OnChainLocked data={content.data} onUpgrade={() => setShowUpgrade(true)} />
+            ))}
           {content.type === 'corporate' && <CorporateSynthesisBody data={content.data} />}
         </div>
 
@@ -1739,6 +1832,13 @@ export function SummaryDetailModal({
           Esc veya dışına tıkla → kapat
         </div>
       </div>
+
+      <InlineUpgradeModal
+        open={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        targetTier="premium"
+        reason="BTC on-chain sinyalleri (CryptoQuant Pro) ve AXIOM skoru Premium üyelere açık. Premium ile tüm sinyalleri ve yorumları gör."
+      />
     </div>
   );
 }

@@ -8,6 +8,8 @@ import FavoritesBar from '@/components/news/FavoritesBar';
 import { DashboardSummary } from '@/components/dashboard/DashboardSummary';
 import MarketTicker from '@/components/ticker/MarketTicker';
 import { useNewsStream, type StreamedNews } from '@/hooks/useNewsStream';
+import { useNewsReadGate } from '@/hooks/useNewsReadGate';
+import InlineUpgradeModal from '@/components/ui/InlineUpgradeModal';
 import {
   getVotes,
   getFavorites,
@@ -133,6 +135,10 @@ export default function NewsTab({ locale }: NewsTabProps) {
   const [error, setError] = useState<string | null>(null);
   const [selectedNewsId, setSelectedNewsId] = useState<string | null>(null);
   const [newsModalOpen, setNewsModalOpen] = useState(false);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+
+  // Günlük ücretsiz okuma gate'i (free/anonim 5 haber/gün, paid sınırsız).
+  const readGate = useNewsReadGate();
   const [votes, setVotes] = useState<Record<string, NewsVote>>({});
   const [favorites, setFavorites] = useState<string[]>([]);
   const [category, setCategory] = useState<NewsCategoryFilter>('all');
@@ -257,6 +263,15 @@ export default function NewsTab({ locale }: NewsTabProps) {
   const selectedNews = selectedNewsId ? news.find(n => n.id === selectedNewsId) ?? null : null;
   const selectedVotes = selectedNewsId ? votes[selectedNewsId] ?? null : null;
 
+  // Haber detayını aç: modalı göster + günlük okuma hakkını dene. tryUnlock
+  // gate.paywalled'ı bu habere göre günceller; başlık her zaman görünür,
+  // hak dolduysa özet+analiz yerine kilit overlay render edilir.
+  const openNews = useCallback((id: string) => {
+    setSelectedNewsId(id);
+    setNewsModalOpen(true);
+    void readGate.tryUnlock(id);
+  }, [readGate]);
+
   const handleVote = (voteType: 'bullish' | 'bearish' | 'panic') => {
     if (!selectedNewsId) return;
     setVotes(addVote(selectedNewsId, voteType));
@@ -289,15 +304,29 @@ export default function NewsTab({ locale }: NewsTabProps) {
       <div className="grid grid-cols-1 md:grid-cols-12 gap-0 flex-1 overflow-hidden">
         {/* Sol: haber listesi + kategori tablari */}
         <div className="col-span-1 md:col-span-3 border-r border-[#2a2a3e] flex flex-col overflow-hidden">
+        {readGate.limit !== null && (
+          <button
+            onClick={() => readGate.remaining === 0 && setShowUpgrade(true)}
+            className={`text-[10px] px-3 py-1.5 border-b border-[#2a2a3e] text-left transition ${
+              readGate.remaining === 0
+                ? 'text-[#a78bfa] hover:bg-[#1a0f2e] cursor-pointer'
+                : 'text-[#8888a0] cursor-default'
+            }`}
+            title={locale === 'tr' ? 'Günlük ücretsiz haber okuma hakkın' : 'Daily free article reads'}
+          >
+            {readGate.remaining === 0
+              ? (locale === 'tr' ? '🔒 Bugünkü ücretsiz hakkın doldu · Premium →' : '🔒 Daily free limit reached · Premium →')
+              : (locale === 'tr'
+                  ? `🆓 Bugün ${readGate.remaining}/${readGate.limit} ücretsiz haber kaldı`
+                  : `🆓 ${readGate.remaining}/${readGate.limit} free reads left today`)}
+          </button>
+        )}
         <NewsList
           items={displayedNews}
           loading={loading}
           error={error}
           selectedId={selectedNewsId}
-          onSelectNews={(id) => {
-            setSelectedNewsId(id);
-            setNewsModalOpen(true);
-          }}
+          onSelectNews={openNews}
           category={category}
           onCategoryChange={setCategory}
           locale={locale}
@@ -318,10 +347,7 @@ export default function NewsTab({ locale }: NewsTabProps) {
             onAddFavorite={handleAddFavorite}
             favorites={favorites}
             allNews={news}
-            onSelectNews={(id) => {
-              setSelectedNewsId(id);
-              setNewsModalOpen(true);
-            }}
+            onSelectNews={openNews}
           />
         </div>
 
@@ -365,12 +391,25 @@ export default function NewsTab({ locale }: NewsTabProps) {
                 onAddFavorite={handleAddFavorite}
                 favorites={favorites}
                 allNews={news}
-                onSelectNews={(id) => setSelectedNewsId(id)}
+                onSelectNews={openNews}
+                locked={readGate.paywalled}
+                onUpgrade={() => setShowUpgrade(true)}
               />
             </div>
           </div>
         </div>
       )}
+
+      <InlineUpgradeModal
+        open={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        targetTier="premium"
+        reason={
+          locale === 'tr'
+            ? 'Günde 5 ücretsiz haber okuma hakkını kullandın. Premium ile tüm haberlerin AI özetini ve AXIOM pazar analizini sınırsız oku.'
+            : "You've used your 5 free article reads today. Premium unlocks unlimited AI summaries and AXIOM market analysis."
+        }
+      />
     </div>
   );
 }

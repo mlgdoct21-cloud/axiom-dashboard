@@ -7,9 +7,8 @@
  * sağdaki detay panelinde açılır.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import type { NewsItem } from '@/components/tabs/NewsTab';
-import NewsPreviewModal from './NewsPreviewModal';
 
 interface Props {
   locale: 'en' | 'tr';
@@ -97,9 +96,9 @@ function FeaturedCard({
         {item.title}
       </h3>
 
-      {/* Summary — flex-1 ile kartı dikey doldur, daha geniş clamp */}
+      {/* Summary — kısa teaser (tam okuma gate'li modalda; line-clamp ile kanca) */}
       {summary && (
-        <p className="text-[12px] text-[#a0a0b8] leading-relaxed line-clamp-6 flex-1">{summary}</p>
+        <p className="text-[12px] text-[#a0a0b8] leading-relaxed line-clamp-3 flex-1">{summary}</p>
       )}
 
       {/* Footer: source + symbols + CTA */}
@@ -129,8 +128,6 @@ function FeaturedCard({
 }
 
 export default function AxiomDigestEmptyState({ locale, news, onSelectNews }: Props) {
-  const [previewItem, setPreviewItem] = useState<NewsItem | null>(null);
-
   // Top 3 öne çıkan haberi seç:
   //   1) is_urgent=true olanlar önce
   //   2) Sonra son 12 saatlik haberler
@@ -199,7 +196,7 @@ export default function AxiomDigestEmptyState({ locale, news, onSelectNews }: Pr
                 item={item}
                 rank={i + 1}
                 locale={locale}
-                onClick={() => setPreviewItem(item)}
+                onClick={() => onSelectNews?.(item.id)}
               />
             ))}
           </div>
@@ -211,14 +208,6 @@ export default function AxiomDigestEmptyState({ locale, news, onSelectNews }: Pr
           </div>
         )}
       </div>
-
-      {/* Featured haber pop-up modal */}
-      <NewsPreviewModal
-        item={previewItem}
-        locale={locale}
-        onClose={() => setPreviewItem(null)}
-        onOpenFull={onSelectNews}
-      />
     </div>
   );
 }
