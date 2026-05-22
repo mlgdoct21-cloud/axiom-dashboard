@@ -254,6 +254,30 @@ export interface AcademyLiveContext {
   stale: boolean;
 }
 
+export interface AcademyLiveExamplePayoffPoint {
+  price: number;
+  pnl: number;
+}
+
+export interface AcademyLiveExample {
+  available: boolean;
+  asset?: string;
+  strategy?: string;
+  data_source?: 'deribit_live' | 'theoretical_fallback';
+  spot?: number;
+  strike?: number;
+  expiry_days?: number;
+  premium_usd?: number;
+  iv_pct?: number | null;
+  instrument?: string | null;
+  max_loss_usd?: number;
+  breakeven_up_usd?: number;
+  protected_floor_usd?: number;
+  payoff?: AcademyLiveExamplePayoffPoint[];
+  generated_at?: string;
+  error?: string;
+}
+
 export interface AcademyModuleProgress {
   module_id: string;
   total: number;
@@ -817,6 +841,12 @@ class ApiClient {
 
   async getAcademyProgress(): Promise<AcademyProgressSummary> {
     return this.request<AcademyProgressSummary>('/academy/progress');
+  }
+
+  async getAcademyLiveExample(strategy: string, asset: string = 'BTC'): Promise<AcademyLiveExample> {
+    return this.request<AcademyLiveExample>(
+      `/academy/live-example/${encodeURIComponent(strategy)}?asset=${encodeURIComponent(asset)}`,
+    );
   }
 
   async getAcademyLiveContext(): Promise<AcademyLiveContext> {

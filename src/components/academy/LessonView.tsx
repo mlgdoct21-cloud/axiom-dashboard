@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { apiClient, type AcademyLesson, type AcademyLessonResponse } from '@/lib/api';
 import MiniQuiz from './MiniQuiz';
 import ThetaWheel from './ThetaWheel';
+import LiveExampleModal from './LiveExampleModal';
 
 interface Props {
   lessonId: string;
@@ -11,10 +12,16 @@ interface Props {
   onProgressChange?: () => void;
 }
 
+// Ders slug'ı → canlı 'Gerçek Örnek' stratejisi (şimdilik prototip: protective put).
+const LIVE_EXAMPLE_BY_SLUG: Record<string, { strategy: string; label: string }> = {
+  'protective-put': { strategy: 'protective-put', label: 'Protective Put — Portföy Sigortası' },
+};
+
 export default function LessonView({ lessonId, isAuthenticated, onProgressChange }: Props) {
   const [payload, setPayload] = useState<AcademyLessonResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [liveExampleOpen, setLiveExampleOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,6 +73,7 @@ export default function LessonView({ lessonId, isAuthenticated, onProgressChange
   }
 
   const showThetaWheel = les.id === 'M2L2' || les.horology_link === 'escapement' || les.horology_link === 'mainspring';
+  const liveExample = LIVE_EXAMPLE_BY_SLUG[les.slug];
 
   return (
     <article className="space-y-6">
@@ -82,6 +90,27 @@ export default function LessonView({ lessonId, isAuthenticated, onProgressChange
           {les.body}
         </div>
       </section>
+
+      {liveExample && (
+        <button
+          type="button"
+          onClick={() => setLiveExampleOpen(true)}
+          className="w-full flex items-center justify-between rounded-xl border border-[#4fc3f7]/40 bg-gradient-to-r from-[#4fc3f7]/10 to-[#a78bfa]/10 px-5 py-3 hover:from-[#4fc3f7]/20 hover:to-[#a78bfa]/20 transition"
+        >
+          <span className="text-sm font-semibold text-[#4fc3f7]">
+            📊 Bunu bugünün gerçek rakamlarıyla gör
+          </span>
+          <span className="text-xs text-gray-400">canlı örnek →</span>
+        </button>
+      )}
+
+      {liveExample && liveExampleOpen && (
+        <LiveExampleModal
+          strategy={liveExample.strategy}
+          strategyLabel={liveExample.label}
+          onClose={() => setLiveExampleOpen(false)}
+        />
+      )}
 
       {showThetaWheel && (
         <div>
