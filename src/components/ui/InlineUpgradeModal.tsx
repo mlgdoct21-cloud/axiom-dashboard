@@ -19,7 +19,7 @@
 
 import { useEffect } from 'react';
 
-const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'axiom_finansal_bot';
+const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'AxiomAnaliz_Bot';
 
 export type UpgradeTier = 'premium' | 'advance';
 

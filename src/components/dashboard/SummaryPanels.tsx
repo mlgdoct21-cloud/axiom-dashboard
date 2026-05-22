@@ -139,15 +139,56 @@ function colorAccent(color?: string): ChipProps['accent'] {
   return 'gray';
 }
 
-export function DigestRiskChip({ card, loading, onClick }: { card?: DailyDigestCard; loading?: boolean; onClick?: () => void }) {
+/**
+ * DigestRiskChip — Risk Radar chip.
+ *
+ * 2026-05-22 genişletme: Mevcut "borsa akışı" özeti üstüne **makro risk
+ * göstergesi** (DXY + 10Y yön + sıradaki event) tertiary satırı eklendi.
+ * Vadeli/Makro yeni-tab planı yerine mevcut chip'i zenginleştirme yaklaşımı.
+ */
+export function DigestRiskChip({
+  card,
+  loading,
+  onClick,
+  macroSnap,
+  nextEventLabel,
+}: {
+  card?: DailyDigestCard;
+  loading?: boolean;
+  onClick?: () => void;
+  /** Makro snapshot: DXY + 10Y son değer + yön. */
+  macroSnap?: { dxy?: number | null; us10y?: number | null; dxy_dir?: 'up' | 'down'; us10y_dir?: 'up' | 'down' } | null;
+  /** Bu haftanın sıradaki yüksek-etki event'i (örn. "FOMC 22 May"). */
+  nextEventLabel?: string;
+}) {
   const empty = !loading && (!card || (!card.analysis && !card.symbols?.length));
   const symbols = card?.symbols?.slice(0, 3).join(' · ');
+
+  // tertiary: makro mini-özet. DXY ve 10Y yön okları + sıradaki event.
+  // Görünürlük için: data yokken bile "Makro: yükleniyor" göstererek satır var olduğunu belirt.
+  const arrow = (d?: 'up' | 'down') => (d === 'up' ? '↗' : d === 'down' ? '↘' : '');
+  const macroTertiary = (() => {
+    const parts: string[] = [];
+    if (macroSnap && typeof macroSnap.dxy === 'number') {
+      parts.push(`DXY ${macroSnap.dxy.toFixed(1)}${arrow(macroSnap.dxy_dir)}`);
+    }
+    if (macroSnap && typeof macroSnap.us10y === 'number') {
+      parts.push(`10Y ${macroSnap.us10y.toFixed(2)}%${arrow(macroSnap.us10y_dir)}`);
+    }
+    if (nextEventLabel) {
+      parts.push(`📅 ${nextEventLabel}`);
+    }
+    if (parts.length === 0) return undefined;
+    return parts.join(' · ');
+  })();
+
   return (
     <Chip
       icon="🔴"
       title="Risk Radar"
       primary={card?.analysis}
       secondary={symbols}
+      tertiary={macroTertiary}
       accent={colorAccent(card?.color)}
       loading={loading}
       empty={empty}
@@ -507,10 +548,14 @@ export function MiniMacroChip({
   release,
   loading,
   onClick,
+  liquidity,
 }: {
   release?: MacroRelease | null;
   loading?: boolean;
   onClick?: () => void;
+  /** 2026-05-22 — Global Likidite (Fed M2 + ECB): chip'in tertiary
+   *  satırına özet olarak (M2+ECB toplam + 30g %değişim) eklenir. */
+  liquidity?: { value_trn: number; ch_30d_pct: number; trend: string } | null;
 }) {
   // Pull next event from the same merged calendar the modal uses. Hook caches
   // 5min and polls 10min so adding a second consumer here is cheap.
@@ -523,14 +568,32 @@ export function MiniMacroChip({
   const ageText = _macroAgeText(release?.released_at);
   const narrative = release?.narrative_md?.slice(0, 70) || '';
 
-  // Tertiary = next upcoming event, e.g. "📅 Sırada: NFP — yarın (8 May)".
-  const tertiary = nextEvent ? (
+  // Tertiary = sıradaki event + Global Likidite (varsa).
+  // Format: "📅 NFP — yarın · 💧 $30.4T -0.8%"
+  const liqPart = liquidity ? (
+    <span className="text-[#26a69a]">
+      💧 ${liquidity.value_trn.toFixed(1)}T{' '}
+      <span className={liquidity.ch_30d_pct >= 0 ? 'text-[#26a69a]' : 'text-[#ef5350]'}>
+        {liquidity.ch_30d_pct >= 0 ? '+' : ''}{liquidity.ch_30d_pct.toFixed(1)}%
+      </span>
+    </span>
+  ) : null;
+
+  const eventPart = nextEvent ? (
     <span>
-      📅 Sırada:{' '}
+      📅{' '}
       <span className="font-medium text-[#e0e0e0]">
         {_UPCOMING_LABEL[nextEvent.event_type] || nextEvent.event_type}
       </span>{' '}
-      — {_daysUntilShort(nextEvent.scheduled_at)} ({_formatUpcomingShort(nextEvent.scheduled_at)})
+      — {_daysUntilShort(nextEvent.scheduled_at)}
+    </span>
+  ) : null;
+
+  const tertiary = (eventPart || liqPart) ? (
+    <span>
+      {eventPart}
+      {eventPart && liqPart && <span className="text-[#555570]"> · </span>}
+      {liqPart}
     </span>
   ) : null;
 

@@ -41,7 +41,13 @@ export interface OnChainSnapshot {
   puell?: { puell: number; date: string };
   leverage_ratio?: { leverage_ratio: number; date: string };
   realized_price?: { realized_price: number; date: string };
+  /** Faz D.1 — Short-Term Holder realized price (kısa-vade yatırımcı maliyet temeli). */
+  sth_realized_price?: { realized_price: number; date: string };
+  /** Faz D.1 — Long-Term Holder realized price (uzun-vade yatırımcı maliyet temeli, güçlü destek). */
+  lth_realized_price?: { realized_price: number; date: string };
   hash_rate?: { hash_rate: number; change_7d_pct: number; date: string };
+  /** Backend snapshot'ta mevcut — long/short tasfiye USD'leri (24s). */
+  btc_liquidations?: { long_usd: number; short_usd: number; total_usd: number; date: string };
   signals: Record<string, SignalEntry>;
   overall: OverallSignal;
   overall_tr: string;

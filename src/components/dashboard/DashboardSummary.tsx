@@ -14,7 +14,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useDailyDigest } from '@/hooks/useDailyDigest';
 import { useDashboardSummary } from '@/hooks/useDashboardSummary';
-import { useMacroLatest } from '@/hooks/useMacroLatest';
+import { useMacroLatest, useMacroUpcoming } from '@/hooks/useMacroLatest';
 import type { OnChainSnapshot } from '@/lib/cryptoquant';
 import {
   DigestRiskChip,
@@ -36,6 +36,27 @@ export function DashboardSummary() {
   const { digest, loading: digestLoading, error: digestError } = useDailyDigest(true);
   const { data, loading, error, refresh } = useDashboardSummary(true);
   const { data: macroData, loading: macroLoading } = useMacroLatest(true);
+  // 2026-05-22: Risk Radar chip'ine sıradaki event etiketi için.
+  const { data: macroUpcoming } = useMacroUpcoming(true, { days: 7, limit: 5 });
+  // 2026-05-22: Makro Pulse chip'ine Global Likidite (Fed M2 + ECB) için.
+  const [liquidity, setLiquidity] = useState<{ value_trn: number; ch_30d_pct: number; trend: string } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch('/api/macro/liquidity');
+        if (!r.ok) return;
+        const body = await r.json();
+        if (cancelled || body.error) return;
+        setLiquidity({
+          value_trn: body.value_trn,
+          ch_30d_pct: body.ch_30d_pct,
+          trend: body.trend,
+        });
+      } catch { /* sessiz — Makro Pulse'da likidite görünmez */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
   const [modal, setModal] = useState<ModalContent | null>(null);
   const [onchainData, setOnchainData] = useState<OnChainSnapshot | null>(null);
   const [corpData, setCorpData] = useState<CorporateResponse | null>(null);
@@ -117,6 +138,32 @@ export function DashboardSummary() {
         <DigestRiskChip
           card={digest?.risk_radar}
           loading={digestLoading && !digest}
+          // 2026-05-22: Makro risk göstergesi tertiary satırı.
+          macroSnap={(() => {
+            const reaction = macroData?.release?.market_reaction;
+            const snap = reaction?.snapshot;
+            if (!snap) return null;
+            return {
+              dxy: snap.dxy ?? null,
+              us10y: snap.us10y ?? null,
+              dxy_dir: (reaction?.dxy_change_pct ?? 0) >= 0 ? 'up' : 'down',
+              us10y_dir: (reaction?.us10y_change_bp ?? 0) >= 0 ? 'up' : 'down',
+            };
+          })()}
+          nextEventLabel={(() => {
+            const ev = macroUpcoming?.events?.[0];
+            if (!ev) return undefined;
+            try {
+              const when = new Date(ev.scheduled_at).toLocaleString('tr-TR', {
+                day: '2-digit',
+                month: 'short',
+              });
+              const name = (ev.label || ev.event_type || '').slice(0, 14);
+              return `${name} ${when}`;
+            } catch {
+              return undefined;
+            }
+          })()}
           onClick={
             digest?.risk_radar
               ? () =>
@@ -197,6 +244,7 @@ export function DashboardSummary() {
         <MiniMacroChip
           release={macroData?.release}
           loading={macroLoading && !macroData}
+          liquidity={liquidity}
           onClick={
             macroData?.release
               ? () => open({ type: 'macro', data: macroData.release!, core: macroData.core_release ?? null })

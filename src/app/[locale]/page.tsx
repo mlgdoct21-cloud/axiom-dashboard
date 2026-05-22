@@ -70,11 +70,11 @@ export default function Home() {
             </svg>
           </a>
           <a
-            href="https://t.me/axiom_bot"
+            href="https://t.me/AxiomAnaliz_Bot"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="AXIOM Telegram Bot"
-            title="AXIOM Telegram Bot (@axiom_bot)"
+            title="AXIOM Telegram Bot (@AxiomAnaliz_Bot)"
             className="p-1.5 rounded text-[#8888a0] hover:text-[#4fc3f7] hover:bg-[#1e1e38] transition"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

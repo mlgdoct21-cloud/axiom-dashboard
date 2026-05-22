@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   ALL_TERMS,
   CATEGORIES,
@@ -15,11 +16,23 @@ import {
 /**
  * AXIOM Sözlük — kategori grid → kategori liste → terim modal akışı.
  * Arama varken kategori filtresi devre dışı, tüm sözlükte flat sonuç.
+ *
+ * Faz A.7: URL'den ?q=<term> ile geldiyse arama state'i pre-fill edilir
+ * (Kokpit chip InfoModal'daki "🎓 Akademi'de Aç →" CTA için).
  */
 export default function GlossaryView() {
+  const urlSearchParams = useSearchParams();
+  const initialQ = urlSearchParams.get('q') ?? '';
+
   const [selectedCategory, setSelectedCategory] = useState<GlossaryCategory | null>(null);
   const [selectedTerm, setSelectedTerm] = useState<GlossaryTerm | null>(null);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialQ);
+
+  // Pre-fill: URL'deki q değişirse (örn. başka chip'ten gelince) arama güncellensin.
+  useEffect(() => {
+    if (initialQ && initialQ !== query) setQuery(initialQ);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQ]);
 
   const trimmed = query.trim();
   const isSearching = trimmed.length > 0;

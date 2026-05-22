@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import PriceChart from '@/components/charts/PriceChart';
+import VolumeProfilePanel from '@/components/charts/VolumeProfilePanel';
+import MtfPanel from '@/components/charts/MtfPanel';
 import type { Resolution } from '@/lib/finnhub';
 
 interface TechnicalTabProps {
@@ -240,6 +242,10 @@ export default function TechnicalTab({ locale }: TechnicalTabProps) {
   const [signal, setSignal] = useState<ScalpResponse | null>(null);
   const [signalLoading, setSignalLoading] = useState(false);
   const [signalError, setSignalError] = useState<string | null>(null);
+  // Faz E.1 — Volume Profile (VPVR) collapsible. Default kapalı (görsel kirlilik olmasın).
+  const [vpvrOpen, setVpvrOpen] = useState<boolean>(false);
+  // Faz E.2 — MTF panel. Default kapalı.
+  const [mtfOpen, setMtfOpen] = useState<boolean>(false);
   // TODO: auth geldiginde session'dan cek. Simdilik test icin sinirsiz.
   type UserTier = 'free' | 'premium' | 'advance';
   const userTier = 'advance' as UserTier;
@@ -534,6 +540,58 @@ export default function TechnicalTab({ locale }: TechnicalTabProps) {
         locale={locale}
         height={450}
       />
+
+      {/* Faz E.1 — Volume Profile (VPVR) collapsible panel. Default kapalı.
+          Eleştirideki "fiyat zamana değil seviyeye göre yoğunlaşma" görüşü için. */}
+      <section>
+        <button
+          type="button"
+          onClick={() => setVpvrOpen((v) => !v)}
+          aria-expanded={vpvrOpen}
+          className="w-full flex items-center justify-between px-3 py-2 bg-[#141425] hover:bg-[#1a1a2e] border border-[#2a2a3e] rounded transition-colors group"
+        >
+          <span className="text-[11px] font-semibold text-[#8888a0] uppercase tracking-wider flex items-center gap-1.5">
+            <span className="w-1 h-3 bg-[#4fc3f7] rounded group-hover:bg-[#4fc3f7] transition-colors" />
+            📊 Hacim Profili (VPVR) — fiyat-bazlı hacim dağılımı
+          </span>
+          <span className={`text-[#8888a0] text-[12px] transition-transform ${vpvrOpen ? 'rotate-180' : ''}`}>
+            ▼
+          </span>
+        </button>
+        {vpvrOpen && (
+          <div className="mt-3">
+            <VolumeProfilePanel
+              symbol={selectedSymbol}
+              resolution={currentTimeframe.resolution}
+              bins={30}
+              height={360}
+            />
+          </div>
+        )}
+      </section>
+
+      {/* Faz E.2 — Sembol-bazlı MTF mini-panel (1dk/5dk/15dk/1s/4s/1g) */}
+      <section>
+        <button
+          type="button"
+          onClick={() => setMtfOpen((v) => !v)}
+          aria-expanded={mtfOpen}
+          className="w-full flex items-center justify-between px-3 py-2 bg-[#141425] hover:bg-[#1a1a2e] border border-[#2a2a3e] rounded transition-colors group"
+        >
+          <span className="text-[11px] font-semibold text-[#8888a0] uppercase tracking-wider flex items-center gap-1.5">
+            <span className="w-1 h-3 bg-[#26a69a] rounded" />
+            📈 Çoklu Zaman Dilimi Trendi (MTF) — 6 dilim hizalama
+          </span>
+          <span className={`text-[#8888a0] text-[12px] transition-transform ${mtfOpen ? 'rotate-180' : ''}`}>
+            ▼
+          </span>
+        </button>
+        {mtfOpen && (
+          <div className="mt-3">
+            <MtfPanel symbol={selectedSymbol} />
+          </div>
+        )}
+      </section>
 
       {/* Trade Signal (AI) */}
       <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 border border-purple-500/30 rounded-xl p-6 space-y-4">

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuotaSummary, QuotaCommandStatus } from '@/hooks/useQuotaSummary';
 import { UserTier } from '@/lib/api';
 
-const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'axiom_finansal_bot';
+const BOT_USERNAME = process.env.NEXT_PUBLIC_BOT_USERNAME || 'AxiomAnaliz_Bot';
 const UPGRADE_URL = `https://t.me/${BOT_USERNAME}?start=upgrade_premium`;
 
 const COMMAND_LABELS: Record<string, { emoji: string; tr: string }> = {

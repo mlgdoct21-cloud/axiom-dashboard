@@ -54,7 +54,7 @@ export default function LessonView({ lessonId, isAuthenticated, onProgressChange
           Tüm modüllere, ileri stratejilere ve quiz ilerlemene Premium ile ulaşırsın.
         </p>
         <a
-          href="https://t.me/axiom_finansal_bot?start=upgrade_premium"
+          href="https://t.me/AxiomAnaliz_Bot?start=upgrade_premium"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-block px-6 py-3 rounded-lg bg-[#a78bfa] text-[#0e0e1a] font-semibold hover:bg-[#a78bfa]/90"

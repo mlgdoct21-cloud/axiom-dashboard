@@ -1,7 +1,40 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { OnChainSnapshot, SignalEntry } from '@/lib/cryptoquant';
 import MetricTooltip from './MetricTooltip';
+import { METRIC_INFO } from '@/lib/onchain-glossary';
+
+/**
+ * CVD verisi — backend /api/cockpit/cvd endpoint'inden.
+ * 24h Binance klines'tan hesaplanan delta + uyum analizi.
+ */
+interface CvdData {
+  delta_24h_usd: number;
+  total_buy_usd: number;
+  total_sell_usd: number;
+  price_change_pct_24h: number;
+  divergence: 'uyumlu' | 'uyumsuz';
+  meaning: string;
+}
+
+function useCvd(): CvdData | null {
+  const [data, setData] = useState<CvdData | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch('/api/cockpit/cvd');
+        if (!r.ok) return;
+        const body = await r.json();
+        if (cancelled || body.error) return;
+        setData(body as CvdData);
+      } catch { /* sessiz — placeholder kalır */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  return data;
+}
 
 const C = {
   green:  '#26de81',
@@ -60,7 +93,12 @@ function MetricRow({ metricKey, sig, valueOverride, big = false }: {
     <div className="flex items-center justify-between gap-3 py-2 border-b border-[#1a1a2e] last:border-b-0">
       <div className="flex items-center min-w-0">
         <MetricTooltip metricKey={metricKey} currentValue={sig.value_str} currentZone={sig.label_tr} />
-        <span className="text-[11px] text-[#c0c0d0] ml-1 truncate"></span>
+        {/* 2026-05-22: Metric ismi her zaman görünür (eskiden boş span'dı; ⓘ tooltip
+            hover gerektiriyordu, kullanıcı şikayet etti). METRIC_INFO[key].short
+            kısa TR etiket (Kaldıraç, Funding, OI, Netflow...). */}
+        <span className="text-[11px] text-[#c0c0d0] ml-1.5 truncate">
+          {METRIC_INFO[metricKey]?.short || metricKey}
+        </span>
       </div>
       <div className="flex items-center gap-2 shrink-0">
         <span className={`font-mono font-bold ${valueClass} tabular-nums`} style={{ color }}>
@@ -190,17 +228,38 @@ export function WhaleRadarPanel({ data }: { data: OnChainSnapshot }) {
 
 // ── C. Risk Isı Haritası (Leverage Heat) ─────────────────────────────────────
 
+/**
+ * LeverageHeatPanel — 2026-05-22 genişletme: "Türev Piyasası" paneli.
+ *
+ * Mevcut Heat bar + Leverage/Funding/OI MetricRow'ları korundu. Altına
+ * 2 yeni section eklendi:
+ *   🔥 Likidasyon Havuzu — snapshot'taki btc_liquidations (long vs short)
+ *   📈 CVD — backend endpoint geldiğinde dolacak (placeholder)
+ *
+ * Vadeli/Likidite yeni-tab planı yerine mevcut on-chain paneli zenginleştirme
+ * yaklaşımı (bilişsel yük artmasın).
+ */
 export function LeverageHeatPanel({ data }: { data: OnChainSnapshot }) {
   const lev = data.signals.leverage_ratio;
   const fr  = data.signals.funding_rates;
   const oi  = data.signals.open_interest;
   const status = statusFromSignal(lev);
+  const cvd = useCvd();
 
   const levVal = data.leverage_ratio?.leverage_ratio ?? 0;
   const heatPct = Math.min(100, (levVal / 0.4) * 100);
 
+  // 🔥 Liquidation havuzu — snapshot'tan
+  const liq = data.btc_liquidations;
+  const longUsd = liq?.long_usd ?? 0;
+  const shortUsd = liq?.short_usd ?? 0;
+  const totalLiq = longUsd + shortUsd;
+  const longPct = totalLiq > 0 ? (longUsd / totalLiq) * 100 : 50;
+  const shortPct = totalLiq > 0 ? (shortUsd / totalLiq) * 100 : 50;
+  const liqFmt = (n: number) => (n >= 1e9 ? `$${(n / 1e9).toFixed(2)}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(0)}M` : `$${n.toFixed(0)}`);
+
   return (
-    <PanelShell icon="🌡️" title="KALDIRAÇ RİSKİ" statusLabel={status.label} statusColor={status.color}>
+    <PanelShell icon="🌡️" title="TÜREV PİYASASI" statusLabel={status.label} statusColor={status.color}>
       {/* Heat bar */}
       <div className="mb-3">
         <div className="flex items-baseline justify-between text-[10px] text-[#666] mb-1.5">
@@ -225,6 +284,69 @@ export function LeverageHeatPanel({ data }: { data: OnChainSnapshot }) {
         <MetricRow metricKey="leverage_ratio" sig={lev} />
         <MetricRow metricKey="funding_rates" sig={fr} />
         <MetricRow metricKey="open_interest" sig={oi} />
+      </div>
+
+      {/* 🔥 Liquidation Havuzu (snapshot'tan) */}
+      {liq && totalLiq > 0 && (
+        <div className="mt-3 border-t border-[#1a1a2e] pt-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-semibold text-[#8888a0] uppercase tracking-wider">
+              🔥 Likidasyon Havuzu (24s)
+            </span>
+            <span className="text-[10px] font-mono text-[#e0e0e0]">{liqFmt(totalLiq)} toplam</span>
+          </div>
+          <div className="relative h-2.5 rounded-full overflow-hidden bg-[#1a1a2e] flex">
+            <div className="h-full bg-[#26a69a]" style={{ width: `${longPct}%` }} title={`Long: ${liqFmt(longUsd)}`} />
+            <div className="h-full bg-[#ef5350]" style={{ width: `${shortPct}%` }} title={`Short: ${liqFmt(shortUsd)}`} />
+          </div>
+          <div className="flex justify-between text-[10px] font-mono mt-1">
+            <span className="text-[#26a69a]">Long {liqFmt(longUsd)}</span>
+            <span className="text-[#ef5350]">Short {liqFmt(shortUsd)}</span>
+          </div>
+          <div className="text-[10px] text-[#8888a0] italic mt-1">
+            {longUsd > shortUsd * 2
+              ? '⚠️ Long-side dominant likidasyon — düşüş baskısı tükenmiş olabilir'
+              : shortUsd > longUsd * 2
+              ? '⚠️ Short-side dominant — short squeeze potansiyeli'
+              : 'Dengeli tasfiye dağılımı'}
+          </div>
+        </div>
+      )}
+
+      {/* 📈 CVD — backend canlı veri */}
+      <div className="mt-3 border-t border-[#1a1a2e] pt-3">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[10px] font-semibold text-[#8888a0] uppercase tracking-wider">
+            📈 CVD (24s)
+          </span>
+          {cvd ? (
+            <span className="text-[10px] font-mono"
+              style={{ color: cvd.divergence === 'uyumlu' ? C.green : C.red }}>
+              {cvd.delta_24h_usd >= 0 ? '+' : ''}
+              {Math.abs(cvd.delta_24h_usd) >= 1e9
+                ? `$${(cvd.delta_24h_usd / 1e9).toFixed(2)}B`
+                : `$${(cvd.delta_24h_usd / 1e6).toFixed(0)}M`}
+            </span>
+          ) : (
+            <span className="text-[9px] text-[#555570] italic">yükleniyor...</span>
+          )}
+        </div>
+        {cvd && (
+          <>
+            <div className="flex justify-between text-[10px] font-mono">
+              <span className="text-[#26a69a]">Alıcı ${Math.round(cvd.total_buy_usd / 1e9 * 10) / 10}B</span>
+              <span className="text-[#ef5350]">Satıcı ${Math.round(cvd.total_sell_usd / 1e9 * 10) / 10}B</span>
+              <span className="text-[#8888a0]">
+                Fiyat: <span className={cvd.price_change_pct_24h >= 0 ? 'text-[#26a69a]' : 'text-[#ef5350]'}>
+                  {cvd.price_change_pct_24h >= 0 ? '+' : ''}{cvd.price_change_pct_24h.toFixed(2)}%
+                </span>
+              </span>
+            </div>
+            <div className="text-[10px] text-[#8888a0] italic mt-1">
+              {cvd.divergence === 'uyumlu' ? '✅ Uyumlu — ' : '⚠️ Uyumsuz — '}{cvd.meaning}
+            </div>
+          </>
+        )}
       </div>
 
       <div className="mt-3 text-[11px] text-[#888] italic leading-snug border-t border-[#1a1a2e] pt-3">
@@ -280,6 +402,40 @@ export function CycleCompassPanel({ data }: { data: OnChainSnapshot }) {
         <MetricRow metricKey="sopr" sig={sopr} />
         <MetricRow metricKey="realized_price" sig={rp} />
       </div>
+
+      {/* Faz D.1 — STH/LTH realized price bantları (kısa/uzun-vade yatırımcı
+          maliyet temeli). Backend snapshot'tan geliyorsa render; yoksa atla. */}
+      {(data.sth_realized_price || data.lth_realized_price) && (
+        <div className="mt-3 border-t border-[#1a1a2e] pt-3">
+          <div className="text-[10px] font-semibold text-[#8888a0] uppercase tracking-wider mb-1.5">
+            Maliyet Bantları (155g)
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-[11px]">
+            {data.sth_realized_price && (
+              <div className="bg-[#0d0d1a] border border-[#1a1a2e] rounded px-2 py-1.5">
+                <div className="text-[9px] text-[#8888a0]">STH — Kısa-vade</div>
+                <div className="font-mono text-[#e0e0e0]">
+                  ${data.sth_realized_price.realized_price.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </div>
+                <div className="text-[9px] text-[#555570] mt-0.5">
+                  ≤ 155g hareketli coin maliyet temeli
+                </div>
+              </div>
+            )}
+            {data.lth_realized_price && (
+              <div className="bg-[#0d0d1a] border border-[#1a1a2e] rounded px-2 py-1.5">
+                <div className="text-[9px] text-[#8888a0]">LTH — Uzun-vade</div>
+                <div className="font-mono text-[#e0e0e0]">
+                  ${data.lth_realized_price.realized_price.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </div>
+                <div className="text-[9px] text-[#555570] mt-0.5">
+                  &gt; 155g HODL maliyet temeli (güçlü destek)
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="mt-3 text-[11px] text-[#888] italic leading-snug border-t border-[#1a1a2e] pt-3">
         {mvrv?.signal === 'BEARISH'

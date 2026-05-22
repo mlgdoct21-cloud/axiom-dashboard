@@ -57,7 +57,7 @@ export default function Footer({ locale }: FooterProps) {
                 </a>
               </li>
               <li>
-                <a href="https://t.me/axiom_bot" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white transition-colors flex items-center gap-2">
+                <a href="https://t.me/AxiomAnaliz_Bot" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white transition-colors flex items-center gap-2">
                   💬 {t('telegram')}
                 </a>
               </li>
