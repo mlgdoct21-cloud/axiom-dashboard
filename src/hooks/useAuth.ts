@@ -81,7 +81,10 @@ export function useAuth() {
     await apiClient.logout();
     setUser(null);
     setIsAuthenticated(false);
-    router.push('/auth/login');
+    // Çıkış → ana sayfaya dön (eski /auth/login manuel-ID sayfasına değil).
+    // /tr header'ındaki AuthControl orada "Giriş Yap" butonunu gösterir →
+    // tek akış: çıkış yap → Giriş Yap → bot /login. Eski sayfa keşfedilmez.
+    router.push('/tr');
   }, [router]);
 
   return {
