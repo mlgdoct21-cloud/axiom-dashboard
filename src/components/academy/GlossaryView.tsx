@@ -190,7 +190,7 @@ function CategoryDetail({
                   className="px-3 py-1.5 rounded-lg border border-[#26314a] bg-[#161629] text-sm text-gray-200 hover:border-[#4fc3f7] hover:text-white hover:bg-[#1a1a2e] transition"
                   title={t.full_tr}
                 >
-                  {t.short}
+                  {t.full_en || t.short}
                 </button>
               ))}
             </div>
@@ -230,7 +230,7 @@ function SearchResults({
             style={{ borderLeftWidth: '3px', borderLeftColor: meta.color }}
           >
             <div className="flex items-start justify-between gap-2 mb-1">
-              <span className="text-sm font-semibold text-white">{t.full_tr}</span>
+              <span className="text-sm font-semibold text-white">{t.full_en || t.full_tr}</span>
               <span className="text-[10px] uppercase tracking-wider text-gray-500 shrink-0">
                 {meta.emoji} {t.subcategory ?? meta.label}
               </span>

@@ -324,6 +324,14 @@ function RevBar({ data }: { data: any[] }) {
 const US_SYMS = ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NFLX'];
 const TR_SYMS = ['ASELS', 'GARAN', 'KCHOL', 'THYAO', 'AKBNK', 'BIMAS'];
 
+// Temel Analiz hisseler içindir. Crypto tab'ı URL'e ?symbol=BTC yazıyor; bu
+// sembol Temel Analiz'e devrolunca anlamsız (kriptonun F/K'sı yok). Kripto
+// sembolünü yok sayıp AAPL'a düşeriz; gerçek hisse deep-link'leri korunur.
+const CRYPTO_SYMS = new Set([
+  'BTC', 'ETH', 'XRP', 'SOL', 'BNB', 'ADA', 'DOGE', 'AVAX', 'DOT', 'LINK',
+  'MATIC', 'LTC', 'TRX', 'TON', 'SHIB', 'XLM', 'ATOM', 'BCH', 'NEAR', 'APT',
+]);
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 import { useSearchParams } from 'next/navigation';
 
@@ -342,7 +350,12 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
   const telegramSymbol = searchParams?.get('symbol');
   const telegramReport = searchParams?.get('report');
 
-  const [symbol,      setSymbol]      = useState(() => symbolProp || telegramSymbol || 'AAPL');
+  // Crypto sembolü (BTC vb.) deep-link'i temel analizde anlamsız → AAPL'a düş.
+  const stockDeepLink =
+    telegramSymbol && !CRYPTO_SYMS.has(telegramSymbol.toUpperCase())
+      ? telegramSymbol
+      : null;
+  const [symbol,      setSymbol]      = useState(() => symbolProp || stockDeepLink || 'AAPL');
   const [input,       setInput]       = useState('');
   const [market,      setMarket]      = useState<'US' | 'TR'>('US');
   const [indicators,  setIndicators]  = useState<string[]>(['sma']);
@@ -609,16 +622,16 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
               )}
             </div>
             <div className="grid grid-cols-2 gap-1.5">
-              <Cell label="F/K (P/E)"    value={fmtNum(metrics.pe)}         color={metrics.pe && metrics.pe < 15 ? '#26de81' : metrics.pe && metrics.pe > 30 ? '#ff4757' : undefined} />
-              <Cell label="ROE"          value={fmtPct(metrics.roe)}        color={metrics.roe && metrics.roe > 0.15 ? '#26de81' : undefined} />
-              <Cell label="Brüt Marj"    value={fmtPct(metrics.grossMargin)} />
-              <Cell label="Net Marj"     value={fmtPct(metrics.netMargin)} />
-              <Cell label="Beta"         value={fmtNum(metrics.beta)}       color={metrics.beta && metrics.beta > 1.5 ? '#ff4757' : undefined} />
-              <Cell label="RSI (14)"     value={metrics.rsi?.toString() ?? 'N/A'} color={metrics.rsi > 70 ? '#ff4757' : metrics.rsi < 30 ? '#26de81' : '#ff9800'} />
-              <Cell label="Piyasa Değ."  value={fmtCap(metrics.marketCap)} />
-              <Cell label="ND/EBITDA"    value={fmtNum(metrics.netDebtEbitda)} color={metrics.netDebtEbitda && metrics.netDebtEbitda > 4 ? '#ff4757' : undefined} />
-              <Cell label="FCF"          value={fmtB(metrics.fcf)} />
-              <Cell label="Analist Alış" value={metrics.analystBuyPct != null ? `%${metrics.analystBuyPct}` : 'N/A'} color={metrics.analystBuyPct >= 70 ? '#26de81' : undefined} />
+              <Cell label="P/E (F/K)"            value={fmtNum(metrics.pe)}         color={metrics.pe && metrics.pe < 15 ? '#26de81' : metrics.pe && metrics.pe > 30 ? '#ff4757' : undefined} />
+              <Cell label="ROE (Özkaynak Kârl.)" value={fmtPct(metrics.roe)}        color={metrics.roe && metrics.roe > 0.15 ? '#26de81' : undefined} />
+              <Cell label="Gross Margin (Brüt Marj)" value={fmtPct(metrics.grossMargin)} />
+              <Cell label="Net Margin (Net Marj)" value={fmtPct(metrics.netMargin)} />
+              <Cell label="Beta"                 value={fmtNum(metrics.beta)}       color={metrics.beta && metrics.beta > 1.5 ? '#ff4757' : undefined} />
+              <Cell label="RSI (14)"             value={metrics.rsi?.toString() ?? 'N/A'} color={metrics.rsi > 70 ? '#ff4757' : metrics.rsi < 30 ? '#26de81' : '#ff9800'} />
+              <Cell label="Market Cap (Piyasa Değ.)" value={fmtCap(metrics.marketCap)} />
+              <Cell label="ND/EBITDA (Net Borç/FAVÖK)" value={fmtNum(metrics.netDebtEbitda)} color={metrics.netDebtEbitda && metrics.netDebtEbitda > 4 ? '#ff4757' : undefined} />
+              <Cell label="FCF (Serbest Nakit A.)" value={fmtB(metrics.fcf)} />
+              <Cell label="Analyst Buy (Analist Alış)" value={metrics.analystBuyPct != null ? `%${metrics.analystBuyPct}` : 'N/A'} color={metrics.analystBuyPct >= 70 ? '#26de81' : undefined} />
             </div>
             {fibonacci && fibonacci.high > 0 && (
               <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3">
