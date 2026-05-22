@@ -531,44 +531,46 @@ export default function TechnicalTab({ locale }: TechnicalTabProps) {
         </div>
       </div>
 
-      {/* Real Chart */}
-      <PriceChart
-        embedded
-        symbol={selectedSymbol}
-        resolution={currentTimeframe.resolution}
-        indicators={activeSupportedIndicators}
-        locale={locale}
-        height={450}
-      />
+      {/* Real Chart — VPVR sağ tarafa dayalı overlay olarak grafiğin üzerine açılır */}
+      <div className="relative">
+        <PriceChart
+          embedded
+          symbol={selectedSymbol}
+          resolution={currentTimeframe.resolution}
+          indicators={activeSupportedIndicators}
+          locale={locale}
+          height={450}
+        />
 
-      {/* Faz E.1 — Volume Profile (VPVR) collapsible panel. Default kapalı.
-          Eleştirideki "fiyat zamana değil seviyeye göre yoğunlaşma" görüşü için. */}
-      <section>
+        {/* VPVR aç/kapa — grafiğin sağ üst köşesinde küçük buton */}
         <button
           type="button"
           onClick={() => setVpvrOpen((v) => !v)}
           aria-expanded={vpvrOpen}
-          className="w-full flex items-center justify-between px-3 py-2 bg-[#141425] hover:bg-[#1a1a2e] border border-[#2a2a3e] rounded transition-colors group"
+          title="Hacim Profili (VPVR) — fiyat-bazlı hacim dağılımı"
+          className={`absolute top-2 right-2 z-30 px-2.5 py-1 rounded text-[11px] font-semibold border transition-colors flex items-center gap-1 ${
+            vpvrOpen
+              ? 'bg-[#4fc3f7]/20 border-[#4fc3f7]/60 text-[#4fc3f7]'
+              : 'bg-[#141425]/90 border-[#2a2a3e] text-[#8888a0] hover:text-[#4fc3f7] hover:border-[#4fc3f7]/50'
+          }`}
         >
-          <span className="text-[11px] font-semibold text-[#8888a0] uppercase tracking-wider flex items-center gap-1.5">
-            <span className="w-1 h-3 bg-[#4fc3f7] rounded group-hover:bg-[#4fc3f7] transition-colors" />
-            📊 Hacim Profili (VPVR) — fiyat-bazlı hacim dağılımı
-          </span>
-          <span className={`text-[#8888a0] text-[12px] transition-transform ${vpvrOpen ? 'rotate-180' : ''}`}>
-            ▼
-          </span>
+          📊 VPVR {vpvrOpen ? '✕' : ''}
         </button>
+
+        {/* Sağa dayalı VPVR overlay paneli */}
         {vpvrOpen && (
-          <div className="mt-3">
-            <VolumeProfilePanel
-              symbol={selectedSymbol}
-              resolution={currentTimeframe.resolution}
-              bins={30}
-              height={360}
-            />
+          <div className="absolute inset-y-0 right-0 z-20 w-[340px] max-w-[60%] p-2 pointer-events-none">
+            <div className="h-full pointer-events-auto overflow-y-auto rounded-lg shadow-2xl ring-1 ring-[#4fc3f7]/30">
+              <VolumeProfilePanel
+                symbol={selectedSymbol}
+                resolution={currentTimeframe.resolution}
+                bins={30}
+                height={330}
+              />
+            </div>
           </div>
         )}
-      </section>
+      </div>
 
       {/* Faz E.2 — Sembol-bazlı MTF mini-panel (1dk/5dk/15dk/1s/4s/1g) */}
       <section>
