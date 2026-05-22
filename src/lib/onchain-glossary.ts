@@ -189,6 +189,20 @@ export const METRIC_INFO: Record<string, MetricInfo> = {
     why_matters: "Fiyat artışı + OI artışı = sağlıklı; fiyat artışı + OI azalışı = zayıf rally. Kombinasyonu okumak şart.",
   },
 
+  cvd: {
+    short: "CVD",
+    full_tr: "Kümülatif Hacim Deltası",
+    full_en: "Cumulative Volume Delta",
+    what_is: "Belirli bir sürede (burada 24 saat) agresif alıcıların (market buy) ve agresif satıcıların (market sell) hacim farkı. Pozitif = alıcılar baskın, negatif = satıcılar baskın. Fiyatın arkasındaki gerçek emir akışı baskısını gösterir.",
+    how_to_read: [
+      { range: "CVD ↑ & Fiyat ↑", emoji: "🟢", label: "Uyumlu Yükseliş",   meaning: "Gerçek alım baskısı yükselişi destekliyor — sağlıklı trend" },
+      { range: "CVD ↓ & Fiyat ↓", emoji: "🟢", label: "Uyumlu Düşüş",      meaning: "Satış baskısı düşüşü açıklıyor — beklenen davranış" },
+      { range: "CVD ↑ & Fiyat ↓", emoji: "⚠️", label: "Pozitif Diverjans", meaning: "Alım var ama fiyat düşüyor — dip / tersine dönüş sinyali olabilir" },
+      { range: "CVD ↓ & Fiyat ↑", emoji: "⚠️", label: "Negatif Diverjans", meaning: "Fiyat çıkıyor ama gerçek alım yok — zayıf rally, tepe riski" },
+    ],
+    why_matters: "Fiyat kısa vadede yanıltabilir ama gerçek emir akışı (kim agresif alıyor/satıyor) yalan söylemez. CVD ile fiyatın uyumsuzluğu (diverjans), trend dönüşlerinin en erken habercilerindendir.",
+  },
+
   coinbase_premium: {
     short: "Coinbase Primi",
     full_tr: "Coinbase Premium Endeksi",

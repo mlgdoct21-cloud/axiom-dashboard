@@ -316,8 +316,9 @@ export function LeverageHeatPanel({ data }: { data: OnChainSnapshot }) {
       {/* 📈 CVD — backend canlı veri */}
       <div className="mt-3 border-t border-[#1a1a2e] pt-3">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-[10px] font-semibold text-[#8888a0] uppercase tracking-wider">
+          <span className="text-[10px] font-semibold text-[#8888a0] uppercase tracking-wider inline-flex items-center">
             📈 CVD (24s)
+            <MetricTooltip metricKey="cvd" />
           </span>
           {cvd ? (
             <span className="text-[10px] font-mono"
