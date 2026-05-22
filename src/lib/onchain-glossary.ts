@@ -148,6 +148,32 @@ export const METRIC_INFO: Record<string, MetricInfo> = {
     why_matters: "BTC'nin 'gerçek' destek seviyesi. Spot fiyat bunun altına düşerse uzun vadeli desteğin kırıldığı söylenir.",
   },
 
+  sth_realized_price: {
+    short: "STH Realized",
+    full_tr: "Kısa-Vade Tutucu Gerçekleşmiş Fiyat",
+    full_en: "Short-Term Holder Realized Price",
+    what_is: "Coin'lerini son ≤155 gün içinde almış/hareket ettirmiş yatırımcıların (kısa-vade tutucular) ortalama maliyet temeli. Yeni/spekülatif paranın break-even seviyesi; genel realized price'tan farklı olarak spot fiyata çok daha yakın seyreder.",
+    how_to_read: [
+      { range: "Spot > STH-RP", emoji: "🟢", label: "STH Karda",     meaning: "Yeni alıcılar karda → bu seviye DESTEK gibi davranır, boğa sağlıklı" },
+      { range: "Spot ≈ STH-RP", emoji: "🟡", label: "Kritik Eşik",   meaning: "Yeni alıcılar başabaşta — bu seviyenin yönü kısa vadeyi belirler" },
+      { range: "Spot < STH-RP", emoji: "🔴", label: "STH Zararda",    meaning: "Yeni alıcılar kayıpta → panik satış baskısı, düzeltme/ayı riski" },
+    ],
+    why_matters: "2025-26 döngüsünün en çok izlenen kısa-vade destek/direnç eşiği. NASIL TAKİP EDİLİR: spot ile STH-RP'nin kesişimine bak — spot üstte kaldıkça düşüşler 'al' fırsatı; STH-RP'nin altına sarkma düzeltme sinyali, geri alınması ise bullish dönüş onayı. Kısa-vadeli momentum/risk yönetimi için kullanılır.",
+  },
+
+  lth_realized_price: {
+    short: "LTH Realized",
+    full_tr: "Uzun-Vade Tutucu Gerçekleşmiş Fiyat",
+    full_en: "Long-Term Holder Realized Price",
+    what_is: "Coin'lerini >155 gündür tutan yatırımcıların (uzun-vade/güçlü eller) ortalama maliyet temeli. Genelde spot'un çok altında olur — döngünün nihai destek zemini.",
+    how_to_read: [
+      { range: "Spot ≫ LTH-RP", emoji: "🟢", label: "Geniş Kar Marjı",   meaning: "Güçlü eller derin karda → boğa olgun, satış riski uzakta" },
+      { range: "Spot → LTH-RP",  emoji: "🟡", label: "Tabana Yaklaşıyor", meaning: "Ayı dibi/değer bölgesi — tarihsel olarak güçlü alım fırsatı" },
+      { range: "Spot < LTH-RP",  emoji: "💎", label: "Kapitülasyon",      meaning: "Uzun-vade tutucular bile zararda → nadir görülen tarihsel makro dip" },
+    ],
+    why_matters: "Döngünün makro destek zemini. NASIL TAKİP EDİLİR: fiyat LTH-RP'ye yaklaştıkça tarihsel olarak makro dipler oluşmuştur ('buy-the-dip' bölgesi). STH-RP kısa-vade çerçevesini, LTH-RP ise uzun-vade/döngü çerçevesini verir; ikisi birlikte okunur.",
+  },
+
   // ── Risk & Türev ──────────────────────────────────────────────────────────
   leverage_ratio: {
     short: "Kaldıraç",

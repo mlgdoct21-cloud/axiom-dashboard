@@ -54,7 +54,7 @@ export default function MetricTooltip({ metricKey, currentValue, currentZone }: 
 
         {tooltipOpen && (
           <div
-            className="absolute left-0 top-6 z-50 w-72 bg-[#0d0d1a] border border-[#2a2a3e] rounded-lg shadow-2xl p-3 text-left"
+            className="absolute left-0 top-6 z-[90] w-72 max-w-[calc(100vw-2rem)] bg-[#0d0d1a] border border-[#2a2a3e] rounded-lg shadow-2xl p-3 text-left"
             onMouseEnter={() => setTooltipOpen(true)}
             onMouseLeave={() => setTooltipOpen(false)}
           >

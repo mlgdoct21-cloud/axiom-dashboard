@@ -62,7 +62,7 @@ function PanelShell({ icon, title, statusLabel, statusColor, children }: {
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded-xl overflow-hidden">
+    <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded-xl">
       <div className="px-4 py-3 border-b border-[#2a2a3e] flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <span className="text-base">{icon}</span>
@@ -414,7 +414,10 @@ export function CycleCompassPanel({ data }: { data: OnChainSnapshot }) {
           <div className="grid grid-cols-2 gap-2 text-[11px]">
             {data.sth_realized_price && (
               <div className="bg-[#0d0d1a] border border-[#1a1a2e] rounded px-2 py-1.5">
-                <div className="text-[9px] text-[#8888a0]">STH — Kısa-vade</div>
+                <div className="text-[9px] text-[#8888a0] inline-flex items-center">
+                  STH — Kısa-vade
+                  <MetricTooltip metricKey="sth_realized_price" />
+                </div>
                 <div className="font-mono text-[#e0e0e0]">
                   ${data.sth_realized_price.realized_price.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </div>
@@ -425,7 +428,10 @@ export function CycleCompassPanel({ data }: { data: OnChainSnapshot }) {
             )}
             {data.lth_realized_price && (
               <div className="bg-[#0d0d1a] border border-[#1a1a2e] rounded px-2 py-1.5">
-                <div className="text-[9px] text-[#8888a0]">LTH — Uzun-vade</div>
+                <div className="text-[9px] text-[#8888a0] inline-flex items-center">
+                  LTH — Uzun-vade
+                  <MetricTooltip metricKey="lth_realized_price" />
+                </div>
                 <div className="font-mono text-[#e0e0e0]">
                   ${data.lth_realized_price.realized_price.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </div>
