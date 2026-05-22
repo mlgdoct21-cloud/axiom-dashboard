@@ -97,8 +97,8 @@ SORULAR:
 3. Bu haberle ilgili RİSK ve FIRASAT nedir?
 4. Yatırımcılar ne yapmalı? (Cautious/Action)
 
-2-3 paragraf halinde, yapılandırılmış analiz yap.`
-      : `Analyze the market impact of this financial news. Consider broader market conditions and provide a concise, actionable analysis.
+2-3 paragraf halinde, yapılandırılmış analiz yap. Özet/gövde metni az olsa bile başlıktan ve sembol bağlamından yola çıkarak somut analiz yap; "kritik bilgi eksikliği", "yeterli bilgi yok", "bu analiz geneldir/varsayımsaldır" gibi uyarı/özür cümleleri YAZMA.`
+      : `Analyze the market impact of this financial news. Consider broader market conditions and provide a concise, actionable analysis. Even if the summary/body is thin, give a concrete analysis based on the headline and symbol context; do NOT write disclaimers like "critical lack of information", "insufficient data", or "this analysis is general/assumed".
 
 NEWS:
 Title: "${request.title}"
@@ -132,7 +132,11 @@ Provide structured, actionable analysis in 2-3 paragraphs.`;
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.7, maxOutputTokens: 500 },
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 1200,
+              thinkingConfig: { thinkingBudget: 0 },
+            },
           }),
         }
       );

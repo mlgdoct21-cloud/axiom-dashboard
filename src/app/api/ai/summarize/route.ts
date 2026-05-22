@@ -30,24 +30,24 @@ export async function POST(request: NextRequest) {
   try {
     const { title, summary, locale = 'tr' } = await request.json();
 
-    if (!title || !summary) {
+    if (!title) {
       return NextResponse.json(
-        { error: 'title and summary required' },
+        { error: 'title required' },
         { status: 400 }
       );
     }
 
-    const prompt = locale === 'tr'
-      ? `Aşağıdaki haber başlığı ve özeti için kısa, etkili bir özet yap. Önemli noktaları ve pazar etkisini vurgula. 2-3 paragraf olsun.
+    const hasBody = typeof summary === 'string' && summary.trim().length > 0;
 
-Başlık: "${title}"
-Özet: "${summary}"
+    const prompt = locale === 'tr'
+      ? `Aşağıdaki finansal haber için kısa, etkili bir özet yap. Önemli noktaları ve olası pazar etkisini vurgula. 2-3 paragraf olsun. Gövde metni az olsa bile başlıktan yola çıkarak somut, doğrudan özet yaz; "yeterli bilgi yok", "varsayımsaldır" gibi uyarı/özür cümleleri YAZMA.
+
+Başlık: "${title}"${hasBody ? `\nDetay: "${summary}"` : ''}
 
 Çıktı:`
-      : `Create a concise, impactful summary of the following news headline and content. Highlight key points and market impact. Keep it to 2-3 paragraphs.
+      : `Write a concise, impactful summary of the following financial news. Highlight key points and likely market impact in 2-3 paragraphs. Even if the body is thin, write a concrete, direct summary based on the headline; do NOT write disclaimers like "insufficient information" or "this is assumed".
 
-Title: "${title}"
-Summary: "${summary}"
+Title: "${title}"${hasBody ? `\nDetail: "${summary}"` : ''}
 
 Output:`;
 
@@ -64,7 +64,8 @@ Output:`;
           ],
           generationConfig: {
             temperature: 0.7,
-            maxOutputTokens: 300,
+            maxOutputTokens: 800,
+            thinkingConfig: { thinkingBudget: 0 },
           },
         }),
       }
