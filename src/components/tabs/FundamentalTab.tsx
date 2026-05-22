@@ -550,13 +550,13 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
 
           <div className="grid grid-cols-4 border-t border-[#2a2a3e]">
             {[
-              { l: 'Alım Bölgesi', v: agent5.entryZone ? `$${agent5.entryZone.low}–${agent5.entryZone.high}` : 'N/A', c: '#4fc3f7' },
-              { l: 'Hedef Fiyat',  v: agent5.targetPrice ? `$${agent5.targetPrice} (+${agent5.targetReturnPct}%)` : 'N/A', c: '#26de81' },
-              { l: 'Stop Loss',    v: agent5.stopLoss    ? `$${agent5.stopLoss} (-${agent5.maxLossPct}%)` : 'N/A', c: '#ff4757' },
-              { l: 'R/R',          v: agent5.riskRewardRatio ? `${agent5.riskRewardRatio}:1` : 'N/A', c: '#ff9800' },
+              { l: 'Alım Bölgesi', v: agent5.entryZone ? `$${agent5.entryZone.low}–${agent5.entryZone.high}` : 'N/A', c: '#4fc3f7', rr: false },
+              { l: 'Hedef Fiyat',  v: agent5.targetPrice ? `$${agent5.targetPrice} (+${agent5.targetReturnPct}%)` : 'N/A', c: '#26de81', rr: false },
+              { l: 'Stop Loss',    v: agent5.stopLoss    ? `$${agent5.stopLoss} (-${agent5.maxLossPct}%)` : 'N/A', c: '#ff4757', rr: false },
+              { l: 'R/R',          v: agent5.riskRewardRatio ? `${agent5.riskRewardRatio}:1` : 'N/A', c: '#ff9800', rr: true },
             ].map((item, i) => (
               <div key={i} className="px-4 py-3 border-r border-[#2a2a3e] last:border-r-0 text-center">
-                <div className="text-[10px] text-[#444] uppercase mb-1">{item.l}</div>
+                <div className="text-[10px] text-[#444] uppercase mb-1 inline-flex items-center justify-center">{item.l}{item.rr && <RRInfoTip />}</div>
                 <div className="text-sm font-bold" style={{ color: item.c }}>{item.v}</div>
               </div>
             ))}
@@ -690,5 +690,85 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
       </div>
 
     </div>
+  );
+}
+
+/**
+ * Küçük "ⓘ" rozeti → R/R (Risk/Ödül) hesaplama yöntemini gösterir.
+ * Popup `position: fixed` ile render edilir; böylece üst kartın
+ * `overflow-hidden`'ı tarafından kırpılmaz.
+ */
+function RRInfoTip() {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    const t = setTimeout(() => document.addEventListener('click', close), 0);
+    document.addEventListener('keydown', esc);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('click', close);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+
+  const toggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      const W = 264;
+      let left = r.left + r.width / 2 - W / 2;
+      left = Math.max(8, Math.min(left, window.innerWidth - W - 8));
+      setPos({ top: r.bottom + 6, left });
+    }
+    setOpen(o => !o);
+  };
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={toggle}
+        className="ml-1 w-3.5 h-3.5 inline-flex items-center justify-center rounded-full bg-[#2a2a3e] hover:bg-[#ff9800]/30 text-[9px] text-[#888] hover:text-[#ff9800] transition align-middle cursor-help"
+        aria-label="R/R hesaplama yöntemi"
+      >
+        ⓘ
+      </button>
+      {open && pos && (
+        <div
+          className="fixed z-[100] w-[264px] bg-[#0d0d1a] border border-[#2a2a3e] rounded-lg shadow-2xl p-3 text-left"
+          style={{ top: pos.top, left: pos.left }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="text-[11px] font-bold text-[#ff9800] mb-1.5">Risk / Ödül Oranı (R/R)</div>
+          <p className="text-[10px] text-[#c0c0d0] leading-snug mb-2">
+            Alınan her 1 birim risk karşılığında beklenen potansiyel ödülü ölçer.
+            <span className="text-[#e0e0f0] font-semibold"> 3:1</span> → riskin 3 katı kazanç hedefi.
+          </p>
+          <div className="space-y-1 text-[10px] font-mono bg-[#111125] border border-[#2a2a3e] rounded px-2.5 py-2">
+            <div className="flex justify-between gap-2">
+              <span className="text-[#888]">Risk</span>
+              <span className="text-[#ff4757]">Giriş − Stop Loss</span>
+            </div>
+            <div className="flex justify-between gap-2">
+              <span className="text-[#888]">Ödül</span>
+              <span className="text-[#26de81]">Hedef − Giriş</span>
+            </div>
+            <div className="flex justify-between gap-2 border-t border-[#2a2a3e] pt-1 mt-1">
+              <span className="text-[#e0e0f0] font-bold">R/R</span>
+              <span className="text-[#ff9800] font-bold">Ödül ÷ Risk</span>
+            </div>
+          </div>
+          <p className="text-[9px] text-[#666] leading-snug mt-2">
+            ≥ 2:1 sağlıklı kabul edilir. Oran düştükçe işlemde isabet oranın yüksek olmalı.
+          </p>
+        </div>
+      )}
+    </>
   );
 }
