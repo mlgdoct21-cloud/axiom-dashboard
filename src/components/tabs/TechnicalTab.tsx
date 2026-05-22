@@ -528,7 +528,8 @@ export default function TechnicalTab({ locale }: TechnicalTabProps) {
         </div>
       </div>
 
-      {/* Real Chart — VPVR sağ tarafa dayalı overlay olarak grafiğin üzerine açılır */}
+      {/* Real Chart — VPVR sağa dayalı overlay olarak grafiğin üzerine açılır.
+          Aç/kapa düğmesi görünürlük için grafiğin hemen altındaki tam-genişlik bar. */}
       <div className="relative">
         <PriceChart
           embedded
@@ -539,25 +540,10 @@ export default function TechnicalTab({ locale }: TechnicalTabProps) {
           height={450}
         />
 
-        {/* VPVR aç/kapa — grafiğin sağ üst köşesinde küçük buton */}
-        <button
-          type="button"
-          onClick={() => setVpvrOpen((v) => !v)}
-          aria-expanded={vpvrOpen}
-          title="Hacim Profili (VPVR) — fiyat-bazlı hacim dağılımı"
-          className={`absolute top-2 right-2 z-30 px-2.5 py-1 rounded text-[11px] font-semibold border transition-colors flex items-center gap-1 ${
-            vpvrOpen
-              ? 'bg-[#4fc3f7]/20 border-[#4fc3f7]/60 text-[#4fc3f7]'
-              : 'bg-[#141425]/90 border-[#2a2a3e] text-[#8888a0] hover:text-[#4fc3f7] hover:border-[#4fc3f7]/50'
-          }`}
-        >
-          📊 VPVR {vpvrOpen ? '✕' : ''}
-        </button>
-
-        {/* Sağa dayalı VPVR overlay paneli */}
+        {/* Sağa dayalı VPVR overlay paneli (toggle aşağıdaki barda) */}
         {vpvrOpen && (
           <div className="absolute inset-y-0 right-0 z-20 w-[340px] max-w-[60%] p-2 pointer-events-none">
-            <div className="h-full pointer-events-auto overflow-y-auto rounded-lg shadow-2xl ring-1 ring-[#4fc3f7]/30">
+            <div className="h-full pointer-events-auto overflow-y-auto rounded-lg shadow-2xl ring-1 ring-[#4fc3f7]/40">
               <VolumeProfilePanel
                 symbol={selectedSymbol}
                 resolution={currentTimeframe.resolution}
@@ -568,6 +554,20 @@ export default function TechnicalTab({ locale }: TechnicalTabProps) {
           </div>
         )}
       </div>
+
+      {/* Faz E.1 — VPVR aç/kapa: görünür tam-genişlik bar. Panel grafiğin sağına dayalı açılır. */}
+      <button
+        type="button"
+        onClick={() => setVpvrOpen((v) => !v)}
+        aria-expanded={vpvrOpen}
+        className="w-full flex items-center justify-between px-3 py-2 bg-[#141425] hover:bg-[#1a1a2e] border border-[#2a2a3e] rounded transition-colors group"
+      >
+        <span className="text-[11px] font-semibold text-[#8888a0] uppercase tracking-wider flex items-center gap-1.5">
+          <span className="w-1 h-3 bg-[#4fc3f7] rounded" />
+          📊 Hacim Profili (VPVR) — {vpvrOpen ? 'açık · grafiğin sağında' : 'fiyat-bazlı hacim dağılımı'}
+        </span>
+        <span className="text-[#8888a0] text-[12px]">{vpvrOpen ? '✕ kapat' : '▼ aç'}</span>
+      </button>
 
       {/* Trade Signal (AI) */}
       <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 border border-purple-500/30 rounded-xl p-6 space-y-4">
