@@ -7,7 +7,10 @@ interface Props {
   strategy: string;        // örn. 'protective-put'
   strategyLabel: string;   // başlıkta gösterilecek ad
   onClose: () => void;
+  showUpsell?: boolean;    // free kullanıcı → 'Premium'da 6 strateji daha' kancası
 }
+
+const UPGRADE_LINK = 'https://t.me/AxiomAnaliz_Bot?start=upgrade_premium';
 
 const ASSETS = ['BTC', 'ETH'] as const;
 type Asset = (typeof ASSETS)[number];
@@ -169,7 +172,7 @@ function LegTable({ data }: { data: AcademyLiveExample }) {
   );
 }
 
-export default function LiveExampleModal({ strategy, strategyLabel, onClose }: Props) {
+export default function LiveExampleModal({ strategy, strategyLabel, onClose, showUpsell }: Props) {
   const [asset, setAsset] = useState<Asset>('BTC');
   const [data, setData] = useState<AcademyLiveExample | null>(null);
   const [loading, setLoading] = useState(true);
@@ -287,6 +290,21 @@ export default function LiveExampleModal({ strategy, strategyLabel, onClose }: P
                   <span><span className="text-[#26de81]">▎</span> kâr bölgesi</span>
                 </div>
               </div>
+
+              {showUpsell && (
+                <a
+                  href={UPGRADE_LINK}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[#a78bfa]/40 bg-gradient-to-r from-[#a78bfa]/15 to-transparent px-4 py-3 hover:from-[#a78bfa]/25 transition"
+                >
+                  <span className="text-sm text-gray-200">
+                    🔒 <strong className="text-[#a78bfa]">Premium</strong>'da 6 strateji daha — covered
+                    call, iron condor, straddle ve dahası, bugünün gerçek rakamlarıyla.
+                  </span>
+                  <span className="text-xs font-semibold text-[#a78bfa] whitespace-nowrap">Yükselt →</span>
+                </a>
+              )}
 
               <p className="text-[11px] text-gray-500 italic text-center mt-3">
                 Sayılar gerçek piyasa verisi + deterministik hesaptan gelir (AI üretimi değil).

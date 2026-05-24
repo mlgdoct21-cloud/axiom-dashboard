@@ -9,6 +9,7 @@ import LiveExampleModal from './LiveExampleModal';
 interface Props {
   lessonId: string;
   isAuthenticated: boolean;
+  userTier?: string;
   onProgressChange?: () => void;
 }
 
@@ -32,7 +33,8 @@ const LIVE_EXAMPLE_BY_SLUG: Record<string, { strategy: string; label: string }> 
   'spread-straddle-giris': { strategy: 'straddle', label: 'Straddle — Çok Bacaklı Yapılara Giriş' },
 };
 
-export default function LessonView({ lessonId, isAuthenticated, onProgressChange }: Props) {
+export default function LessonView({ lessonId, isAuthenticated, userTier, onProgressChange }: Props) {
+  const isPaid = userTier === 'premium' || userTier === 'advance';
   const [payload, setPayload] = useState<AcademyLessonResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,10 +73,14 @@ export default function LessonView({ lessonId, isAuthenticated, onProgressChange
         <h2 className="text-2xl font-bold text-white mb-2">{les.title}</h2>
         <p className="text-gray-400 mb-1">{payload.module_title}</p>
         <p className="text-sm text-[#a78bfa] mb-4 italic">{les.learning_objective}</p>
-        <p className="text-gray-300 mb-6">
+        <p className="text-gray-300 mb-3">
           Bu ders <strong className="text-[#a78bfa]">Premium</strong> erişim gerektiriyor.
-          Tüm modüllere, ileri stratejilere ve quiz ilerlemene Premium ile ulaşırsın.
         </p>
+        <ul className="inline-block text-left text-sm text-gray-300 mb-6 space-y-1">
+          <li>✓ Tüm modüller, ileri stratejiler ve Greeks</li>
+          <li>✓ Quiz ilerlemesi ve ilerleme kaydı</li>
+          <li>✓ 📊 6 stratejide bugünün <strong className="text-white">gerçek rakamlarıyla canlı örnek</strong></li>
+        </ul>
         <a
           href="https://t.me/AxiomAnaliz_Bot?start=upgrade_premium"
           target="_blank"
@@ -123,6 +129,7 @@ export default function LessonView({ lessonId, isAuthenticated, onProgressChange
         <LiveExampleModal
           strategy={liveExample.strategy}
           strategyLabel={liveExample.label}
+          showUpsell={!isPaid}
           onClose={() => setLiveExampleOpen(false)}
         />
       )}

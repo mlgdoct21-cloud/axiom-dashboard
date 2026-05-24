@@ -226,6 +226,7 @@ export default function AcademyClient() {
                   <LessonView
                     lessonId={activeLessonId}
                     isAuthenticated={isAuth}
+                    userTier={tier}
                     onProgressChange={refreshProgress}
                   />
                 ) : (
