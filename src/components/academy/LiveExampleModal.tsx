@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiClient, type AcademyLiveExample } from '@/lib/api';
+import { apiClient, type AcademyLiveExample, type AcademyLiveExampleMetric } from '@/lib/api';
 
 interface Props {
   strategy: string;        // örn. 'protective-put'
@@ -12,12 +12,23 @@ interface Props {
 const ASSETS = ['BTC', 'ETH'] as const;
 type Asset = (typeof ASSETS)[number];
 
+const KIND_COLOR: Record<AcademyLiveExampleMetric['kind'], string> = {
+  loss: '#ff5c5c',
+  gain: '#26de81',
+  neutral: '#4fc3f7',
+};
+
 function usd(n: number | undefined | null): string {
   if (n === undefined || n === null) return '—';
   return n.toLocaleString('tr-TR', { maximumFractionDigits: 0 }) + ' $';
 }
 
-/** Basit inline SVG payoff grafiği — ekstra bağımlılık yok. */
+function metricText(m: AcademyLiveExampleMetric): string {
+  if (m.display) return m.display;
+  return usd(m.value);
+}
+
+/** Basit inline SVG payoff grafiği — ekstra bağımlılık yok. Çok bacaklı yapıları destekler. */
 function PayoffChart({ data }: { data: AcademyLiveExample }) {
   const pts = data.payoff ?? [];
   if (pts.length < 2) return null;
@@ -42,42 +53,78 @@ function PayoffChart({ data }: { data: AcademyLiveExample }) {
 
   const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${sx(p.price).toFixed(1)},${sy(p.pnl).toFixed(1)}`).join(' ');
   const zeroY = sy(0);
-  const strikeX = data.strike !== undefined ? sx(data.strike) : null;
   const spotX = data.spot !== undefined ? sx(data.spot) : null;
 
-  // PnL=0 çizgisinin üstü yeşil, altı kırmızı alan
-  const areaTop = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${sx(p.price).toFixed(1)},${sy(p.pnl).toFixed(1)}`).join(' ');
+  // Tüm strike'lar (dedup) — çok bacaklı yapılarda birden fazla dikey çizgi.
+  const rawStrikes = data.strikes && data.strikes.length > 0 ? data.strikes : (data.strike !== undefined ? [data.strike] : []);
+  const strikes = Array.from(new Set(rawStrikes)).filter((k) => k >= minX && k <= maxX);
+
+  const areaTop = line;
   const areaClose = `L${sx(pts[pts.length - 1].price).toFixed(1)},${zeroY.toFixed(1)} L${sx(pts[0].price).toFixed(1)},${zeroY.toFixed(1)} Z`;
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 200 }}>
       <defs>
-        <clipPath id="above"><rect x="0" y="0" width={W} height={zeroY} /></clipPath>
-        <clipPath id="below"><rect x="0" y={zeroY} width={W} height={H - zeroY} /></clipPath>
+        <clipPath id="above"><rect x="0" y="0" width={W} height={Math.max(0, zeroY)} /></clipPath>
+        <clipPath id="below"><rect x="0" y={zeroY} width={W} height={Math.max(0, H - zeroY)} /></clipPath>
       </defs>
       {/* alanlar */}
       <path d={`${areaTop} ${areaClose}`} fill="#26de81" opacity="0.12" clipPath="url(#above)" />
       <path d={`${areaTop} ${areaClose}`} fill="#ff5c5c" opacity="0.12" clipPath="url(#below)" />
       {/* sıfır çizgisi */}
       <line x1={padL} y1={zeroY} x2={W - padR} y2={zeroY} stroke="#5b6480" strokeWidth="1" strokeDasharray="4 3" />
-      {/* strike */}
-      {strikeX !== null && (
-        <line x1={strikeX} y1={padT} x2={strikeX} y2={H - padB} stroke="#a78bfa" strokeWidth="1" strokeDasharray="3 3" />
-      )}
+      {/* strike çizgileri */}
+      {strikes.map((k, i) => {
+        const x = sx(k);
+        return (
+          <g key={`k-${i}`}>
+            <line x1={x} y1={padT} x2={x} y2={H - padB} stroke="#a78bfa" strokeWidth="1" strokeDasharray="3 3" />
+            {strikes.length <= 4 && (
+              <text x={x} y={H - 6} fill="#a78bfa" fontSize="8" textAnchor="middle">{usd(k)}</text>
+            )}
+          </g>
+        );
+      })}
       {/* spot */}
       {spotX !== null && (
         <line x1={spotX} y1={padT} x2={spotX} y2={H - padB} stroke="#4fc3f7" strokeWidth="1" />
       )}
       {/* payoff eğrisi */}
       <path d={line} fill="none" stroke="#e6e6f0" strokeWidth="2" />
-      {/* etiketler */}
-      {strikeX !== null && (
-        <text x={strikeX} y={H - 6} fill="#a78bfa" fontSize="9" textAnchor="middle">strike</text>
-      )}
+      {/* spot etiketi */}
       {spotX !== null && (
         <text x={spotX} y={padT - 2} fill="#4fc3f7" fontSize="9" textAnchor="middle">bugün</text>
       )}
     </svg>
+  );
+}
+
+function LegTable({ data }: { data: AcademyLiveExample }) {
+  const legs = data.legs ?? [];
+  if (legs.length === 0) return null;
+  return (
+    <div className="rounded-xl border border-[#26314a] bg-[#0e0e1a] p-3 mb-4">
+      <div className="text-xs text-gray-500 mb-2">Pozisyon bacakları</div>
+      <div className="space-y-1">
+        {legs.map((leg, i) => (
+          <div key={i} className="flex items-center justify-between text-xs">
+            <span className="flex items-center gap-2">
+              <span
+                className={`px-1.5 py-0.5 rounded font-semibold ${
+                  leg.side === 'long' ? 'bg-[#26de81]/15 text-[#26de81]' : 'bg-[#ff5c5c]/15 text-[#ff5c5c]'
+                }`}
+              >
+                {leg.side === 'long' ? 'AL' : 'SAT'}
+              </span>
+              <span className="text-gray-300">
+                {usd(leg.strike)} {leg.type === 'call' ? 'Call' : 'Put'}
+              </span>
+            </span>
+            <span className="text-gray-400">prim {usd(leg.premium)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -106,6 +153,7 @@ export default function LiveExampleModal({ strategy, strategyLabel, onClose }: P
   }, [strategy, asset]);
 
   const theoretical = data?.data_source === 'theoretical_fallback';
+  const metrics = data?.metrics ?? [];
 
   return (
     <div
@@ -154,31 +202,33 @@ export default function LiveExampleModal({ strategy, strategyLabel, onClose }: P
               {/* veri kaynağı rozeti */}
               {theoretical ? (
                 <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-                  ⚠️ Canlı opsiyon zinciri (Deribit) şu an alınamadı — gösterilen prim
+                  ⚠️ Canlı opsiyon zinciri (Deribit) şu an alınamadı — primler
                   <strong> Black-Scholes ile hesaplanmış teorik tahmindir</strong> (spot canlı).
-                  Yayında gerçek piyasa primi gösterilir.
+                  Yayında gerçek piyasa primleri gösterilir.
                 </div>
               ) : (
                 <div className="mb-3 rounded-lg border border-[#26de81]/30 bg-[#26de81]/10 px-3 py-2 text-xs text-[#26de81]">
-                  ✅ Canlı Deribit opsiyon verisi · {data.instrument}
+                  ✅ Canlı Deribit opsiyon verisi
+                  {data.iv_pct != null && <> · ort. IV %{data.iv_pct}</>}
                 </div>
               )}
 
               {/* senaryo cümlesi */}
-              <p className="text-sm text-gray-200 leading-relaxed mb-4">
-                Bugün <strong className="text-white">{asset} = {usd(data.spot)}</strong>.
-                {' '}~{data.expiry_days} günlük, <strong className="text-white">{usd(data.strike)}</strong> kullanım
-                fiyatlı bir put alırsan primi ≈ <strong className="text-white">{usd(data.premium_usd)}</strong>
-                {data.iv_pct != null && <> (IV %{data.iv_pct})</>}. Bu protective put ile 1 {asset}&apos;ini
-                aşağı sigortalarsın.
-              </p>
+              {data.summary && (
+                <p className="text-sm text-gray-200 leading-relaxed mb-4">{data.summary}</p>
+              )}
 
-              {/* metrikler */}
-              <div className="grid grid-cols-3 gap-2 mb-4">
-                <Metric label="Max zarar" value={usd(data.max_loss_usd)} color="#ff5c5c" />
-                <Metric label="Korunan taban" value={usd(data.protected_floor_usd)} color="#4fc3f7" />
-                <Metric label="Yukarı başabaş" value={usd(data.breakeven_up_usd)} color="#26de81" />
-              </div>
+              {/* metrikler (backend'den dinamik) */}
+              {metrics.length > 0 && (
+                <div className={`grid gap-2 mb-4 ${metrics.length >= 4 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
+                  {metrics.map((m, i) => (
+                    <Metric key={i} label={m.label} value={metricText(m)} color={KIND_COLOR[m.kind]} />
+                  ))}
+                </div>
+              )}
+
+              {/* bacak tablosu */}
+              <LegTable data={data} />
 
               {/* payoff grafiği */}
               <div className="rounded-xl border border-[#26314a] bg-[#0e0e1a] p-3 mb-2">
@@ -189,7 +239,7 @@ export default function LiveExampleModal({ strategy, strategyLabel, onClose }: P
                 <div className="flex gap-4 text-[10px] text-gray-500 mt-1">
                   <span><span className="text-[#4fc3f7]">▎</span> bugünkü fiyat</span>
                   <span><span className="text-[#a78bfa]">▎</span> strike</span>
-                  <span>Aşağıda kayıp <strong className="text-gray-300">tabanlanır</strong>.</span>
+                  <span><span className="text-[#26de81]">▎</span> kâr bölgesi</span>
                 </div>
               </div>
 

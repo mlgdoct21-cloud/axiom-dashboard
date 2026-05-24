@@ -12,9 +12,18 @@ interface Props {
   onProgressChange?: () => void;
 }
 
-// Ders slug'ı → canlı 'Gerçek Örnek' stratejisi (şimdilik prototip: protective put).
+// Ders slug'ı → canlı 'Gerçek Örnek' stratejisi. Birden fazla slug aynı
+// stratejiye bağlanabilir (örn. covered call'un giriş + sistematik dersleri).
 const LIVE_EXAMPLE_BY_SLUG: Record<string, { strategy: string; label: string }> = {
   'protective-put': { strategy: 'protective-put', label: 'Protective Put — Portföy Sigortası' },
+  'covered-call': { strategy: 'covered-call', label: 'Covered Call — Yatay Piyasada Kira' },
+  'covered-call-sistematigi': { strategy: 'covered-call', label: 'Covered Call — Kira Merdiveni' },
+  'cash-secured-put': { strategy: 'cash-secured-put', label: 'Cash-Secured Put — İndirimli Giriş + Prim' },
+  'iron-condor': { strategy: 'iron-condor', label: 'Iron Condor — İki Taraflı Tanımlı Risk' },
+  'debit-spreadler': { strategy: 'debit-spread', label: 'Debit Spread (Bull Call) — Ucuz Tanımlı Yön' },
+  'credit-spreadler': { strategy: 'credit-spread', label: 'Credit Spread (Bull Put) — Prim Toplayan Yön' },
+  'straddle-strangle-derin': { strategy: 'straddle', label: 'Straddle — Volatilite / Büyük Hareket Bahsi' },
+  'spread-straddle-giris': { strategy: 'straddle', label: 'Straddle — Çok Bacaklı Yapılara Giriş' },
 };
 
 export default function LessonView({ lessonId, isAuthenticated, onProgressChange }: Props) {

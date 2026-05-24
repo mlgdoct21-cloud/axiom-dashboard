@@ -259,6 +259,21 @@ export interface AcademyLiveExamplePayoffPoint {
   pnl: number;
 }
 
+export interface AcademyLiveExampleLeg {
+  type: 'call' | 'put';
+  side: 'long' | 'short';
+  strike: number;
+  premium: number;
+  instrument?: string | null;
+}
+
+export interface AcademyLiveExampleMetric {
+  label: string;
+  value?: number | null;
+  display?: string;
+  kind: 'loss' | 'gain' | 'neutral';
+}
+
 export interface AcademyLiveExample {
   available: boolean;
   asset?: string;
@@ -266,10 +281,17 @@ export interface AcademyLiveExample {
   data_source?: 'deribit_live' | 'theoretical_fallback';
   spot?: number;
   strike?: number;
+  strikes?: number[];
   expiry_days?: number;
   premium_usd?: number;
+  net_premium_usd?: number;
   iv_pct?: number | null;
   instrument?: string | null;
+  legs?: AcademyLiveExampleLeg[];
+  metrics?: AcademyLiveExampleMetric[];
+  breakevens?: number[];
+  summary?: string;
+  // protective-put geriye dönük alanlar
   max_loss_usd?: number;
   breakeven_up_usd?: number;
   protected_floor_usd?: number;
