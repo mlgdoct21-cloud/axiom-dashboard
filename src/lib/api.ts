@@ -274,6 +274,18 @@ export interface AcademyLiveExampleMetric {
   kind: 'loss' | 'gain' | 'neutral';
 }
 
+export interface AcademyLiveExampleTeachingStep {
+  label: string;
+  body: string;
+  pnl?: string; // işaretli kâr/zarar metni, örn. '+1.493 $'
+}
+
+export interface AcademyLiveExampleTeaching {
+  intro: string;
+  steps: AcademyLiveExampleTeachingStep[];
+  takeaway: string;
+}
+
 export interface AcademyLiveExample {
   available: boolean;
   asset?: string;
@@ -291,6 +303,7 @@ export interface AcademyLiveExample {
   metrics?: AcademyLiveExampleMetric[];
   breakevens?: number[];
   summary?: string;
+  teaching?: AcademyLiveExampleTeaching | null;
   // protective-put geriye dönük alanlar
   max_loss_usd?: number;
   breakeven_up_usd?: number;

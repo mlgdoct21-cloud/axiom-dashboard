@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiClient, type AcademyLiveExample, type AcademyLiveExampleMetric } from '@/lib/api';
+import { apiClient, type AcademyLiveExample, type AcademyLiveExampleMetric, type AcademyLiveExampleTeaching } from '@/lib/api';
 
 interface Props {
   strategy: string;        // örn. 'protective-put'
@@ -96,6 +96,47 @@ function PayoffChart({ data }: { data: AcademyLiveExample }) {
         <text x={spotX} y={padT - 2} fill="#4fc3f7" fontSize="9" textAnchor="middle">bugün</text>
       )}
     </svg>
+  );
+}
+
+/** Adım adım öğretmen-öğrenci anlatımı: giriş + numaralı senaryolar + ders. */
+function Teaching({ t }: { t: AcademyLiveExampleTeaching }) {
+  return (
+    <div className="mb-4">
+      <p className="text-sm text-gray-200 leading-relaxed mb-3">{t.intro}</p>
+      <ol className="space-y-2 mb-3">
+        {t.steps.map((s, i) => {
+          const isLoss = s.pnl?.trimStart().startsWith('−') || s.pnl?.trimStart().startsWith('-');
+          return (
+            <li key={i} className="flex gap-2.5 rounded-xl border border-[#26314a] bg-[#0e0e1a] p-2.5">
+              <span className="flex-shrink-0 mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#4fc3f7]/15 text-[11px] font-bold text-[#4fc3f7]">
+                {i + 1}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{s.label}</span>
+                  {s.pnl && (
+                    <span
+                      className="flex-shrink-0 rounded-md px-1.5 py-0.5 text-xs font-bold"
+                      style={{
+                        color: isLoss ? '#ff5c5c' : '#26de81',
+                        background: (isLoss ? '#ff5c5c' : '#26de81') + '1f',
+                      }}
+                    >
+                      {s.pnl}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-0.5 text-[13px] leading-snug text-gray-300">{s.body}</p>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="rounded-xl border border-[#a78bfa]/30 bg-[#a78bfa]/10 px-3 py-2 text-[13px] text-[#cbb6ff]">
+        <span className="font-semibold">📌 Ders: </span>{t.takeaway}
+      </div>
+    </div>
   );
 }
 
@@ -213,9 +254,13 @@ export default function LiveExampleModal({ strategy, strategyLabel, onClose }: P
                 </div>
               )}
 
-              {/* senaryo cümlesi */}
-              {data.summary && (
-                <p className="text-sm text-gray-200 leading-relaxed mb-4">{data.summary}</p>
+              {/* öğretmen-öğrenci anlatımı (yoksa tek cümlelik özete düş) */}
+              {data.teaching ? (
+                <Teaching t={data.teaching} />
+              ) : (
+                data.summary && (
+                  <p className="text-sm text-gray-200 leading-relaxed mb-4">{data.summary}</p>
+                )
               )}
 
               {/* metrikler (backend'den dinamik) */}
