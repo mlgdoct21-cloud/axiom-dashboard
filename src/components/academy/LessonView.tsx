@@ -14,7 +14,13 @@ interface Props {
 
 // Ders slug'ı → canlı 'Gerçek Örnek' stratejisi. Birden fazla slug aynı
 // stratejiye bağlanabilir (örn. covered call'un giriş + sistematik dersleri).
+// NOT: Canlı örnekler büyük çoğunlukla premium modüllerde (M4-M6) yer alır, yani
+// fiilen premium-gated. TEK İSTİSNA: M1L4 (free) — protective-put örneği free
+// kullanıcıya 'tadımlık' olarak açık kalır (sigorta sezgisini canlı rakamla göster,
+// premium'a çek). Free örneği değiştirmek = bu free-ders eşlemesini değiştir.
 const LIVE_EXAMPLE_BY_SLUG: Record<string, { strategy: string; label: string }> = {
+  // ↓ FREE tadımlık (M1L4 'sigorta-vs-spekulasyon', free modül)
+  'sigorta-vs-spekulasyon': { strategy: 'protective-put', label: 'Protective Put — Sigorta Sezgisini Canlı Gör' },
   'protective-put': { strategy: 'protective-put', label: 'Protective Put — Portföy Sigortası' },
   'covered-call': { strategy: 'covered-call', label: 'Covered Call — Yatay Piyasada Kira' },
   'covered-call-sistematigi': { strategy: 'covered-call', label: 'Covered Call — Kira Merdiveni' },
