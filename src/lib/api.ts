@@ -290,7 +290,7 @@ export interface AcademyLiveExample {
   available: boolean;
   asset?: string;
   strategy?: string;
-  data_source?: 'deribit_live' | 'theoretical_fallback';
+  data_source?: 'deribit_live' | 'theoretical_fallback' | 'theoretical_equity';
   spot?: number;
   strike?: number;
   strikes?: number[];

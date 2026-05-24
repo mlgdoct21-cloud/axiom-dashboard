@@ -12,7 +12,7 @@ interface Props {
 
 const UPGRADE_LINK = 'https://t.me/AxiomAnaliz_Bot?start=upgrade_premium';
 
-const ASSETS = ['BTC', 'ETH'] as const;
+const ASSETS = ['BTC', 'ETH', 'SPY', 'AAPL', 'QQQ'] as const;
 type Asset = (typeof ASSETS)[number];
 
 const KIND_COLOR: Record<AcademyLiveExampleMetric['kind'], string> = {
@@ -196,7 +196,7 @@ export default function LiveExampleModal({ strategy, strategyLabel, onClose, sho
     return () => { cancelled = true; };
   }, [strategy, asset]);
 
-  const theoretical = data?.data_source === 'theoretical_fallback';
+  const source = data?.data_source;
   const metrics = data?.metrics ?? [];
 
   return (
@@ -218,7 +218,7 @@ export default function LiveExampleModal({ strategy, strategyLabel, onClose, sho
         </div>
 
         {/* varlık seçimi */}
-        <div className="flex gap-2 px-5 pt-4">
+        <div className="flex flex-wrap gap-2 px-5 pt-4">
           {ASSETS.map((a) => (
             <button
               key={a}
@@ -244,16 +244,24 @@ export default function LiveExampleModal({ strategy, strategyLabel, onClose, sho
           {!loading && !err && data?.available && (
             <>
               {/* veri kaynağı rozeti */}
-              {theoretical ? (
+              {source === 'deribit_live' && (
+                <div className="mb-3 rounded-lg border border-[#26de81]/30 bg-[#26de81]/10 px-3 py-2 text-xs text-[#26de81]">
+                  ✅ Canlı Deribit opsiyon verisi
+                  {data.iv_pct != null && <> · ort. IV %{data.iv_pct}</>}
+                </div>
+              )}
+              {source === 'theoretical_fallback' && (
                 <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
                   ⚠️ Canlı opsiyon zinciri (Deribit) şu an alınamadı — primler
                   <strong> Black-Scholes ile hesaplanmış teorik tahmindir</strong> (spot canlı).
                   Yayında gerçek piyasa primleri gösterilir.
                 </div>
-              ) : (
-                <div className="mb-3 rounded-lg border border-[#26de81]/30 bg-[#26de81]/10 px-3 py-2 text-xs text-[#26de81]">
-                  ✅ Canlı Deribit opsiyon verisi
-                  {data.iv_pct != null && <> · ort. IV %{data.iv_pct}</>}
+              )}
+              {source === 'theoretical_equity' && (
+                <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                  📐 Hisse opsiyon primleri <strong>Black-Scholes ile hesaplanmış teorik değerdir</strong>{' '}
+                  (spot canlı · FMP{data.iv_pct != null && <> · varsayılan IV %{data.iv_pct}</>}).
+                  Örnek <strong>1 hisse</strong> üzerinden; gerçekte 1 opsiyon sözleşmesi = 100 hisse.
                 </div>
               )}
 
