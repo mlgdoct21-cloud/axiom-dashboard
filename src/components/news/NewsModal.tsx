@@ -108,7 +108,7 @@ export default function NewsModal({ item, isOpen, onClose, locale, marketAnalysi
             {marketAnalysis && (
               <div className="pt-4 border-t border-[#2a2a3e]">
                 <div className="text-[10px] text-[#ff9800] uppercase mb-2 font-semibold tracking-wider">
-                  📊 {locale === 'tr' ? 'AXIOM Pazar Analizi' : 'AXIOM Market Analysis'}
+                  🎯 {locale === 'tr' ? 'AXIOM Görüşü' : 'AXIOM View'}
                 </div>
                 <p className="text-[#c0c0d0] text-xs leading-relaxed whitespace-pre-line">
                   {marketAnalysis}

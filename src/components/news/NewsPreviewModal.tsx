@@ -123,7 +123,7 @@ export default function NewsPreviewModal({ item, locale, onClose, onOpenFull }: 
           {summary && (
             <div>
               <div className="text-[10px] text-[#8888a0] uppercase tracking-wider mb-1.5">
-                {locale === 'tr' ? '📝 Özet' : '📝 Summary'}
+                {locale === 'tr' ? '📰 Haberin Özeti' : '📰 News Summary'}
               </div>
               <p className="text-[13px] text-[#e0e0e0] leading-relaxed">{summary}</p>
             </div>
@@ -133,7 +133,7 @@ export default function NewsPreviewModal({ item, locale, onClose, onOpenFull }: 
           {analysis && (
             <div>
               <div className="text-[10px] text-[#8888a0] uppercase tracking-wider mb-1.5">
-                {locale === 'tr' ? '🎯 Axiom Analizi' : '🎯 Axiom Analysis'}
+                {locale === 'tr' ? '🎯 AXIOM Görüşü' : '🎯 AXIOM View'}
               </div>
               <p className="text-[13px] text-[#a0a0b8] leading-relaxed">{analysis}</p>
             </div>

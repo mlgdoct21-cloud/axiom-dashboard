@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import NewsModal from './NewsModal';
 import AxiomDigestEmptyState from './AxiomDigestEmptyState';
 import type { NewsItem } from '@/components/tabs/NewsTab';
 import type { NewsVote } from '@/lib/news-storage';
@@ -66,7 +65,6 @@ export default function NewsDetail({
   locked = false,
   onUpgrade,
 }: NewsDetailProps) {
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [priceSnapshots, setPriceSnapshots] = useState<Record<string, PriceSnapshot>>({});
 
   // On-demand fallback state (used when backend SSE is slow / dropped)
@@ -292,7 +290,7 @@ export default function NewsDetail({
           {/* AI Özet Panel (Ana Fokus) — Otomatik Yükleniyor */}
           <div className="p-4 bg-[#0f1a2e] border border-[#2a4a6e] rounded">
             <div className="text-[11px] text-[#4fc3f7] uppercase mb-3 font-semibold tracking-wider flex items-center gap-2">
-              🤖 {locale === 'tr' ? 'AI Özet' : 'AI Summary'}
+              📰 {locale === 'tr' ? 'Haberin Özeti' : 'News Summary'}
               {aiLoading && <span className="animate-pulse">•</span>}
             </div>
 
@@ -331,7 +329,7 @@ export default function NewsDetail({
           {/* AXIOM Market Analysis Panel — Piyasa Konteksti */}
           <div className="p-4 bg-[#1a0f2e] border border-[#4a2a6e] rounded">
             <div className="text-[11px] text-[#ff9800] uppercase mb-3 font-semibold tracking-wider flex items-center gap-2">
-              📊 {locale === 'tr' ? 'AXIOM Pazar Analizi' : 'AXIOM Market Analysis'}
+              🎯 {locale === 'tr' ? 'AXIOM Görüşü' : 'AXIOM View'}
               {analysisLoading && <span className="animate-pulse">•</span>}
             </div>
 
@@ -428,22 +426,8 @@ export default function NewsDetail({
             </button>
           </div>
 
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="w-full py-1.5 bg-[#1a2a3e] border border-[#2a4a6e] text-[#ff9800] hover:bg-[#1e3248] rounded text-xs font-medium transition"
-          >
-            📖 {locale === 'tr' ? 'Makaleyi Oku' : 'Read Article'} ↗
-          </button>
         </div>
       </div>
-
-      <NewsModal
-        item={item}
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        locale={locale}
-        marketAnalysis={marketAnalysis}
-      />
     </>
   );
 }
