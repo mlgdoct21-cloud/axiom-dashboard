@@ -40,6 +40,244 @@ function Cell({ label, value, color }: { label: string; value: string; color?: s
 }
 
 // ─── Agent cards ─────────────────────────────────────────────────────────────
+//
+// "Kullandığı veriler" expand'i (C2): kullanıcı yorumun kaynağını görsün diye
+// her ajan kartının altına ham veri özetini gösteren bir <details> bloğu.
+// Tek bir component, her kart kendi dataUsed nesnesini geçer.
+function DataUsedExpand({ data }: { data: Record<string, any> }) {
+  const entries = Object.entries(data || {}).filter(([, v]) =>
+    v != null && (Array.isArray(v) ? v.length > 0 : true)
+  );
+  if (!entries.length) return null;
+  return (
+    <details className="mt-3 group">
+      <summary className="text-[11px] text-[#666680] cursor-pointer hover:text-[#4fc3f7] select-none">
+        ▼ Bu yorumun dayandığı veriler ({entries.length} kaynak)
+      </summary>
+      <div className="mt-2 bg-[#08081a] border border-[#1a1a2e] rounded p-3 max-h-96 overflow-auto">
+        <pre className="text-[10px] text-[#888] whitespace-pre-wrap font-mono leading-relaxed">
+{entries.map(([k, v]) => {
+  let preview: string;
+  if (Array.isArray(v)) {
+    preview = JSON.stringify(v.slice(0, 4), null, 2);
+    if (v.length > 4) preview += `\n... (+${v.length - 4} daha)`;
+  } else {
+    preview = JSON.stringify(v, null, 2);
+  }
+  return `── ${k} ──\n${preview}\n`;
+}).join('\n')}
+        </pre>
+      </div>
+    </details>
+  );
+}
+
+// ─── Finansal Tablolar paneli (C1) — ham bilanço/gelir/nakit + oranlar ──
+function FinancialsPanel({
+  balanceSheet, incomeExt, cashFlowExt, computedRatios,
+  sectorBaseline, analystTarget, geographicRevenue, symbolNews,
+}: any) {
+  const noData = !balanceSheet?.length && !incomeExt?.length && !cashFlowExt?.length;
+  if (noData) {
+    return (
+      <div className="p-6 text-center text-sm text-[#666680]">
+        Ham finansal tablo verisi yok. (BIST hisselerinde FMP balance-sheet
+        yok; ABD için sembolün analiz tamamlanması gerek.)
+      </div>
+    );
+  }
+  const fmtB = (n: number | null) => n != null ? (n / 1e9).toFixed(2) + 'B' : '—';
+  const fmtM = (n: number | null) => n != null ? (n / 1e6).toFixed(0) + 'M' : '—';
+  return (
+    <div className="space-y-4">
+      {/* Bilanço */}
+      {balanceSheet?.length > 0 && (
+        <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3 overflow-auto">
+          <div className="text-xs text-[#4fc3f7] font-bold uppercase mb-2">Bilanço (Son 4 Yıl, $)</div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[#666680] border-b border-[#2a2a3e]">
+                <th className="text-left py-1.5 pr-3">Kalem</th>
+                {balanceSheet.slice(0, 4).map((r: any) => <th key={r.date} className="text-right py-1.5 px-2">{r.date.slice(0, 4)}</th>)}
+              </tr>
+            </thead>
+            <tbody className="text-[#c0c0d0]">
+              {[
+                ['Nakit & Eşd.', 'cashAndShortTermInvestments'],
+                ['Stok', 'inventory'],
+                ['Net Alacaklar', 'netReceivables'],
+                ['Dönen Varlıklar', 'totalCurrentAssets'],
+                ['Toplam Varlık', 'totalAssets'],
+                ['Şerefiye', 'goodwill'],
+                ['KV Yükümlülük', 'totalCurrentLiabilities'],
+                ['KV Borç', 'shortTermDebt'],
+                ['UV Borç', 'longTermDebt'],
+                ['Toplam Borç', 'totalDebt'],
+                ['Özkaynak', 'totalEquity'],
+              ].map(([label, key]) => (
+                <tr key={key as string} className="border-b border-[#1a1a2e]">
+                  <td className="py-1 pr-3 text-[#888]">{label}</td>
+                  {balanceSheet.slice(0, 4).map((r: any) => <td key={r.date} className="text-right py-1 px-2 font-mono">{fmtB(r[key as string])}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {/* Gelir Tablosu Ek */}
+      {incomeExt?.length > 0 && (
+        <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3 overflow-auto">
+          <div className="text-xs text-[#4fc3f7] font-bold uppercase mb-2">Gelir Tablosu (Son 4 Yıl, $)</div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[#666680] border-b border-[#2a2a3e]">
+                <th className="text-left py-1.5 pr-3">Kalem</th>
+                {incomeExt.slice(0, 4).map((r: any) => <th key={r.date} className="text-right py-1.5 px-2">{r.date.slice(0, 4)}</th>)}
+              </tr>
+            </thead>
+            <tbody className="text-[#c0c0d0]">
+              {[
+                ['Hasılat', 'revenue'],
+                ['COGS', 'costOfRevenue'],
+                ['Brüt Kâr', 'grossProfit'],
+                ['R&D', 'researchAndDevelopmentExpenses'],
+                ['SG&A', 'sellingGeneralAndAdministrativeExpenses'],
+                ['EBIT (Op.Kâr)', 'operatingIncome'],
+                ['FAVÖK', 'ebitda'],
+                ['Faiz Gideri', 'interestExpense'],
+                ['Vergi', 'incomeTaxExpense'],
+                ['Net Kâr', 'netIncome'],
+              ].map(([label, key]) => (
+                <tr key={key as string} className="border-b border-[#1a1a2e]">
+                  <td className="py-1 pr-3 text-[#888]">{label}</td>
+                  {incomeExt.slice(0, 4).map((r: any) => <td key={r.date} className="text-right py-1 px-2 font-mono">{fmtB(r[key as string])}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {/* Nakit Akış Ek */}
+      {cashFlowExt?.length > 0 && (
+        <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3 overflow-auto">
+          <div className="text-xs text-[#4fc3f7] font-bold uppercase mb-2">Nakit Akış (Son 4 Yıl, $)</div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[#666680] border-b border-[#2a2a3e]">
+                <th className="text-left py-1.5 pr-3">Kalem</th>
+                {cashFlowExt.slice(0, 4).map((r: any) => <th key={r.date} className="text-right py-1.5 px-2">{r.date.slice(0, 4)}</th>)}
+              </tr>
+            </thead>
+            <tbody className="text-[#c0c0d0]">
+              {[
+                ['Op. Nakit Akış', 'operatingCashFlow'],
+                ['CapEx', 'capitalExpenditure'],
+                ['Serbest Nakit (FCF)', 'freeCashFlow'],
+                ['Buyback', 'commonStockRepurchased'],
+                ['Temettü Ödemesi', 'dividendsPaid'],
+                ['Borç İhracı', 'debtIssuance'],
+                ['Borç Geri Ödeme', 'debtRepayment'],
+                ['ΔÇalışma Sermayesi', 'changeInWorkingCapital'],
+              ].map(([label, key]) => (
+                <tr key={key as string} className="border-b border-[#1a1a2e]">
+                  <td className="py-1 pr-3 text-[#888]">{label}</td>
+                  {cashFlowExt.slice(0, 4).map((r: any) => <td key={r.date} className="text-right py-1 px-2 font-mono">{fmtB(r[key as string])}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {/* Türetilmiş oranlar (kod hesabı) */}
+      {computedRatios && (
+        <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3">
+          <div className="text-xs text-[#4fc3f7] font-bold uppercase mb-2">Türetilmiş Oranlar (Broker Matrisi, Kod Hesabı)</div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+            {[
+              ['Net İşletme Sermayesi', computedRatios.netWorkingCapital != null ? fmtM(computedRatios.netWorkingCapital) : '—'],
+              ['NİS / Hasılat', computedRatios.netWorkingCapitalPctRevenue != null ? `%${computedRatios.netWorkingCapitalPctRevenue}` : '—'],
+              ['Kaldıraç (TopBorç/TopVarlık)', computedRatios.leverageRatio != null ? `%${computedRatios.leverageRatio}` : '—'],
+              ['Net Borç/FAVÖK', computedRatios.debtToEbitda != null ? `${computedRatios.debtToEbitda}x` : '—'],
+              ['Stok Devir Hızı', computedRatios.inventoryTurnover != null ? `${computedRatios.inventoryTurnover}x` : '—'],
+              ['Stokta Kalış (DIO)', computedRatios.daysInventoryOutstanding != null ? `${computedRatios.daysInventoryOutstanding} gün` : '—'],
+              ['Alacak Tahsil (DSO)', computedRatios.daysSalesOutstanding != null ? `${computedRatios.daysSalesOutstanding} gün` : '—'],
+              ['FAVÖK Marjı', computedRatios.ebitdaMargin != null ? `%${computedRatios.ebitdaMargin}` : '—'],
+              ['R&D Yoğunluğu', computedRatios.rdIntensity != null ? `%${computedRatios.rdIntensity}` : '—'],
+              ['SG&A Yoğunluğu', computedRatios.sgaIntensity != null ? `%${computedRatios.sgaIntensity}` : '—'],
+              ['Etkin Vergi Oranı', computedRatios.effectiveTaxRate != null ? `%${computedRatios.effectiveTaxRate}` : '—'],
+              ['Varlık Devri', computedRatios.assetTurnover != null ? `${computedRatios.assetTurnover}x` : '—'],
+              ['Sermaye Çarpanı', computedRatios.equityMultiplier != null ? `${computedRatios.equityMultiplier}x` : '—'],
+              ['Nakit Dönüşüm', computedRatios.cashConversionRatio != null ? `${computedRatios.cashConversionRatio}x` : '—'],
+              ['Hissedar Getirisi', computedRatios.shareholderYieldPct != null ? `%${computedRatios.shareholderYieldPct}` : '—'],
+            ].map(([label, val]) => (
+              <div key={label} className="flex justify-between border-b border-[#1a1a2e] py-1">
+                <span className="text-[#888]">{label}</span>
+                <span className="font-mono font-bold text-[#c0c0d0]">{val}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {/* Sektör baseline + Analist hedef */}
+      <div className="grid md:grid-cols-2 gap-3">
+        {sectorBaseline && (
+          <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3">
+            <div className="text-xs text-[#4fc3f7] font-bold uppercase mb-2">Sektör Baseline</div>
+            <div className="text-xs space-y-1 text-[#c0c0d0]">
+              <div>Sektör: <span className="font-mono">{sectorBaseline.sectorName || '—'}</span> → P/E: <span className="font-bold">{sectorBaseline.sectorPE ?? '—'}</span></div>
+              <div>Endüstri: <span className="font-mono">{sectorBaseline.industryName || '—'}</span> → P/E: <span className="font-bold">{sectorBaseline.industryPE ?? '—'}</span></div>
+            </div>
+          </div>
+        )}
+        {analystTarget && (
+          <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3">
+            <div className="text-xs text-[#4fc3f7] font-bold uppercase mb-2">Analist Hedef Fiyat</div>
+            <div className="text-xs space-y-1 text-[#c0c0d0]">
+              <div>Yüksek / Median / Düşük: <span className="font-mono font-bold">${analystTarget.consensusHigh ?? '—'} / ${analystTarget.consensusMedian ?? '—'} / ${analystTarget.consensusLow ?? '—'}</span></div>
+              <div>AL {analystTarget.recentBuy ?? 0} · TUT {analystTarget.recentHold ?? 0} · SAT {analystTarget.recentSell ?? 0} ({analystTarget.numAnalysts ?? '—'} analist)</div>
+            </div>
+          </div>
+        )}
+      </div>
+      {/* Coğrafi gelir */}
+      {geographicRevenue?.segments?.length > 0 && (
+        <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3">
+          <div className="text-xs text-[#4fc3f7] font-bold uppercase mb-2">Coğrafi Gelir Kırılımı ({geographicRevenue.fiscalYear})</div>
+          <div className="space-y-1">
+            {geographicRevenue.segments.slice(0, 8).map((s: any) => (
+              <div key={s.region} className="flex items-center gap-2 text-xs">
+                <span className="text-[#c0c0d0] w-40 truncate">{s.region}</span>
+                <div className="flex-1 h-2 bg-[#1a1a2e] rounded overflow-hidden">
+                  <div className="h-full bg-[#4fc3f7]" style={{ width: `${s.sharePct}%` }} />
+                </div>
+                <span className="text-[#888] font-mono w-12 text-right">%{s.sharePct}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {/* Sembol haberleri */}
+      {symbolNews?.length > 0 && (
+        <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3">
+          <div className="text-xs text-[#4fc3f7] font-bold uppercase mb-2">Hisseye Özel Son Haberler ({symbolNews.length})</div>
+          <div className="space-y-2 max-h-80 overflow-auto">
+            {symbolNews.map((n: any, i: number) => (
+              <div key={i} className="text-xs border-b border-[#1a1a2e] pb-2 last:border-0">
+                <div className="flex items-center gap-2 text-[10px] text-[#666]">
+                  <span className="font-mono">{n.date}</span>
+                  <span className="text-[#4fc3f7]">[{n.source}]</span>
+                </div>
+                <a href={n.url} target="_blank" rel="noopener noreferrer" className="text-[#c0c0d0] hover:text-[#4fc3f7]">{n.title}</a>
+                {n.summary && <div className="text-[#888] mt-1">{n.summary}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RatingBadge({ r }: { r: string }) {
   const c = r === 'GÜÇLÜ' || r === 'HARİKA' ? '#26de81'
     : r === 'ZAYIF' || r === 'ŞÜPHELİ' || r === 'TEHLİKELİ' ? '#ff4757'
@@ -47,7 +285,7 @@ function RatingBadge({ r }: { r: string }) {
   return <span className="text-xs font-bold px-2 py-0.5 rounded" style={{ color: c, background: c + '22' }}>{r}</span>;
 }
 
-function Agent1Card({ d }: { d: any }) {
+function Agent1Card({ d, dataUsed }: { d: any; dataUsed?: Record<string, any> }) {
   if (d?.error) return <p className="text-sm text-[#ff9800]">⚠ {d.error}</p>;
   return (
     <div className="space-y-3">
@@ -100,11 +338,12 @@ function Agent1Card({ d }: { d: any }) {
           </div>
         )}
       </div>
+      {dataUsed && <DataUsedExpand data={dataUsed} />}
     </div>
   );
 }
 
-function Agent2Card({ d }: { d: any }) {
+function Agent2Card({ d, dataUsed }: { d: any; dataUsed?: Record<string, any> }) {
   if (d?.error) return <p className="text-sm text-[#ff9800]">⚠ {d.error}</p>;
   const sigColor = (s: string) => s === 'AL' ? '#26de81' : s === 'SAT' ? '#ff4757' : '#ff9800';
   return (
@@ -147,11 +386,12 @@ function Agent2Card({ d }: { d: any }) {
           </div>
         )}
       </div>
+      {dataUsed && <DataUsedExpand data={dataUsed} />}
     </div>
   );
 }
 
-function Agent3Card({ d }: { d: any }) {
+function Agent3Card({ d, dataUsed }: { d: any; dataUsed?: Record<string, any> }) {
   if (d?.error) return <p className="text-sm text-[#ff9800]">⚠ {d.error}</p>;
   const rc = (s: string) => s === 'DÜŞÜK' ? '#26de81' : s === 'YÜKSEK' || s === 'KRİTİK' ? '#ff4757' : '#ff9800';
   return (
@@ -205,11 +445,12 @@ function Agent3Card({ d }: { d: any }) {
           ))}
         </div>
       )}
+      {dataUsed && <DataUsedExpand data={dataUsed} />}
     </div>
   );
 }
 
-function Agent4Card({ d }: { d: any }) {
+function Agent4Card({ d, dataUsed }: { d: any; dataUsed?: Record<string, any> }) {
   if (d?.error) return <p className="text-sm text-[#ff9800]">⚠ {d.error}</p>;
   const sigColor = (s: string) => s === 'AL' ? '#26de81' : s === 'SAT' ? '#ff4757' : '#ff9800';
   const crossColor = (s: string) => s === 'GOLDEN_CROSS' ? '#26de81' : s === 'DEATH_CROSS' ? '#ff4757' : '#888';
@@ -256,6 +497,7 @@ function Agent4Card({ d }: { d: any }) {
           </div>
         )}
       </div>
+      {dataUsed && <DataUsedExpand data={dataUsed} />}
     </div>
   );
 }
@@ -368,6 +610,15 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
   const [revTrend,  setRevTrend]  = useState<any[]>([]);
   const [fibonacci, setFibonacci] = useState<any>(null);
   const [latestQ,   setLatestQ]   = useState<any>(null);
+  // ── Enrichment state (C1+C2: ham finansal tablolar + ajan veri expand) ──
+  const [balanceSheet,    setBalanceSheet]    = useState<any[]>([]);
+  const [incomeExt,       setIncomeExt]       = useState<any[]>([]);
+  const [cashFlowExt,     setCashFlowExt]     = useState<any[]>([]);
+  const [computedRatios,  setComputedRatios]  = useState<any>(null);
+  const [sectorBaseline,  setSectorBaseline]  = useState<any>(null);
+  const [analystTarget,   setAnalystTarget]   = useState<any>(null);
+  const [geographicRevenue, setGeographicRevenue] = useState<any>(null);
+  const [symbolNews,      setSymbolNews]      = useState<any[]>([]);
   const [agent1,    setAgent1]    = useState<any>(null);
   const [agent2,    setAgent2]    = useState<any>(null);
   const [agent3,    setAgent3]    = useState<any>(null);
@@ -380,6 +631,8 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
 
   const runAnalysis = (sym: string, force = false) => {
     setStatus(''); setMetrics(null); setRevTrend([]); setFibonacci(null); setLatestQ(null);
+    setBalanceSheet([]); setIncomeExt([]); setCashFlowExt([]); setComputedRatios(null);
+    setSectorBaseline(null); setAnalystTarget(null); setGeographicRevenue(null); setSymbolNews([]);
     setAgent1(null); setAgent2(null); setAgent3(null); setAgent4(null); setAgent5(null);
     setDone(false); setError(null); setActiveTab(0);
     if (esRef.current) { esRef.current.close(); esRef.current = null; }
@@ -396,6 +649,15 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
       setRevTrend(d.revenueTrend || []);
       setFibonacci(d.fibonacci || null);
       setLatestQ(d.latestReportedQuarter || null);
+      // Enrichment alanları (geriye uyumlu — eski cache'lerde undefined olabilir)
+      setBalanceSheet(d.balanceSheet || []);
+      setIncomeExt(d.incomeExt || []);
+      setCashFlowExt(d.cashFlowExt || []);
+      setComputedRatios(d.computedRatios || null);
+      setSectorBaseline(d.sectorBaseline || null);
+      setAnalystTarget(d.analystTarget || null);
+      setGeographicRevenue(d.geographicRevenue || null);
+      setSymbolNews(d.symbolNews || []);
     });
     es.addEventListener('agent_1',  e => setAgent1(JSON.parse((e as MessageEvent).data)));
     es.addEventListener('agent_2',  e => setAgent2(JSON.parse((e as MessageEvent).data)));
@@ -428,11 +690,26 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
   const score     = agent5?.score ?? null;
   const decColor  = decisionColor(decision);
 
+  // Ham finansal tablolar — ajan yorumlarının kaynağını kullanıcıya açar
+  // (C1). Always-ready sekme: enrichment yoksa "veri yok" panel gösterir.
+  const financialsReady = (balanceSheet.length > 0) || (incomeExt.length > 0) || (cashFlowExt.length > 0);
   const TABS = [
-    { label: '🔬 Muhasebeci', ready: !!agent1, content: <Agent1Card d={agent1} /> },
-    { label: '📈 Stratejist', ready: !!agent2, content: <Agent2Card d={agent2} /> },
-    { label: '🚨 Şeytan',     ready: !!agent3, content: <Agent3Card d={agent3} /> },
-    { label: '📐 Teknisyen',  ready: !!agent4, content: <Agent4Card d={agent4} /> },
+    { label: '🔬 Muhasebeci', ready: !!agent1, content: <Agent1Card d={agent1} dataUsed={{ balanceSheet, incomeExt, cashFlowExt, computedRatios }} /> },
+    { label: '📈 Stratejist', ready: !!agent2, content: <Agent2Card d={agent2} dataUsed={{ sectorBaseline, geographicRevenue, computedRatios }} /> },
+    { label: '🚨 Şeytan',     ready: !!agent3, content: <Agent3Card d={agent3} dataUsed={{ balanceSheet, geographicRevenue, symbolNews, computedRatios }} /> },
+    { label: '📐 Teknisyen',  ready: !!agent4, content: <Agent4Card d={agent4} dataUsed={{ fibonacci, metrics }} /> },
+    { label: '📊 Finansal Tablolar', ready: financialsReady, content: (
+      <FinancialsPanel
+        balanceSheet={balanceSheet}
+        incomeExt={incomeExt}
+        cashFlowExt={cashFlowExt}
+        computedRatios={computedRatios}
+        sectorBaseline={sectorBaseline}
+        analystTarget={analystTarget}
+        geographicRevenue={geographicRevenue}
+        symbolNews={symbolNews}
+      />
+    ) },
   ];
 
   const IND_BTNS = [{ id: 'rsi', label: 'RSI' }, { id: 'sma', label: 'SMA' }, { id: 'ema', label: 'EMA' }];
@@ -581,6 +858,28 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
                 </div>
               )}
             </div>
+          )}
+          {/* Deterministik sinyal bileşenleri + analist konsensüs (kod hesabı) */}
+          {agent5._deterministicSignals && (
+            <details className="mt-3">
+              <summary className="text-[10px] text-[#666680] cursor-pointer hover:text-[#4fc3f7] uppercase tracking-wider">
+                ▼ Skor Bileşenleri (kod hesabı — Gemini değiştiremez)
+              </summary>
+              <div className="mt-2 grid grid-cols-5 gap-2 text-center text-[11px]">
+                {[
+                  { l: 'Muhasebeci', v: agent5._deterministicSignals.forensicRating, w: '%25' },
+                  { l: 'Stratejist', v: agent5._deterministicSignals.strategistSignal, w: '%25' },
+                  { l: 'Risk', v: agent5._deterministicSignals.devilRisk, w: '%20' },
+                  { l: 'Teknik', v: agent5._deterministicSignals.technicalSignal, w: '%15' },
+                  { l: 'Analist', v: agent5._deterministicSignals.analystConsensus, w: '%15' },
+                ].map(s => (
+                  <div key={s.l} className="bg-[#08081a] border border-[#1a1a2e] rounded p-2">
+                    <div className="text-[9px] text-[#555]">{s.l} <span className="text-[#888]">({s.w})</span></div>
+                    <div className="text-base font-bold text-[#4fc3f7]">{s.v}</div>
+                  </div>
+                ))}
+              </div>
+            </details>
           )}
         </div>
       ) : (

@@ -2,6 +2,21 @@ import { NextRequest } from 'next/server';
 import YahooFinance from 'yahoo-finance2';
 import { extractLatestReportedQuarter, type LatestReportedQuarter } from '@/lib/earnings-detect';
 import { getCachedCryptoReport, setCachedCryptoReport } from '@/lib/crypto-cache';
+import {
+  fetchBalanceSheet,
+  mapIncomeStatementExtended,
+  mapCashFlowExtended,
+  fetchSectorBaseline,
+  fetchAnalystTarget,
+  fetchGeographicRevenue,
+  fetchSymbolNews,
+  fetchCurrencyExposure,
+  computeRatios,
+  type FundamentalEnrichment,
+  type BalanceSheetRow,
+  type IncomeStatementExtended,
+  type CashFlowExtended,
+} from '@/lib/fundamental-enrichment';
 
 const yahooFinance = new YahooFinance({ suppressNotices: ['ripHistorical'] as any });
 
@@ -19,6 +34,10 @@ const AGENT_CACHE_TTL_HOURS = 0.25; // 15 dakika
 // 1500 ile JSON ortasında kesiliyor ve parse başarısız oluyordu → "Veri yetersiz"
 const GEMINI_PRIMARY = 'gemini-2.0-flash';
 const GEMINI_FALLBACK = 'gemini-2.5-flash-lite';
+// Ajan 5 (Portföy Yöneticisi) sentez işi — 4 ajanın çelişkisini dengeleyip
+// nihai karar veriyor. Flash burada yüzeysel kalıyordu; Pro daha tutarlı
+// yorum üretir. Fallback yine Flash.
+const GEMINI_PRO = 'gemini-2.5-pro';
 
 function parseGeminiJson(raw: string): any | null {
   if (!raw) return null;
@@ -91,17 +110,24 @@ async function callGeminiModel(model: string, prompt: string): Promise<{ ok: boo
   }
 }
 
-async function callGemini(prompt: string): Promise<any> {
+async function callGemini(prompt: string, opts?: { model?: string }): Promise<any> {
+  const primaryModel = opts?.model || GEMINI_PRIMARY;
   // 1) Primary dene
-  const primary = await callGeminiModel(GEMINI_PRIMARY, prompt);
+  const primary = await callGeminiModel(primaryModel, prompt);
   if (primary.ok) return primary.data;
   // 429 (rate limit) / 503 / parse-fail → fallback modele geç
   const shouldFallback = primary.status === 429 || primary.status === 503 || primary.err === 'JSON parse failed';
   if (shouldFallback) {
-    console.warn(`[gemini] Primary başarısız (${primary.status || primary.err}), fallback deneniyor…`);
-    const fallback = await callGeminiModel(GEMINI_FALLBACK, prompt);
-    if (fallback.ok) return fallback.data;
-    console.error(`[gemini] Hem primary hem fallback başarısız`, { primary, fallback });
+    // Pro fail ise önce primary flash'a düş; o da fail ise lite
+    const fbChain = primaryModel === GEMINI_PRO
+      ? [GEMINI_PRIMARY, GEMINI_FALLBACK]
+      : [GEMINI_FALLBACK];
+    for (const fbModel of fbChain) {
+      console.warn(`[gemini] ${primaryModel} başarısız (${primary.status || primary.err}), ${fbModel} deneniyor…`);
+      const fb = await callGeminiModel(fbModel, prompt);
+      if (fb.ok) return fb.data;
+    }
+    console.error(`[gemini] Tüm modeller başarısız`, { primaryModel, primary });
   }
   return null;
 }
@@ -290,6 +316,30 @@ async function fetchBISTStockData(symbol: string) {
     insiderSells: 0,
     lastNetIncome: pickNetIncome(lastIncome) || Number(yfFin.netIncomeToCommon ?? 0),
     lastOperatingCF: Number(yfFin.operatingCashflow ?? num((lastCashflow as any).operatingCashFlow) ?? 0),
+    // ── ENRICHMENT (BIST için Yahoo veriyle minimal doldur) ────────────
+    // FMP BIST'i kapsamadığı için bilanço/sektör baseline/analist hedef
+    // detayı şu an YOK. Yahoo'dan totalDebt/cash gibi tekil değerler
+    // gelebilir ama 4-yıl serisi yok. MVP: empty/null geç → prompt'lar
+    // "veri yok" der; ileride is.fintables veya KAP entegrasyonu.
+    balanceSheet: [] as BalanceSheetRow[],
+    incomeExt: [] as IncomeStatementExtended[],
+    cashFlowExt: [] as CashFlowExtended[],
+    sectorBaseline: { sectorPE: null, industryPE: null, sectorName: yfProfile.sector || null, industryName: yfProfile.industry || null, source: 'BIST (Yahoo)' },
+    analystTarget: { consensusHigh: null, consensusMedian: null, consensusLow: null, numAnalysts: null, recentBuy: null, recentHold: null, recentSell: null },
+    geographicRevenue: { fiscalYear: null, segments: [] as Array<{region: string; revenue: number; sharePct: number}> },
+    symbolNews: [] as Array<{date: string; title: string; source: string; url?: string; summary?: string}>,
+    currencyExposure: { netForeignCurrencyPosition: null, foreignCurrencyDebtShare: null, source: 'KAP (entegrasyon beklemede)', asOfDate: null, available: false },
+    computedRatios: {
+      netWorkingCapital: null, netWorkingCapitalPctRevenue: null,
+      leverageRatio: null, debtToEbitda: null,
+      inventoryTurnover: null, daysSalesOutstanding: null,
+      daysInventoryOutstanding: null,
+      ebitdaMargin: null, rdIntensity: null, sgaIntensity: null,
+      effectiveTaxRate: null,
+      assetTurnover: null, equityMultiplier: null,
+      cashConversionRatio: null,
+      shareholderYieldPct: null,
+    },
   };
 }
 
@@ -327,7 +377,11 @@ async function fetchStockData(symbol: string) {
     }
   };
 
-  // Parallel fetch — note quarterly income-statement and earnings use 300s TTL
+  // Parallel fetch — note quarterly income-statement and earnings use 300s TTL.
+  // ENRICHMENT (A1+A2+A3+A4+A5+A6+A11): balance-sheet, sektör baseline, analist
+  // hedef fiyat, coğrafi gelir, sembol haberleri ek olarak çekilir. Tümü
+  // fail-soft (Promise.allSettled + her fetcher kendi içinde try/catch).
+  const sym = symbol;  // closure için
   const results = await Promise.allSettled([
     fetchFMP('profile'),
     fetchFMP('key-metrics-ttm'),
@@ -338,6 +392,11 @@ async function fetchStockData(symbol: string) {
     fetchFMP('historical-price-eod/full', 'limit=200&'),
     fetchFMP('income-statement', 'period=quarter&limit=4&', 300),
     fetchFMP('earnings', 'limit=12&', 300),
+    // ── ENRICHMENT layer ──────────────────────────────────────────────
+    fetchBalanceSheet(sym, apiKey, 4),                       // [9]  A1
+    fetchAnalystTarget(sym, apiKey),                         // [10] A3
+    fetchGeographicRevenue(sym, apiKey),                     // [11] A11
+    fetchSymbolNews(sym, apiKey, 12),                        // [12] A6
   ]);
 
   const profile = (results[0].status === 'fulfilled' ? results[0].value : null)?.[0] || {};
@@ -351,6 +410,35 @@ async function fetchStockData(symbol: string) {
   const hist = Array.isArray(histRaw) ? histRaw : (histRaw?.historical || []);
   const incomeQuarterly = (results[7].status === 'fulfilled' ? results[7].value : null) || [];
   const earningsRaw = (results[8].status === 'fulfilled' ? results[8].value : null) || [];
+
+  // ── ENRICHMENT unpack ───────────────────────────────────────────────
+  const balanceSheet: BalanceSheetRow[] = results[9].status === 'fulfilled' ? results[9].value : [];
+  const analystTarget = results[10].status === 'fulfilled' ? results[10].value : {
+    consensusHigh: null, consensusMedian: null, consensusLow: null,
+    numAnalysts: null, recentBuy: null, recentHold: null, recentSell: null,
+  };
+  const geographicRevenue = results[11].status === 'fulfilled' ? results[11].value : {
+    fiscalYear: null, segments: [],
+  };
+  const symbolNews = results[12].status === 'fulfilled' ? results[12].value : [];
+  // Sektör baseline profile sonrası çekilebilir (sector/industry bilinmeden çağrılamaz)
+  const sectorBaseline = await fetchSectorBaseline(
+    profile.sector || '', profile.industry || '', apiKey,
+  );
+  // KAP döviz pozisyonu — TR-only MVP no-op (ileride entegre)
+  const currencyExposure = await fetchCurrencyExposure(sym, /*isBIST=*/ false);
+
+  const incomeExt: IncomeStatementExtended[] = mapIncomeStatementExtended(income);
+  const cashFlowExt: CashFlowExtended[] = mapCashFlowExtended(cashflow);
+
+  // ── B2: Türetilmiş oranları KODDA hesapla (ajan uydurmasın) ─────────
+  const computedRatios = computeRatios({
+    latestBS: balanceSheet[0] ?? null,
+    prevBS: balanceSheet[1] ?? null,
+    latestIS: incomeExt[0] ?? null,
+    latestCF: cashFlowExt[0] ?? null,
+    marketCap: profile.marketCap || metrics.marketCap || 0,
+  });
 
   const latestReportedQuarter = extractLatestReportedQuarter(earningsRaw);
 
@@ -494,6 +582,16 @@ async function fetchStockData(symbol: string) {
     insiderSells: 1,
     lastNetIncome: income[0]?.netIncome || (yfFin?.netIncomeToCommon) || 0,
     lastOperatingCF: cashflow[0]?.operatingCashFlow || yfFin?.operatingCashflow || 0,
+    // ── ENRICHMENT (A1+A2+A3+A4+A5+A6+A11) ─────────────────────────────
+    balanceSheet,           // A1 — ham 4Y bilanço
+    incomeExt,              // A5 — R&D, SG&A, faiz, vergi, COGS
+    cashFlowExt,            // A4 — buyback, temettü, borç hareketleri
+    sectorBaseline,         // A2 — sektör P/E baseline (anti-halüsinasyon)
+    analystTarget,          // A3 — analist hedef fiyat konsensüsü
+    geographicRevenue,      // A11 — coğrafi gelir (kur exposure vekili)
+    symbolNews,             // A6 — sembol-özel son haberler
+    currencyExposure,       // A10 — TR döviz pozisyonu (MVP no-op)
+    computedRatios,         // B2 — kodda hesaplanan oranlar
   };
 }
 
@@ -543,51 +641,168 @@ ZORUNLU: Bu yeni çeyreği analizinde AÇIKÇA referans al. "${q.date} bilanços
 type StockData = NonNullable<Awaited<ReturnType<typeof fetchStockData>>>;
 
 const COMMON_PERSONA_RULES = `
-KATI KURALLAR:
-1. SADECE yukarıda verilen sayıları kullan — yeni rakam UYDURMA.
-2. "Genel olarak", "birçok açıdan", "dikkatlice değerlendirmek gerekir" gibi
-   boş ifadeler YASAK. Her cümlen spesifik bir RAKAMA veya ORANA dayansın.
-3. "Veri yetersiz" deme — verilen alanların HEPSİNİ kullan, dip notu bırakma.
-4. Türkçe finansal dil kullan (F/K, ROE, FAVÖK, MorgueStanley değil "Morgan
-   Stanley" gibi). Profesyonel ama kesin, yuvarlak değil.
-5. Kararlarını gerekçelendirken spesifik rakamları parantez içinde ver
-   (örn: "ROE %45 — sektör ortalaması %15'in 3x üzerinde").
-6. JSON'u KESİNLİKLE tamamla, kesmeden bitir. Kod bloğu (\`\`\`) kullanma.
+KATI KURALLAR (HALÜSİNASYON ÖNLEME):
+1. SADECE yukarıda verilen sayıları kullan — yeni rakam UYDURMA. "Tahminen",
+   "yaklaşık", "yakın geçmişte" gibi sayı uydurma şabloncuları YASAK.
+2. "Sektör ortalaması" iddiası SADECE "SEKTÖR/ENDÜSTRİ BASELINE" bloğundan
+   gelen rakamlara dayanır. Baseline yoksa "sektör baseline verisi yok" yaz,
+   ezberden rakam ATMA (Tech 15-25, Sanayi 8-12 gibi cümleler YASAK).
+3. "Analist hedef fiyatı" iddiası SADECE "ANALİST HEDEF" bloğundan gelir.
+   Yoksa "analist konsensüs verisi yok" yaz.
+4. "Genel olarak", "birçok açıdan", "dikkatlice değerlendirmek gerekir",
+   "yakından takip edilmeli" gibi içi boş ifadeler YASAK. Her cümlen
+   spesifik bir RAKAMA veya ORANA dayansın.
+5. "Veri yetersiz" deme — verilen alanların HEPSİNİ kullan. Bir veri eksikse
+   o satırı atla, başka alandan örnekleyerek devam et.
+6. Türkçe finansal dil: F/K, ROE, FAVÖK, Net İşletme Sermayesi, DSO,
+   Stok Devir Hızı, FD/FAVÖK, PEG. Yabancı şirket adlarını DOĞRU yaz.
+7. Gerekçelerinde rakamları parantez içinde ver
+   (örn: "ROE %45 — sektör baseline P/E 28 vs hisse 42, %50 prim").
+8. JSON'u KESİNLİKLE tamamla, kesmeden bitir. Kod bloğu (\`\`\`) kullanma.
 `;
+
+// ─── Ortak veri blokları (her ajan promptuna gömülür) ────────────────────
+function bsBlock(d: StockData): string {
+  const bs = (d as any).balanceSheet as BalanceSheetRow[];
+  if (!bs || !bs.length) return 'BİLANÇO (4Y): veri yok\n';
+  const fmtB = (n: number | null) => n != null ? (n / 1e9).toFixed(2) + 'B' : 'N/A';
+  const rows = bs.slice(0, 4).map(r =>
+    `  ${r.date}: Nakit ${fmtB(r.cashAndShortTermInvestments)}, Stok ${fmtB(r.inventory)}, Alacak ${fmtB(r.netReceivables)}, Toplam Varlık ${fmtB(r.totalAssets)}, KV Yük. ${fmtB(r.totalCurrentLiabilities)}, KV Borç ${fmtB(r.shortTermDebt)}, UV Borç ${fmtB(r.longTermDebt)}, Top.Borç ${fmtB(r.totalDebt)}, Özkaynak ${fmtB(r.totalEquity)}`
+  ).join('\n');
+  return `BİLANÇO HAM (4Y, $):\n${rows}\n`;
+}
+
+function isExtBlock(d: StockData): string {
+  const ie = (d as any).incomeExt as IncomeStatementExtended[];
+  if (!ie || !ie.length) return 'GELİR TABLOSU EK ALANLAR: veri yok\n';
+  const fmtB = (n: number | null) => n != null ? (n / 1e9).toFixed(2) + 'B' : 'N/A';
+  const rows = ie.slice(0, 4).map(r =>
+    `  ${r.date}: Hasılat ${fmtB(r.revenue)}, COGS ${fmtB(r.costOfRevenue)}, R&D ${fmtB(r.researchAndDevelopmentExpenses)}, SG&A ${fmtB(r.sellingGeneralAndAdministrativeExpenses)}, EBIT ${fmtB(r.operatingIncome)}, Faiz Gid. ${fmtB(r.interestExpense)}, Vergi ${fmtB(r.incomeTaxExpense)}, Net Kâr ${fmtB(r.netIncome)}, FAVÖK ${fmtB(r.ebitda)}`
+  ).join('\n');
+  return `GELİR TABLOSU EK ALANLAR (4Y, $):\n${rows}\n`;
+}
+
+function cfExtBlock(d: StockData): string {
+  const cf = (d as any).cashFlowExt as CashFlowExtended[];
+  if (!cf || !cf.length) return 'NAKİT AKIŞ EK ALANLAR: veri yok\n';
+  const fmtB = (n: number | null) => n != null ? (n / 1e9).toFixed(2) + 'B' : 'N/A';
+  const rows = cf.slice(0, 4).map(r =>
+    `  ${r.date}: Op.CF ${fmtB(r.operatingCashFlow)}, CapEx ${fmtB(r.capitalExpenditure)}, FCF ${fmtB(r.freeCashFlow)}, Buyback ${fmtB(r.commonStockRepurchased)}, Temettü ${fmtB(r.dividendsPaid)}, Borç İhraç ${fmtB(r.debtIssuance)}, Borç Geri Ödeme ${fmtB(r.debtRepayment)}, ΔÇSermaye ${fmtB(r.changeInWorkingCapital)}`
+  ).join('\n');
+  return `NAKİT AKIŞ EK ALANLAR (4Y, $):\n${rows}\n`;
+}
+
+function ratiosBlock(d: StockData): string {
+  const r = (d as any).computedRatios;
+  if (!r) return '';
+  const fmt = (v: number | null, suffix = '') => v != null ? v + suffix : 'N/A';
+  const nwcDisp = r.netWorkingCapital != null ? (r.netWorkingCapital / 1e9).toFixed(2) + 'B$' : 'N/A';
+  return `KODDA HESAPLANAN ORANLAR (broker matrisi, uydurma — sadece yorumla):
+- Net İşletme Sermayesi: ${nwcDisp} (Hasılatın %${fmt(r.netWorkingCapitalPctRevenue)})
+- Kaldıraç (TopBorç/TopVarlık): %${fmt(r.leverageRatio)} (>70 yüksek risk)
+- Stok Devir Hızı: ${fmt(r.inventoryTurnover, 'x')} | Stokta Kalış (DIO): ${fmt(r.daysInventoryOutstanding, ' gün')}
+- Alacak Tahsil Süresi (DSO): ${fmt(r.daysSalesOutstanding, ' gün')}
+- FAVÖK Marjı: %${fmt(r.ebitdaMargin)}
+- R&D Yoğunluğu: %${fmt(r.rdIntensity)} | SG&A Yoğunluğu: %${fmt(r.sgaIntensity)}
+- Etkin Vergi Oranı: %${fmt(r.effectiveTaxRate)}
+- Varlık Devri (DuPont): ${fmt(r.assetTurnover, 'x')} | Sermaye Çarpanı: ${fmt(r.equityMultiplier, 'x')}
+- Nakit Dönüşüm: ${fmt(r.cashConversionRatio, 'x')} (>1 sağlıklı)
+- Hissedar Getirisi (Buyback+Temettü/PD): %${fmt(r.shareholderYieldPct)}
+`;
+}
+
+function sectorBaselineBlock(d: StockData): string {
+  const sb = (d as any).sectorBaseline;
+  if (!sb || (sb.sectorPE == null && sb.industryPE == null)) {
+    return 'SEKTÖR/ENDÜSTRİ BASELINE: veri yok — "sektör ortalaması" iddiasında bulunma.\n';
+  }
+  return `SEKTÖR/ENDÜSTRİ BASELINE (FMP, GERÇEK):
+- Sektör: ${sb.sectorName || 'N/A'} → P/E baseline: ${sb.sectorPE ?? 'N/A'}
+- Endüstri: ${sb.industryName || 'N/A'} → P/E baseline: ${sb.industryPE ?? 'N/A'}
+(Hisse P/E ile karşılaştırırken SADECE bu sayıları kullan)
+`;
+}
+
+function analystTargetBlock(d: StockData): string {
+  const at = (d as any).analystTarget;
+  if (!at || (at.consensusMedian == null && at.consensusHigh == null)) {
+    return 'ANALİST HEDEF: veri yok — hedef fiyat tartışmasında dışarıdan rakam atma.\n';
+  }
+  return `ANALİST HEDEF FİYAT KONSENSÜSÜ:
+- Yüksek: $${at.consensusHigh ?? 'N/A'} | Median: $${at.consensusMedian ?? 'N/A'} | Düşük: $${at.consensusLow ?? 'N/A'}
+- Tavsiye dağılımı: AL ${at.recentBuy ?? 0} / TUT ${at.recentHold ?? 0} / SAT ${at.recentSell ?? 0} (toplam ${at.numAnalysts ?? 'N/A'} analist)
+`;
+}
+
+function geoRevBlock(d: StockData): string {
+  const g = (d as any).geographicRevenue;
+  if (!g?.segments?.length) return 'COĞRAFİ GELİR KIRILIMI: veri yok\n';
+  const rows = g.segments.slice(0, 6).map((s: any) => `  ${s.region}: %${s.sharePct}`).join('\n');
+  return `COĞRAFİ GELİR KIRILIMI (${g.fiscalYear || 'son FY'}):\n${rows}\n(Kur exposure'unu YORUMLARKEN bu paylar kullanılır)\n`;
+}
+
+function symbolNewsBlock(d: StockData): string {
+  const news = (d as any).symbolNews as Array<{date: string; title: string; source: string; summary?: string}>;
+  if (!news?.length) return '';
+  const rows = news.slice(0, 8).map(n =>
+    `  ${n.date} [${n.source}]: ${n.title}${n.summary ? ` — ${n.summary.slice(0, 120)}` : ''}`
+  ).join('\n');
+  return `\nHİSSEYE ÖZEL SON HABERLER (8 başlık):\n${rows}\n`;
+}
+
+function currencyExpBlock(d: StockData): string {
+  const ce = (d as any).currencyExposure;
+  if (!ce?.available) return '';
+  return `DÖVİZ POZİSYONU (${ce.asOfDate || ''}):
+- Net YP Pozisyon: ${ce.netForeignCurrencyPosition ?? 'N/A'}
+- Döviz Borç / Toplam Borç: %${ce.foreignCurrencyDebtShare ?? 'N/A'}
+`;
+}
 
 function promptForensic(d: StockData): string {
   const cashConv = d.lastNetIncome && d.lastOperatingCF ? (d.lastOperatingCF / d.lastNetIncome).toFixed(2) : 'N/A';
   const revRows = d.revenueTrend.map((r: any) => `  ${r.date}: Gelir ${fmt(r.revenue,1e-9,'B$',1)}, Net Kâr ${fmt(r.netIncome,1e-9,'B$',1)}, Op.Marj %${r.operatingMargin ?? 'N/A'}`).join('\n');
   const cfRows  = d.cashflowData.map((r: any) => `  ${r.date}: Op.CF ${fmt(r.operatingCF,1e-9,'B$',1)}, FCF ${fmt(r.fcf,1e-9,'B$',1)}`).join('\n');
   const freshBlock = freshEarningsBlock(d.latestReportedQuarter, d.quarterlyTrend);
-  return `Sen 40 yıllık tecrübeli, Enron/Worldcom skandallarını öngörmüş bir
-Adli Muhasebecisin (CFA + CPA). Sayı yalan söylemez, sen de sayının dilini
-anlarsın. Şirketin defterlerinde saklı hikayeyi bul — karı şişirmek,
-gideri geciktirmek, nakit akışıyla kâr arasındaki çelişki.
+  return `Sen kıdemli bir Adli Muhasebecisin (CFA + CPA). Sayı yalan söylemez, sen de
+sayının dilini anlarsın. Şirketin defterlerinde saklı hikayeyi bul — karı
+şişirmek, gideri geciktirmek, nakit akışıyla kâr arasındaki çelişki, alacak
+kalitesi, stok birikimi.
 
 HİSSE: ${d.symbol} (${d.name}) | Sektör: ${d.sector} | Ülke: ${d.country}
 ${freshBlock}
-GELİR TABLOSU (Son 4 Yıl):
+GELİR TABLOSU (Son 4 Yıl, özet):
 ${revRows || '  Veri yok'}
 
-NAKİT AKIŞI (Son 4 Yıl):
+NAKİT AKIŞI (Son 4 Yıl, özet):
 ${cfRows || '  Veri yok'}
 
-TEMEL METRİKLER:
-- Net Kâr / İşletme CF Oranı (Nakit Dönüşüm): ${cashConv}x (>1 iyi, <1 şüpheli)
+${bsBlock(d)}
+${isExtBlock(d)}
+${cfExtBlock(d)}
+${ratiosBlock(d)}
+TEMEL METRİKLER (TTM, türetilmiş):
+- Net Kâr / İşletme CF Oranı (Nakit Dönüşüm — Kalite Kontrol #1): ${cashConv}x (>1 iyi, <1 şüpheli)
 - Net Borç/FAVÖK: ${d.netDebtEbitda ?? 'N/A'} (0-2 harika, 2-4 yönetilebilir, 4+ tehlike)
-- Faiz Karşılama: ${d.interestCoverage ?? 'N/A'}x (>1.5 gerekli)
+- Faiz Karşılama: ${d.interestCoverage ?? 'N/A'}x (>1.5 gerekli, <1.5 temerrüt riski)
 - ROE: ${fmt(d.roe,100,'%')} | ROA: ${fmt(d.roa,100,'%')} | Net Marj: ${fmt(d.netMargin,100,'%')}
-- Cari Oran: ${d.currentRatio ?? 'N/A'} | Hızlı Oran: ${d.quickRatio ?? 'N/A'}
+- Cari Oran: ${d.currentRatio ?? 'N/A'} | Hızlı Oran (Asit-Test): ${d.quickRatio ?? 'N/A'}
 - Borç/Özkaynak: ${d.debtToEquity ?? 'N/A'}
 
 ${COMMON_PERSONA_RULES}
 
-Bu rakamlara 40 yıllık gözünle bak. Öncelikle "Nakit Dönüşüm" oranının ne
-söylediği: Şirket 1$ net kâr için kaç $ operasyonel nakit üretiyor? 1x'in altı
-kâr kalitesini sorgulatır. Sonra borç yüküne bak: Net Borç/FAVÖK
-sektör eşiğini aşıyor mu? DuPont ile ROE'nin kaynağını ayrıştır — kâr marjı
-mı, varlık devri mi, kaldıraç mı? Kaldıraçla gelen ROE sürdürülebilir değil.
+ANALİZ ÇERÇEVESİ (fon yöneticisi akışı):
+1) KALİTE KONTROL: Nakit Dönüşüm <1 ise alacaklar şişti mi (DSO yükseliyor mu),
+   stok birikti mi (DIO arttı mı) — bilanço ham rakamından kontrol et.
+2) DuPont: ROE = Net Marj × Varlık Devri × Sermaye Çarpanı. Hesaplanmış 3
+   bileşeni "KODDA HESAPLANAN ORANLAR" bloğundan oku, ROE'nin kaynağını
+   ayrıştır. Kaldıraçtan gelen ROE sürdürülebilir DEĞİL.
+3) Likidite: Cari Oran 1.5-2 ideal; <1 kriz. Asit-Test >1 olmalı. Net
+   İşletme Sermayesi pozitif ve büyüyor mu?
+4) Borçluluk: Kaldıraç (%TopBorç/TopVarlık) >70 alarm. Net Borç/FAVÖK >3
+   borçluluk alarmı.
+5) Stok/Alacak verimliliği: DSO uzuyorsa müşteri ödemiyor, DIO uzuyorsa
+   ürün rafta kalıyor — ikisi de nakit döngüsünü vurur.
 
 Çıktı formatı (JSON, kod bloğu olmadan):
 {
@@ -619,15 +834,15 @@ mı, varlık devri mi, kaldıraç mı? Kaldıraçla gelen ROE sürdürülebilir 
 }
 
 function promptStrategist(d: StockData): string {
-  return `Sen 40 yıllık sektör stratejistisin — Buffett stilinde hendek
-("moat") avcısısın, ama PEG/FD/FAVÖK gibi değerleme matematiğini de unutmadın.
-Münker Lynch'in portföyünden TSMC'yi 10 yıl önce seçmişsin. Büyüme hikayesi
-sana "anlatılmaz" — sen rakamlardan kendin çıkarırsın.
+  return `Sen kıdemli bir sektör stratejistisin — Buffett-Lynch hattında hendek
+("moat") avcısısın, ama PEG/FD/FAVÖK gibi değerleme matematiğini titizce
+uygularsın. Büyüme hikayesi sana "anlatılmaz" — sen rakamlardan kendin
+çıkarırsın.
 
-HİSSE: ${d.symbol} (${d.name}) | Sektör: ${d.sector}
+HİSSE: ${d.symbol} (${d.name}) | Sektör: ${d.sector} | Endüstri: ${d.industry}
 
 BÜYÜME & VERİMLİLİK:
-- Gelir Büyümesi: ${fmt(d.revenueGrowth,100,'%')} | Kazanç Büyümesi: ${fmt(d.earningsGrowth,100,'%')}
+- Gelir Büyümesi (TTM): ${fmt(d.revenueGrowth,100,'%')} | Kazanç Büyümesi: ${fmt(d.earningsGrowth,100,'%')}
 - Brüt Marj: ${fmt(d.grossMargin,100,'%')} | Op.Marj: ${fmt(d.operatingMargin,100,'%')} | Net Marj: ${fmt(d.netMargin,100,'%')}
 - FAVÖK: ${d.ebitda ? (d.ebitda/1e9).toFixed(1)+'B$' : 'N/A'}
 - FCF: ${d.fcf ? (d.fcf/1e9).toFixed(1)+'B$' : 'N/A'} | Op.CF: ${d.operatingCF ? (d.operatingCF/1e9).toFixed(1)+'B$' : 'N/A'}
@@ -642,17 +857,26 @@ PAZAR DEĞERLEMESİ:
 - FD/FAVÖK: ${d.evEbitda?.toFixed(1) ?? 'N/A'} | PD/DD: ${d.pb?.toFixed(2) ?? 'N/A'}
 - Piyasa Değeri: ${d.marketCap ? (d.marketCap/1e9).toFixed(0)+'B$' : 'N/A'}
 
+${sectorBaselineBlock(d)}
+${ratiosBlock(d)}
+${geoRevBlock(d)}
+${symbolNewsBlock(d)}
+
 ${COMMON_PERSONA_RULES}
 
-Üç boyutta analiz yap: (1) BÜYÜME — gelir büyümesi enflasyonu (yıllık %5)
-yeniyor mu? Op.marj genişliyor mu, yoksa mi daralıyor? (2) MOAT — brüt marj
-%40+ ise fiyatlandırma gücü var, %20 altı ise komoditeleşmiş. ROE %15+ ise
-rekabet avantajı muhtemel. (3) DEĞERLEME — PEG<1 büyümesine göre ucuz,
-PEG>2 balon. FD/FAVÖK sektör ortalamasıyla karşılaştır (tech 15-25,
-sanayi 8-12, bankacılık 4-8).
+Üç boyutta analiz yap:
+(1) BÜYÜME — gelir büyümesi enflasyonu (yıllık %5) yeniyor mu? FAVÖK Marjı
+    (hesaplanmış) genişliyor mu daralıyor mı? R&D Yoğunluğu yatırım
+    döngüsünü gösterir (>%10 yüksek inovasyon).
+(2) MOAT — Brüt marj %40+ ise fiyatlandırma gücü var, %20 altı ise
+    komoditeleşmiş. ROE %15+ ve Varlık Devri >0.6 ise rekabet avantajı.
+    Coğrafi gelir konsantrasyonu (tek bölge >%50) ise tek-pazar riski.
+(3) DEĞERLEME — Hisse P/E'sini SEKTÖR BASELINE ile karşılaştır (yukarıda
+    rakam varsa kullan; yoksa kıyaslama YAPMA). PEG<1 ucuz, PEG>2 balon.
+    FD/FAVÖK sektör baseline ile karşılaştır.
 
 "brokerNote"u bir yatırımcı dostunun kulağına fısıldar gibi yaz — 2 cümle
-ama hatırlanır.
+ama hatırlanır, ezbere "izlenmeli" yok, somut tetik var.
 
 Çıktı formatı (JSON, kod bloğu olmadan):
 {
@@ -681,11 +905,9 @@ ama hatırlanır.
 }
 
 function promptDevil(d: StockData): string {
-  return `Sen 40 yıllık Şeytanın Avukatısın — 2000 dot-com, 2008 Lehman,
-2022 SVB'yi önceden görmüş risk yöneticisi. Sen "neden düşmez" sorusunu
-değil, "hangi tetikleyici bu hisseyi %30 düşürür" sorusunu sorarsın.
-Pembe tabloyu parçalamak senin işin, avukatı olduğun müvekkil yatırımcının
-parası.
+  return `Sen kıdemli bir Şeytanın Avukatı — "neden düşmez" sorusunu değil,
+"hangi tetikleyici bu hisseyi %30 düşürür" sorusunu sorarsın. Pembe tabloyu
+parçalamak senin işin.
 
 HİSSE: ${d.symbol} (${d.name}) | Sektör: ${d.sector} | Ülke: ${d.country}
 
@@ -694,28 +916,37 @@ PİYASA RİSKİ:
 - Short Ratio (Açık Satış): ${d.shortRatio?.toFixed(1) ?? 'N/A'} gün
 - Temettü Verimi: ${fmt(d.dividendYield,100,'%')}
 
-FİNANSAL RISKLER:
+FİNANSAL RİSKLER:
 - Net Borç/FAVÖK: ${d.netDebtEbitda ?? 'N/A'}
 - Faiz Karşılama: ${d.interestCoverage ?? 'N/A'}x
 - Cari Oran: ${d.currentRatio ?? 'N/A'}
 - Borç/Özkaynak: ${d.debtToEquity ?? 'N/A'}
 
-INSIDER AKTİVİTE:
-- Son dönem alım: ${d.insiderBuys} işlem | Satış: ${d.insiderSells} işlem
+${bsBlock(d)}
+${ratiosBlock(d)}
+${geoRevBlock(d)}
+${currencyExpBlock(d)}
+${symbolNewsBlock(d)}
 
-ANALİST KONSENSÜS:
-- Alış oranı: %${d.analystBuyPct ?? 'N/A'}
+INSIDER AKTİVİTE: alım ${d.insiderBuys} | satış ${d.insiderSells}
+ANALİST: Alış oranı %${d.analystBuyPct ?? 'N/A'}
 
 ${COMMON_PERSONA_RULES}
 
-3 boyutta risk ara: (1) PİYASA — Beta>1.3 ise S&P %10 düşerse bu hisse %13+
-düşer. Short Ratio>5 gün ise piyasa bu hisseden kuşkulu. (2) FİNANSAL —
-Net Borç/FAVÖK>4 kritik, Faiz Karşılama<1.5 kırmızı alarm. Cari oran<1
-likidite sıkışıklığı. (3) MAKRO — Sektör spesifik riskler (teknoloji için
-faiz, bankacılık için kredi zararı, emtia için çin yavaşlaması).
+3 boyutta ŞİRKETE ÖZEL risk ara (jenerik "resesyon, faiz" YASAK — bu
+şirketin VERİSİNE dayanan tetikleyiciler):
 
-En az 2 farklı "bear case" senaryosu çıkar (örn: resesyon, sektör
-disrupt'ı, yönetim skandalı). Her birine olasılık (0-1) ve fiyat etkisi ver.
+(1) PİYASA — Beta>1.3 ise S&P %10 düşerse bu hisse %13+ düşer. Short
+    Ratio>5 gün ise piyasa şüpheli.
+(2) FİNANSAL — Kaldıraç (hesaplanmış %) >70, Net Borç/FAVÖK>4, Faiz
+    Karşılama<1.5, Asit-Test<1 → her biri ayrı bayraktır. Bilanço ham
+    rakamlarından (KV borç, nakit) ödeme penceresini hesapla.
+(3) İŞ MODELİ — Coğrafi gelir konsantrasyonu >%50 tek bölgede ise o
+    bölgenin riski (örn: Çin %35 → ticaret savaşı). R&D yoğunluğu >%15
+    ise teknolojide kalmama riski. DSO uzuyorsa tahsilat zorluğu.
+
+En az 3 farklı bear case çıkar — her birinde TETİKLEYİCİ + bilançodan
+veya haberden GERÇEK rakam + olasılık (0-1) + fiyat etkisi % olsun.
 
 Çıktı formatı (JSON, kod bloğu olmadan):
 {
@@ -745,10 +976,9 @@ function promptTechnical(d: StockData): string {
   const crossStatus = d.sma50 && d.sma200
     ? (d.sma50 > d.sma200 ? 'GOLDEN CROSS (Yükseliş)' : 'DEATH CROSS (Düşüş)')
     : 'N/A';
-  return `Sen 40 yıllık Market Wizards'tan çıkmış bir teknik strategistsin —
-Paul Tudor Jones'un öğrencisisin. Charts don't lie; trend is your friend.
-Fibonacci, SMA ve RSI senin matematiğin. Giriş-çıkış-stop üçlüsü olmadan
-pozisyon alma; risk/ödül 1:2'nin altında trade yok.
+  return `Sen kıdemli bir teknik strategistsin. Charts don't lie; trend is
+your friend. Fibonacci, SMA ve RSI senin matematiğin. Giriş-çıkış-stop
+üçlüsü olmadan pozisyon alma; risk/ödül 1:2'nin altında trade yok.
 
 HİSSE: ${d.symbol} | Güncel Fiyat: $${d.currentPrice.toFixed(2)}
 
@@ -814,60 +1044,168 @@ Giriş Stratejisi ZORUNLU:
 }`;
 }
 
+// ─── Ajan 5: deterministik score + targetPrice (kod hesabı) ──────────────
+//
+// Önceki versiyonda Ajan 5 score'u "ağırlıklı ortalama" diye yazıyordu ama
+// Gemini her seferinde farklı sayı veriyordu. Şimdi kod hesaplıyor; Gemini
+// SADECE narrative + debate + reasons + entry zone (zaten teknisyenden) +
+// timeHorizon üretir.
+export interface DeterministicScore {
+  score: number;
+  decision: 'AL' | 'SAT' | 'TUT' | 'İZLE';
+  targetPrice: number | null;
+  targetReturnPct: number | null;
+  signals: {
+    forensicRating: number;
+    strategistSignal: number;
+    devilRisk: number;
+    technicalSignal: number;
+    analystConsensus: number;
+  };
+}
+
+function computeDeterministicScore(
+  d: StockData,
+  a1: any, a2: any, a3: any, a4: any,
+): DeterministicScore {
+  // Skor bileşenleri 0-100; sonra ağırlıklı topla
+  const score1 = (() => {
+    const r = String(a1?.overallRating || a1?.earningsQuality?.rating || '').toUpperCase();
+    if (r.includes('GÜÇ')) return 85;
+    if (r.includes('NORMAL')) return 60;
+    if (r.includes('ZAYIF')) return 35;
+    if (r.includes('ŞÜPHE')) return 15;
+    return 50;
+  })();
+  const score2 = (() => {
+    const s = String(a2?.overallSignal || '').toUpperCase();
+    if (s === 'AL') return 80;
+    if (s === 'BEKLE') return 50;
+    if (s === 'SAT') return 20;
+    return 50;
+  })();
+  const score3 = (() => {
+    const r = String(a3?.overallRiskLevel || '').toUpperCase();
+    if (r === 'DÜŞÜK') return 80;
+    if (r === 'ORTA') return 55;
+    if (r === 'YÜKSEK') return 30;
+    if (r === 'KRİTİK') return 10;
+    return 50;
+  })();
+  const score4 = (() => {
+    const s = String(a4?.overallSignal || '').toUpperCase();
+    if (s === 'AL') return 80;
+    if (s === 'BEKLE') return 50;
+    if (s === 'SAT') return 20;
+    return 50;
+  })();
+  const analyst = (d as any).analystTarget;
+  const totalAnalysts = (analyst?.recentBuy ?? 0) + (analyst?.recentHold ?? 0) + (analyst?.recentSell ?? 0);
+  const score5 = totalAnalysts > 0
+    ? Math.round(((analyst.recentBuy ?? 0) * 80 + (analyst.recentHold ?? 0) * 50 + (analyst.recentSell ?? 0) * 20) / totalAnalysts)
+    : 50;
+
+  // Ağırlıklar: Muhasebeci %25 (kalite), Stratejist %25 (değerleme), Risk %20
+  // (negatif), Teknik %15 (timing), Analist %15 (konsensüs)
+  const score = Math.round(
+    score1 * 0.25 + score2 * 0.25 + score3 * 0.20 + score4 * 0.15 + score5 * 0.15,
+  );
+
+  const decision: 'AL' | 'SAT' | 'TUT' | 'İZLE' =
+    score >= 70 ? 'AL'
+    : score >= 50 ? 'TUT'
+    : score >= 30 ? 'İZLE'
+    : 'SAT';
+
+  // Target price: analyst median (varsa) %50 + technician TP1 %30 + strategist
+  // hedef getiri-implied (currentPrice × (1 + pct/100)) %20
+  const tp1 = Number(a4?.entryStrategy?.takeProfit1) || null;
+  const stratPct = Number(a2?.targetPotentialPct);
+  const stratTarget = Number.isFinite(stratPct) ? d.currentPrice * (1 + stratPct / 100) : null;
+  const analystMed = Number(analyst?.consensusMedian) || null;
+  const parts: Array<[number, number]> = [];
+  if (analystMed) parts.push([analystMed, 0.5]);
+  if (tp1) parts.push([tp1, 0.3]);
+  if (stratTarget) parts.push([stratTarget, 0.2]);
+  let targetPrice: number | null = null;
+  if (parts.length) {
+    const wSum = parts.reduce((s, [, w]) => s + w, 0);
+    targetPrice = +(parts.reduce((s, [v, w]) => s + v * w, 0) / wSum).toFixed(2);
+  }
+  const targetReturnPct = targetPrice && d.currentPrice
+    ? +(((targetPrice / d.currentPrice) - 1) * 100).toFixed(1)
+    : null;
+
+  return {
+    score, decision, targetPrice, targetReturnPct,
+    signals: {
+      forensicRating: score1, strategistSignal: score2, devilRisk: score3,
+      technicalSignal: score4, analystConsensus: score5,
+    },
+  };
+}
+
 function promptPortfolio(
   d: StockData,
-  a1: any, a2: any, a3: any, a4: any
+  a1: any, a2: any, a3: any, a4: any,
+  ds: DeterministicScore,
 ): string {
   const freshBlock = freshEarningsBlock(d.latestReportedQuarter, d.quarterlyTrend);
-  return `Sen 40 yıllık Portföy Yöneticisisin — Bridgewater'dan emekli,
-şimdi aile ofisinde yönetiyorsun. Dört uzmanından (Muhasebeci, Stratejist,
-Risk Avukatı, Teknisyen) gelen raporları aldın. Onların hiçbiri yanlış
-değil ama birbirleriyle çelişir. Senin işin: ÇELİŞKİYİ TARTIŞIP karar
-vermek. "Ucuz + yüksek risk" mi yoksa "pahalı + güvenli" mi tercih edilir?
-Sen bilirsin — piyasa dönemi ve müşterinin profili önemli.
+  const at = (d as any).analystTarget;
+  const atLine = at?.consensusMedian
+    ? `Analist median hedef $${at.consensusMedian} (yüksek $${at.consensusHigh}, düşük $${at.consensusLow}, ${at.numAnalysts} analist)`
+    : 'Analist konsensüs verisi yok';
+  return `Sen kıdemli bir Portföy Yöneticisin. Dört uzmanının (Muhasebeci,
+Stratejist, Risk Avukatı, Teknisyen) raporları + bir DETERMİNİSTİK SKOR
+sistemi elinde. Senin işin: çelişkileri tartışmak, yatırımcıya açıklamak.
+SKOR ve DECISION'ı KOD hesapladı — sen değiştirmeyeceksin, sadece
+yorumlayacaksın.
 
 HİSSE: ${d.symbol} (${d.name}) | Sektör: ${d.sector} | Güncel Fiyat: $${d.currentPrice.toFixed(2)}
 ${freshBlock}
+
+DETERMİNİSTİK ÖLÇÜMLER (KOD HESABI — DEĞİŞTİRME):
+- score: ${ds.score} / 100
+- decision: ${ds.decision}
+- targetPrice: ${ds.targetPrice != null ? '$' + ds.targetPrice : 'N/A'}
+- targetReturnPct: ${ds.targetReturnPct != null ? ds.targetReturnPct + '%' : 'N/A'}
+- Bileşen skorları: Muhasebeci=${ds.signals.forensicRating}, Stratejist=${ds.signals.strategistSignal}, Risk=${ds.signals.devilRisk}, Teknik=${ds.signals.technicalSignal}, Analist=${ds.signals.analystConsensus}
+- ${atLine}
 
 ADLİ MUHASEBECİ SONUCU: ${JSON.stringify(a1)}
 SEKTÖR STRATEJİSTİ SONUCU: ${JSON.stringify(a2)}
 ŞEYTANIN AVUKATI SONUCU: ${JSON.stringify(a3)}
 TEKNİK STRATEJİST SONUCU: ${JSON.stringify(a4)}
 
+${sectorBaselineBlock(d)}
+${analystTargetBlock(d)}
+${symbolNewsBlock(d)}
+
 ${COMMON_PERSONA_RULES}
 
-Kararı ZORUNLU SPESİFİK YAP:
-- "decision": AL / SAT / TUT / İZLE — tereddütsüz
-- "score": 0-100 tek sayı (Muhasebeci+Stratejist-Risk-Teknik'in ağırlıklı ortalaması)
-  · 80+ = Yüksek ikna, kritik fırsat
-  · 60-79 = İyi fırsat, pozisyon al
-  · 40-59 = Nötr, izle
-  · 20-39 = Kaçın
-  · <20 = Sat veya shorta gir
-- "entryZone": Teknisyenin önerdiği aralığın ±%1 bandı
-- "targetPrice": Stratejist'in "targetPotentialPct" + Teknisyen'in "takeProfit1"in
-  ağırlıklı ortalaması
-- "topReasons": 3 madde, her biri spesifik rakama dayansın
-  (örn: "ROE %45, sektör ortalaması %15'in 3x üzerinde — rekabet avantajı net")
-
-"narrative" yatırımcı mektubu gibi akıcı olsun; "committeeDebate" 4 ajanın
-çeliştiği yeri açık şekilde tartışsın (örn: "Stratejist UCUZ dedi, Şeytanın
-Avukatı borç yükü nedeniyle KRİTİK işaretledi — ben iki tarafı şöyle
-dengeliyorum: ...").
+GÖREVİN — SADECE YORUMLA:
+- "narrative" (4-5 cümle): Şirketi bir hikaye olarak anlat. Bilanço + son
+  haber + sektör baseline + analist konsensüsünü harmanla. Spesifik
+  rakamlar geçir. Ezberden cümle YASAK.
+- "committeeDebate" (3-4 cümle): 4 ajanın çelişkisini anlat. Hangi ajan
+  hangi rakamla AL dedi, hangi ajan hangi rakamla SAT dedi, bu çelişkiyi
+  nasıl bağdaştırdın. Sayı + ajan adı ZORUNLU.
+- "topReasons" (3 madde): Her biri farklı bir AJAN'dan ve farklı bir
+  RAKAM'dan beslensin. Tek-kalemli (sadece P/E gibi) liste YASAK.
+- "entryZone": Teknisyenin entryStrategy.idealEntryLow/High'ını kullan.
+- "stopLoss" / "maxLossPct": Teknisyenden al.
+- "riskRewardRatio": (targetPrice - entryMid) / (entryMid - stopLoss).
+- "timeHorizon": Analiz baz alındığında KISA / ORTA / UZUN — gerekçeli seç.
 
 Çıktı formatı (JSON, kod bloğu olmadan):
 {
-  "narrative": "<Şirketi bir hikaye olarak anlat — piyasanın neresinde duruyor, rüzgar arkasında mı? 3-4 cümle, akıcı>",
-  "committeeDebate": "<4 ajanın bulguları arasındaki en önemli çelişki ve nasıl dengelendiği — 2-3 cümle>",
-  "decision": "AL|SAT|TUT|İZLE",
-  "score": <0-100 yatırım skoru>,
+  "narrative": "<4-5 cümle, akıcı, rakam-yoğun>",
+  "committeeDebate": "<3-4 cümle, ajan adı + rakam çelişkisi>",
   "entryZone": { "low": <number>, "high": <number> },
-  "targetPrice": <number>,
-  "targetReturnPct": <number — hedef getiri %>,
   "stopLoss": <number>,
-  "maxLossPct": <number — maksimum kayıp %>,
+  "maxLossPct": <number>,
   "riskRewardRatio": <number>,
-  "topReasons": ["<1. ana gerekçe>", "<2. ana gerekçe>", "<3. ana gerekçe>"],
+  "topReasons": ["<gerekçe 1, ajan+rakam>", "<gerekçe 2>", "<gerekçe 3>"],
   "timeHorizon": "KISA_VADE|ORTA_VADE|UZUN_VADE"
 }`;
 }
@@ -919,14 +1257,24 @@ export async function GET(req: NextRequest) {
         return;
       }
 
-      // Strip ohlc from raw_data to keep payload small; UI only needs metrics
+      // Strip ohlc from raw_data to keep payload small; UI only needs metrics.
+      // Enrichment payload C1 (ham finansal tablolar) ve C2 (ajan veri expand)
+      // için ayrı dallarda göndeririliyor — metrics içine gömmek yerine
+      // top-level alanlar daha temiz.
       const {
         ohlc, revenueTrend, cashflowData, fibonacci,
-        quarterlyTrend, latestReportedQuarter, ...metrics
-      } = d;
+        quarterlyTrend, latestReportedQuarter,
+        balanceSheet, incomeExt, cashFlowExt, sectorBaseline,
+        analystTarget, geographicRevenue, symbolNews, currencyExposure,
+        computedRatios, ...metrics
+      } = d as any;
       const rawData = {
         metrics, revenueTrend, cashflowData, fibonacci,
         quarterlyTrend, latestReportedQuarter,
+        // ── enrichment (frontend C1+C2 için) ──
+        balanceSheet, incomeExt, cashFlowExt, computedRatios,
+        sectorBaseline, analystTarget, geographicRevenue,
+        symbolNews, currencyExposure,
       };
       send('raw_data', rawData);
 
@@ -942,8 +1290,21 @@ export async function GET(req: NextRequest) {
       ]);
 
       send('status', { message: 'Portföy Yöneticisi nihai raporu hazırlıyor...' });
-      const a5 = await callGemini(promptPortfolio(d, a1, a2, a3, a4));
-      send('agent_5', a5 ?? { error: 'Sentez oluşturulamadı' });
+      // Deterministik score+decision+targetPrice KOD hesabı (anti-halüsinasyon)
+      const ds = computeDeterministicScore(d, a1, a2, a3, a4);
+      // Ajan 5 — Gemini 2.5 Pro (sentez kalitesi için); fallback Flash zinciri
+      const a5Raw = await callGemini(promptPortfolio(d, a1, a2, a3, a4, ds), { model: GEMINI_PRO });
+      // Score/decision/targetPrice'ı kod kararından inject et — Gemini'nin
+      // sayı uydurmasını engellemek için
+      const a5 = a5Raw ? {
+        ...a5Raw,
+        decision: ds.decision,
+        score: ds.score,
+        targetPrice: ds.targetPrice,
+        targetReturnPct: ds.targetReturnPct,
+        _deterministicSignals: ds.signals,
+      } : { error: 'Sentez oluşturulamadı', ...ds };
+      send('agent_5', a5);
       send('done', {});
 
       // ── Cache write: sadece tüm ajanlar başarılıysa sakla (hata cache'leme) ──
