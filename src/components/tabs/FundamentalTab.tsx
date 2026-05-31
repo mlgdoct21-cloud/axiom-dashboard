@@ -564,7 +564,15 @@ function RevBar({ data }: { data: any[] }) {
 
 // ─── Symbol quick buttons ─────────────────────────────────────────────────────
 const US_SYMS = ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NFLX'];
-const TR_SYMS = ['ASELS', 'GARAN', 'KCHOL', 'THYAO', 'AKBNK', 'BIMAS'];
+// Backend services/market_detector.py BIST_SYMBOLS env varsayılanıyla aynı liste.
+// Tek source-of-truth olması idealdir; ileride /bist/symbols endpoint'inden çekilebilir.
+const TR_SYMS = [
+  'ASELS', 'GARAN', 'KCHOL', 'THYAO', 'AKBNK', 'BIMAS',
+  'EREGL', 'TAVHL', 'PETKM', 'SASA', 'SISE', 'TCELL',
+  'TUPRS', 'FROTO', 'YKBNK', 'HALKB', 'ISCTR', 'VAKBN',
+  'ARCLK', 'KOZAL',
+];
+const TR_SYMS_SET = new Set(TR_SYMS);
 
 // Temel Analiz hisseler içindir. Crypto tab'ı URL'e ?symbol=BTC yazıyor; bu
 // sembol Temel Analiz'e devrolunca anlamsız (kriptonun F/K'sı yok). Kripto
@@ -573,6 +581,81 @@ const CRYPTO_SYMS = new Set([
   'BTC', 'ETH', 'XRP', 'SOL', 'BNB', 'ADA', 'DOGE', 'AVAX', 'DOT', 'LINK',
   'MATIC', 'LTC', 'TRX', 'TON', 'SHIB', 'XLM', 'ATOM', 'BCH', 'NEAR', 'APT',
 ]);
+
+// ─── BIST TL UFRS Bilanço Panel — isyatirimhisse (long-format) ─────────────
+//
+// /api/v1/bist/financials/{symbol} long-format döner: her satır = 1 kalem,
+// "values" map'i period (YYYY/Q) → TL tutar. Burada wide format'a pivotlayıp
+// FinancialsPanel ile aynı görsel ritimde render ediyoruz.
+//
+// FMP TR şirketleri için TL UFRS tablosu döndürmüyor → AAPL'da olan "Bilanço/
+// Gelir/Nakit" tablosu BIST sembollerinde boş kalıyor. Bu panel o boşluğu
+// kapatır; haftalık cron (services/bist_financials_service.py) doldurur.
+function BistFinancialsPanel({ data }: { data: any }) {
+  if (!data || !data.items?.length) {
+    return (
+      <div className="p-6 text-center text-sm text-[#666680]">
+        Bu BIST sembolü için henüz TL bilanço verisi yok.
+        Haftalık scraper bir sonraki çalışmasında yeni periyodları getirir.
+      </div>
+    );
+  }
+  const periods: string[] = (data.periods || []).slice(-8);
+  const items = data.items as Array<{ code: string; name_tr: string; values: Record<string, number | null> }>;
+  // XI_29 kodları ile mantıklı gruplama (bilanço/gelir/nakit). 1*/2* = bilanço,
+  // 3* = gelir tablosu, 4* = öz kaynak, 5*/6* = nakit akış (isyatirim XI_29).
+  const grouped: Record<string, typeof items> = { Bilanço: [], 'Gelir Tablosu': [], 'Öz Kaynak': [], 'Nakit Akış': [], Diğer: [] };
+  for (const it of items) {
+    const c = (it.code || '').charAt(0);
+    if (c === '1' || c === '2') grouped['Bilanço'].push(it);
+    else if (c === '3') grouped['Gelir Tablosu'].push(it);
+    else if (c === '4') grouped['Öz Kaynak'].push(it);
+    else if (c === '5' || c === '6') grouped['Nakit Akış'].push(it);
+    else grouped['Diğer'].push(it);
+  }
+  const fmtTL = (v: number | null | undefined) => {
+    if (v == null) return '—';
+    const a = Math.abs(v);
+    if (a >= 1e9) return (v / 1e9).toFixed(2) + ' Mr';
+    if (a >= 1e6) return (v / 1e6).toFixed(1) + ' M';
+    if (a >= 1e3) return (v / 1e3).toFixed(0) + ' B';
+    return v.toFixed(0);
+  };
+  return (
+    <div className="space-y-4">
+      <div className="text-xs text-[#666680]">
+        Kaynak: İş Yatırım (isyatirimhisse) · Para birimi: <span className="text-[#4fc3f7]">TL</span> ·
+        {data.fetched_at && ` Son güncelleme: ${new Date(data.fetched_at).toLocaleDateString('tr-TR')}`}
+      </div>
+      {Object.entries(grouped).map(([gName, rows]) => rows.length === 0 ? null : (
+        <div key={gName} className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3 overflow-auto">
+          <div className="text-xs text-[#4fc3f7] font-bold uppercase mb-2">{gName} (Son {periods.length} Çeyrek, TL)</div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[#666680] border-b border-[#2a2a3e]">
+                <th className="text-left py-1.5 pr-3 whitespace-nowrap">Kalem</th>
+                {periods.map(p => <th key={p} className="text-right py-1.5 px-2 whitespace-nowrap">{p}</th>)}
+              </tr>
+            </thead>
+            <tbody className="text-[#c0c0d0]">
+              {rows.slice(0, 20).map(it => (
+                <tr key={it.code} className="border-b border-[#1a1a2e]">
+                  <td className="py-1 pr-3 text-[#888] whitespace-nowrap" title={it.code}>{it.name_tr || it.code}</td>
+                  {periods.map(p => (
+                    <td key={p} className="text-right py-1 px-2 font-mono">{fmtTL(it.values?.[p])}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {rows.length > 20 && (
+            <div className="text-[10px] text-[#555570] mt-2 text-right">+{rows.length - 20} kalem daha gizlendi</div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 import { useSearchParams } from 'next/navigation';
@@ -619,6 +702,8 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
   const [analystTarget,   setAnalystTarget]   = useState<any>(null);
   const [geographicRevenue, setGeographicRevenue] = useState<any>(null);
   const [symbolNews,      setSymbolNews]      = useState<any[]>([]);
+  // BIST TL UFRS bilanço (isyatirimhisse) — sadece TR_SYMS sembollerinde doldurulur.
+  const [bistFinancials,  setBistFinancials]  = useState<any>(null);
   const [agent1,    setAgent1]    = useState<any>(null);
   const [agent2,    setAgent2]    = useState<any>(null);
   const [agent3,    setAgent3]    = useState<any>(null);
@@ -633,8 +718,24 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
     setStatus(''); setMetrics(null); setRevTrend([]); setFibonacci(null); setLatestQ(null);
     setBalanceSheet([]); setIncomeExt([]); setCashFlowExt([]); setComputedRatios(null);
     setSectorBaseline(null); setAnalystTarget(null); setGeographicRevenue(null); setSymbolNews([]);
+    setBistFinancials(null);
     setAgent1(null); setAgent2(null); setAgent3(null); setAgent4(null); setAgent5(null);
     setDone(false); setError(null); setActiveTab(0);
+
+    // BIST sembolü ise paralelde TL UFRS bilanço çek — backend Python tarafı
+    // /api/v1/bist/financials/{symbol} (services/bist_financials_service.py).
+    // SSE akışıyla ilgisiz, başarısız olursa SSE'yi etkilemesin.
+    if (TR_SYMS_SET.has(sym.toUpperCase())) {
+      const apiBase =
+        process.env.NEXT_PUBLIC_API_URL ||
+        (typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+          ? 'https://vivacious-growth-production-4875.up.railway.app/api/v1'
+          : 'http://localhost:8000/api/v1');
+      fetch(`${apiBase}/bist/financials/${encodeURIComponent(sym.toUpperCase())}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d && d.items?.length) setBistFinancials(d); })
+        .catch(() => { /* sessizce yok say — SSE akışı bağımsız çalışır */ });
+    }
     if (esRef.current) { esRef.current.close(); esRef.current = null; }
 
     // force=1 → backend Supabase cache'ini atlar ve ajanları yeniden çalıştırıp
@@ -710,6 +811,14 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
         symbolNews={symbolNews}
       />
     ) },
+    // BIST sembollerinde TL UFRS bilanço sekmesi (isyatirimhisse haftalık cron).
+    // FMP TR şirketleri için balance-sheet döndürmediği için bu sekme BIST'in
+    // tek ham finansal tablo kaynağı.
+    ...(TR_SYMS_SET.has(symbol.toUpperCase()) ? [{
+      label: '🇹🇷 BIST TL Bilanço',
+      ready: !!bistFinancials,
+      content: <BistFinancialsPanel data={bistFinancials} />,
+    }] : []),
   ];
 
   const IND_BTNS = [{ id: 'rsi', label: 'RSI' }, { id: 'sma', label: 'SMA' }, { id: 'ema', label: 'EMA' }];
