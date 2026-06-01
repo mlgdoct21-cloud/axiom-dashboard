@@ -313,6 +313,126 @@ export interface AcademyLiveExample {
   error?: string;
 }
 
+// ---------------------------------------------------------------------------
+// TA Akademisi (Teknik Analiz) — paralel tipler
+// ---------------------------------------------------------------------------
+export interface TALesson {
+  id: string;
+  slug: string;
+  title: string;
+  learning_objective?: string;
+  body?: string;
+  worked_examples?: Array<{ asset: string; symbol: string; scenario: string }>;
+  navigation_link?: string | null;
+  navigation_note?: string | null;
+  quiz?: { question: string; options: Array<{ text: string }> } | null;
+  glossary_refs?: string[];
+  tier_required?: 'free' | 'premium' | 'advance';
+  locked: boolean;
+  tier_hint?: string;
+}
+
+export interface TAModule {
+  id: string;
+  slug: string;
+  title: string;
+  tagline?: string;
+  summary?: string;
+  tier_required: 'free' | 'premium' | 'advance';
+  duration_min?: number;
+  locked: boolean;
+  lessons: TALesson[];
+}
+
+export interface TACurriculum {
+  metadata?: Record<string, unknown>;
+  user_tier: 'free' | 'premium' | 'advance';
+  track: 'ta';
+  modules: TAModule[];
+}
+
+export interface TALessonResponse {
+  module_id: string;
+  module_title: string;
+  lesson: TALesson;
+}
+
+export interface TAGlossaryTerm {
+  slug: string;
+  tr: string;
+  intuition?: string;
+  one_liner?: string;
+  pitfall?: string;
+  section?: string;
+}
+
+export type TAGlossary = Record<string, TAGlossaryTerm[] | Record<string, unknown>>;
+
+export interface TAExampleAnnotation {
+  type: 'level' | 'pivot' | 'trendline' | 'neckline' | 'pattern';
+  i?: number;
+  from_i?: number;
+  to_i?: number;
+  price?: number;
+  from_price?: number;
+  to_price?: number;
+  side?: 'support' | 'resistance' | 'high' | 'low' | 'bullish' | 'bearish';
+  label?: string;
+  price_open?: number;
+  price_close?: number;
+  r2?: number;
+}
+
+export interface TAExampleBar {
+  t: number; // epoch ms
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  v: number;
+}
+
+export interface TAExampleMetric {
+  label: string;
+  value: string;
+}
+
+export interface TAExampleTeachingStep {
+  title: string;
+  body: string;
+}
+
+export interface TAExampleTeaching {
+  character?: string;
+  intro?: string;
+  steps?: TAExampleTeachingStep[];
+  takeaway?: string;
+}
+
+export interface TAExample {
+  available: boolean;
+  technique?: string;
+  technique_name?: string;
+  asset?: string;
+  asset_label?: string;
+  currency?: string;
+  decimals?: number;
+  timeframe?: string;
+  source?: 'binance' | 'fmp' | 'cache';
+  bars?: TAExampleBar[];
+  indicators?: Record<string, Array<number | null>>;
+  annotations?: TAExampleAnnotation[];
+  summary?: {
+    headline: string;
+    metrics: TAExampleMetric[];
+    found: boolean;
+  };
+  teaching?: TAExampleTeaching;
+  supported_assets?: string[];
+  fetched_at?: string;
+  error?: string;
+}
+
 export interface AcademyModuleProgress {
   module_id: string;
   total: number;
@@ -886,6 +1006,31 @@ class ApiClient {
 
   async getAcademyLiveContext(): Promise<AcademyLiveContext> {
     return this.request<AcademyLiveContext>('/academy/context');
+  }
+
+  // ---------- TA Akademisi (Teknik Analiz) ----------
+  async getTACurriculum(): Promise<TACurriculum> {
+    return this.request<TACurriculum>('/academy/ta-curriculum');
+  }
+
+  async getTALesson(lessonId: string): Promise<TALessonResponse> {
+    return this.request<TALessonResponse>(`/academy/ta-lessons/${lessonId}`);
+  }
+
+  async getTAGlossary(): Promise<TAGlossary> {
+    return this.request<TAGlossary>('/academy/ta-glossary');
+  }
+
+  async searchTAGlossary(q: string): Promise<{ query: string; results: TAGlossaryTerm[] }> {
+    return this.request<{ query: string; results: TAGlossaryTerm[] }>(
+      `/academy/ta-glossary/search?q=${encodeURIComponent(q)}`,
+    );
+  }
+
+  async getTAExample(technique: string, asset: string = 'BTC'): Promise<TAExample> {
+    return this.request<TAExample>(
+      `/academy/ta-example/${encodeURIComponent(technique)}?asset=${encodeURIComponent(asset)}`,
+    );
   }
 
   isAuthenticated(): boolean {

@@ -13,6 +13,7 @@ import GlossarySearchBar from './GlossarySearchBar';
 import GlossaryView from './GlossaryView';
 import ScenarioGrid from './ScenarioGrid';
 import LiveContextBadge from './LiveContextBadge';
+import TATrack from './TATrack';
 
 // Hardcoded: Vercel env eski değer taşıyıp override ediyordu — bkz settings/page.
 const BOT_USERNAME = 'AxiomAnaliz_Bot';
@@ -30,7 +31,7 @@ export default function AcademyClient() {
   const [scenarios, setScenarios] = useState<AcademyScenarioCard[]>([]);
   const [progress, setProgress] = useState<AcademyProgressSummary | null>(null);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'lessons' | 'glossary'>('lessons');
+  const [activeTab, setActiveTab] = useState<'lessons' | 'glossary' | 'ta'>('lessons');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAuth, setIsAuth] = useState(false);
@@ -137,6 +138,17 @@ export default function AcademyClient() {
         </button>
         <button
           type="button"
+          onClick={() => setActiveTab('ta')}
+          className={`px-4 py-2.5 text-sm font-semibold transition border-b-2 -mb-px ${
+            activeTab === 'ta'
+              ? 'border-[#a78bfa] text-white'
+              : 'border-transparent text-gray-400 hover:text-gray-200'
+          }`}
+        >
+          📈 Teknik Analiz
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveTab('glossary')}
           className={`px-4 py-2.5 text-sm font-semibold transition border-b-2 -mb-px ${
             activeTab === 'glossary'
@@ -144,7 +156,7 @@ export default function AcademyClient() {
               : 'border-transparent text-gray-400 hover:text-gray-200'
           }`}
         >
-          📖 Sözlük
+          📖 Opsiyon Sözlüğü
         </button>
       </div>
 
@@ -239,6 +251,8 @@ export default function AcademyClient() {
             <ScenarioGrid cards={scenarios} />
           </>
         )
+      ) : activeTab === 'ta' ? (
+        <TATrack userTier={tier} isAuthenticated={isAuth} />
       ) : (
         <GlossaryView />
       )}
