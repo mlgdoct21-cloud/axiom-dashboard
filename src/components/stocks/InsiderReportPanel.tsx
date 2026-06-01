@@ -233,7 +233,7 @@ export default function InsiderReportPanel({ symbol, autoOpen = false }: Props) 
   // ─── Sayfa içi tetikleyici kart ─────────────────────────────────────────────
   const trigger = (
     <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded-lg overflow-hidden">
-      <div className="px-5 py-4 flex items-center justify-between gap-4">
+      <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <div className="text-[10px] text-[#4fc3f7] uppercase tracking-wider mb-1">
             AXIOM Insider Intelligence
@@ -243,7 +243,7 @@ export default function InsiderReportPanel({ symbol, autoOpen = false }: Props) 
         </div>
         <button
           onClick={() => fetchReport(false)}
-          className="shrink-0 px-4 py-2 rounded bg-[#4fc3f7]/10 border border-[#4fc3f7]/40 hover:bg-[#4fc3f7]/20 hover:scale-105 text-xs font-semibold text-[#4fc3f7] transition-all duration-200"
+          className="w-full sm:w-auto sm:shrink-0 px-4 py-2 rounded bg-[#4fc3f7]/10 border border-[#4fc3f7]/40 hover:bg-[#4fc3f7]/20 hover:scale-105 text-xs font-semibold text-[#4fc3f7] transition-all duration-200"
         >
           {data ? 'Raporu Yeniden Aç' : t.generate}
         </button>

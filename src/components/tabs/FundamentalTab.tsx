@@ -934,7 +934,7 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
             </div>
           )}
 
-          <div className="grid grid-cols-4 border-t border-[#2a2a3e]">
+          <div className="grid grid-cols-2 md:grid-cols-4 border-t border-[#2a2a3e]">
             {[
               { l: 'Alım Bölgesi', v: agent5.entryZone ? `$${agent5.entryZone.low}–${agent5.entryZone.high}` : 'N/A', c: '#4fc3f7', rr: false },
               { l: 'Hedef Fiyat',  v: agent5.targetPrice ? `$${agent5.targetPrice} (+${agent5.targetReturnPct}%)` : 'N/A', c: '#26de81', rr: false },
@@ -949,7 +949,7 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
           </div>
 
           {agent5.topReasons?.length > 0 && (
-            <div className="px-5 py-4 border-t border-[#2a2a3e] flex items-start justify-between gap-4">
+            <div className="px-5 py-4 border-t border-[#2a2a3e] flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
               <div className="flex-1">
                 <div className="text-[10px] text-[#555570] uppercase mb-2">Ana Gerekçeler</div>
                 <ul className="space-y-1">
@@ -961,7 +961,7 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
                 </ul>
               </div>
               {agent5.timeHorizon && (
-                <div className="text-right shrink-0">
+                <div className="sm:text-right sm:shrink-0">
                   <div className="text-[10px] text-[#555570] uppercase mb-1">Zaman Ufku</div>
                   <div className="text-sm font-bold text-[#ff9800]">{agent5.timeHorizon.replace('_', ' ')}</div>
                 </div>
@@ -974,7 +974,7 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
               <summary className="text-[10px] text-[#666680] cursor-pointer hover:text-[#4fc3f7] uppercase tracking-wider">
                 ▼ Skor Bileşenleri (kod hesabı — Gemini değiştiremez)
               </summary>
-              <div className="mt-2 grid grid-cols-5 gap-2 text-center text-[11px]">
+              <div className="mt-2 grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-[11px]">
                 {[
                   { l: 'Muhasebeci', v: agent5._deterministicSignals.forensicRating, w: '%25' },
                   { l: 'Stratejist', v: agent5._deterministicSignals.strategistSignal, w: '%25' },
@@ -1000,9 +1000,9 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
 
       {/* ── Chart + Metrics ── */}
       {metrics ? (
-        <div className="grid grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           {/* Chart 3/5 */}
-          <div className="col-span-3 space-y-2">
+          <div className="md:col-span-3 space-y-2">
             <div className="flex items-center gap-2">
               {IND_BTNS.map(b => (
                 <button key={b.id} onClick={() => toggleInd(b.id)} className="text-[11px] px-2.5 py-1 rounded border transition-colors"
@@ -1017,7 +1017,7 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
           </div>
 
           {/* Metrics 2/5 */}
-          <div className="col-span-2 space-y-2">
+          <div className="md:col-span-2 space-y-2">
             <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3 flex items-center justify-between">
               <div>
                 <div className="text-lg font-bold text-[#e0e0f0]">${metrics.currentPrice?.toFixed(2)}</div>
@@ -1064,9 +1064,9 @@ export default function FundamentalTab({ locale, symbol: symbolProp }: Fundament
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-5 gap-4">
-          <div className="col-span-3"><Skel h={75} /></div>
-          <div className="col-span-2 space-y-2">{[1,2,3,4,5].map(i => <Skel key={i} h={10} />)}</div>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="md:col-span-3"><Skel h={75} /></div>
+          <div className="md:col-span-2 space-y-2">{[1,2,3,4,5].map(i => <Skel key={i} h={10} />)}</div>
         </div>
       )}
 
