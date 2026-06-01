@@ -14,11 +14,13 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   createChart,
+  createSeriesMarkers,
   CandlestickSeries,
   LineSeries,
   ColorType,
   type IChartApi,
   type ISeriesApi,
+  type SeriesMarker,
   type UTCTimestamp,
 } from 'lightweight-charts';
 import { apiClient, type TAExample, type TAExampleAnnotation } from '@/lib/api';
@@ -99,21 +101,22 @@ function TAChart({ data }: { data: TAExample }) {
         scaleMargins: { top: 0.08, bottom: 0.08 },
       },
       crosshair: { mode: 1 },
-      // Chart body etkileşimi:
-      //   • Wheel: time-eksen zoom (mum genişlik değişir, fiyat ekseni etkilenmez)
-      //   • Drag: yatay kaydırma (geçmişe/şimdiye git)
-      //   • Touch dikey kaydırma kapalı — dokunmatik cihazda sayfa scroll'u serbest kalır
+      // Chart body etkileşimi (kullanıcı isteği):
+      //   • Wheel chart body üstünde → mumlar SADECE yatay kayar (pan, ZOOM YOK)
+      //   • Sol klik basılı tutup sürükle → grafik blok halinde yatay kaydırma
+      //   • Touch yatay kaydırma açık, dikey kaydırma kapalı (sayfa scroll'u serbest)
       handleScroll: {
-        mouseWheel: true,
-        pressedMouseMove: true,
+        mouseWheel: true,         // wheel pan'i etkin
+        pressedMouseMove: true,   // sol klik + drag → yatay kaydırma (blok hareket)
         horzTouchDrag: true,
         vertTouchDrag: false,
       },
-      // Price ekseninde wheel/drag → SADECE Y (fiyat) zoom; zaman ekseni kaymaz
+      // Zoom KISITLI: chart body wheel'i ASLA zaman zoom yapmaz (sadece pan).
+      // Fiyat sütununda wheel/drag → sadece Y (fiyat) zoom; mumlar yana kaymaz.
       handleScale: {
         axisPressedMouseMove: { time: false, price: true },
         axisDoubleClickReset: { time: true, price: true },
-        mouseWheel: true,
+        mouseWheel: false,        // KRİTİK: body'de wheel artık zoom yapmaz, pan yapar
         pinch: true,
       },
     });
@@ -177,6 +180,12 @@ function TAChart({ data }: { data: TAExample }) {
 
     // Set of "level" labels üretilen indikatör serileri ile çift çizim olmasın diye filtrelenir
     const SUPPRESSED_LEVEL_LABELS = new Set(['Üst Bant', 'Alt Bant', 'Orta (SMA20)']);
+
+    // Pivot/marker annotation'larını mum üstünde gerçek text label olarak biriktirir.
+    // Kullanıcı omuz-baş-omuz noktalarını, divergence pivotlarını, spring tetiğini
+    // grafiğin tam o mumunda görür — "nereden başlamış, nerede bitmiş, hangi
+    // bağlantı noktası" sorularına görsel cevap.
+    const chartMarkers: SeriesMarker<UTCTimestamp>[] = [];
 
     // Annotation'ları işle
     const annotations = data.annotations ?? [];
@@ -284,17 +293,59 @@ function TAChart({ data }: { data: TAExample }) {
           ]);
         }
       } else if (ann.type === 'marker' && ann.i !== undefined && ann.price !== undefined) {
-        // Marker — yatay referans çizgisi (event noktasını işaretle)
+        // Marker — mum üstünde / altında gerçek text label (olay noktasını işaretle)
         const isBullish = ann.side === 'low' || ann.kind === 'bullish' || ann.kind === 'golden';
-        candleSeries.createPriceLine({
-          price: ann.price,
-          color: isBullish ? '#26de81' : '#ff5c5c',
-          lineWidth: 1,
-          lineStyle: 3, // dotted
-          axisLabelVisible: true,
-          title: ann.label ?? 'Olay',
-        });
+        const bar = bars[Math.max(0, Math.min(ann.i, bars.length - 1))];
+        if (bar) {
+          chartMarkers.push({
+            time: epochMsToTime(bar.t),
+            position: isBullish ? 'belowBar' : 'aboveBar',
+            color: isBullish ? '#26de81' : '#ff5c5c',
+            shape: isBullish ? 'arrowUp' : 'arrowDown',
+            text: ann.label ?? 'Olay',
+            size: 1,
+          });
+        }
+      } else if (ann.type === 'pivot' && ann.i !== undefined && ann.price !== undefined) {
+        // Pivot — formasyon bağlantı noktaları (Sol Omuz / Baş / Sağ Omuz / Dip / Tepe /
+        // Pivot 1 / Pivot 2 / Swing Başlangıcı / Swing Sonu)
+        // Mum üstünde gerçek text label ile gösterilir → kullanıcı formasyonun
+        // başladığı, bittiği, bağlandığı noktayı doğrudan grafiğin üstünde okur.
+        const bar = bars[Math.max(0, Math.min(ann.i, bars.length - 1))];
+        if (bar) {
+          const isHigh = ann.side === 'high';
+          chartMarkers.push({
+            time: epochMsToTime(bar.t),
+            position: isHigh ? 'aboveBar' : 'belowBar',
+            color: isHigh ? '#ff5c5c' : '#26de81',
+            shape: isHigh ? 'arrowDown' : 'arrowUp',
+            text: ann.label ?? (isHigh ? 'Tepe' : 'Dip'),
+            size: 1,
+          });
+        }
+      } else if (ann.type === 'pattern' && ann.i !== undefined && ann.price !== undefined) {
+        // Pattern — formasyonun tetik mumu (engulfing/hammer/doji)
+        const bar = bars[Math.max(0, Math.min(ann.i, bars.length - 1))];
+        if (bar) {
+          const isBullish = ann.side === 'low' || ann.kind === 'bullish';
+          chartMarkers.push({
+            time: epochMsToTime(bar.t),
+            position: isBullish ? 'belowBar' : 'aboveBar',
+            color: '#a78bfa',
+            shape: 'circle',
+            text: ann.label ?? 'Formasyon',
+            size: 2,
+          });
+        }
       }
+    }
+
+    // Tüm pivot/marker/pattern annotation'larını mum üstüne tek seferde yaz
+    if (chartMarkers.length > 0) {
+      // Aynı (time, position) için duplicate olursa LWC sadece sonuncuyu gösterir;
+      // önce time'a göre sırala (LWC zorunlu) sonra yaz.
+      chartMarkers.sort((a, b) => (a.time as number) - (b.time as number));
+      createSeriesMarkers(candleSeries, chartMarkers);
     }
 
     chart.timeScale().fitContent();
