@@ -75,7 +75,7 @@ function TAChart({ data }: { data: TAExample }) {
 
     const chart = createChart(container, {
       width: container.clientWidth,
-      height: 360,
+      height: 480,
       layout: {
         background: { type: ColorType.Solid, color: '#0f1320' },
         textColor: '#d1d4dc',
@@ -89,9 +89,33 @@ function TAChart({ data }: { data: TAExample }) {
         timeVisible: true,
         secondsVisible: false,
         borderColor: '#2a2f42',
+        rightOffset: 6,
+        barSpacing: 8,
       },
-      rightPriceScale: { borderColor: '#2a2f42' },
+      rightPriceScale: {
+        borderColor: '#2a2f42',
+        autoScale: true,
+        // Kullanıcı price ekseninde wheel/drag ile sadece fiyat zoom'u yapabilir
+        scaleMargins: { top: 0.08, bottom: 0.08 },
+      },
       crosshair: { mode: 1 },
+      // Chart body etkileşimi:
+      //   • Wheel: time-eksen zoom (mum genişlik değişir, fiyat ekseni etkilenmez)
+      //   • Drag: yatay kaydırma (geçmişe/şimdiye git)
+      //   • Touch dikey kaydırma kapalı — dokunmatik cihazda sayfa scroll'u serbest kalır
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: false,
+      },
+      // Price ekseninde wheel/drag → SADECE Y (fiyat) zoom; zaman ekseni kaymaz
+      handleScale: {
+        axisPressedMouseMove: { time: false, price: true },
+        axisDoubleClickReset: { time: true, price: true },
+        mouseWheel: true,
+        pinch: true,
+      },
     });
     chartRef.current = chart;
 
@@ -113,43 +137,84 @@ function TAChart({ data }: { data: TAExample }) {
     }));
     candleSeries.setData(candleData);
 
-    // EMA20 overlay
-    const ema20 = data.indicators?.ema20;
-    if (ema20 && ema20.length === data.bars.length) {
-      const emaSeries = chart.addSeries(LineSeries, {
-        color: '#ffd166',
-        lineWidth: 1,
-        lastValueVisible: false,
+    // Genel indikatör serisi yardımcısı — tek bir serinin (None-aware) tam tarihçe çizimi
+    const bars = data.bars ?? [];
+    const plotSeries = (
+      values: (number | null | undefined)[] | undefined,
+      opts: { color: string; lineWidth?: 1 | 2 | 3; lineStyle?: 0 | 1 | 2 | 3 },
+    ) => {
+      if (!values || values.length !== bars.length) return;
+      const s = chart.addSeries(LineSeries, {
+        color: opts.color,
+        lineWidth: opts.lineWidth ?? 1,
+        lineStyle: opts.lineStyle ?? 0,
+        lastValueVisible: true,
         priceLineVisible: false,
       });
-      const emaPoints = data.bars
+      const pts = bars
         .map((b, i) => {
-          const v = ema20[i];
+          const v = values[i];
           return v !== null && v !== undefined
-            ? { time: epochMsToTime(b.t), value: v }
+            ? { time: epochMsToTime(b.t), value: v as number }
             : null;
         })
         .filter((p): p is { time: UTCTimestamp; value: number } => p !== null);
-      emaSeries.setData(emaPoints);
-    }
+      if (pts.length) s.setData(pts);
+    };
+
+    // EMA20 overlay (her teknikte ana trend pürüzsüzleştirici)
+    plotSeries(data.indicators?.ema20, { color: '#ffd166', lineWidth: 1 });
+
+    // Bollinger Bands — squeeze tekniği için üst/orta/alt bantlar tam tarihçeyle
+    // Böylece kullanıcı bantların geçmişte sıkıştığı/açıldığı noktaları görsel olarak görür.
+    plotSeries(data.indicators?.bb_upper, { color: '#ff5c5c', lineWidth: 1, lineStyle: 2 });
+    plotSeries(data.indicators?.bb_middle, { color: '#4fc3f7', lineWidth: 1 });
+    plotSeries(data.indicators?.bb_lower, { color: '#26de81', lineWidth: 1, lineStyle: 2 });
+
+    // SMA50 / SMA200 — golden cross & MTF tekniklerinde trend dizilimi görseli
+    plotSeries(data.indicators?.sma50, { color: '#a78bfa', lineWidth: 2 });
+    plotSeries(data.indicators?.sma200, { color: '#ff9f43', lineWidth: 2 });
+
+    // Set of "level" labels üretilen indikatör serileri ile çift çizim olmasın diye filtrelenir
+    const SUPPRESSED_LEVEL_LABELS = new Set(['Üst Bant', 'Alt Bant', 'Orta (SMA20)']);
 
     // Annotation'ları işle
     const annotations = data.annotations ?? [];
     for (const ann of annotations) {
       if (ann.type === 'level' && ann.price !== undefined) {
+        // Bollinger üst/orta/alt zaten LineSeries olarak çizildi — yatay priceLine çift çizim olmasın
+        const rawLabel = ann.label ?? '';
+        if (SUPPRESSED_LEVEL_LABELS.has(rawLabel)) continue;
+
         const color =
           ann.side === 'support'
             ? LEVEL_COLORS.support
             : ann.side === 'resistance'
               ? LEVEL_COLORS.resistance
               : LEVEL_COLORS.default;
+        // Pivot seviyeleri (P/R/S) için kalınlık hiyerarşisi: P kalın, R1/S1 orta, R2/S2 ince, R3/S3 nokta
+        let lineWidth: 1 | 2 | 3 = 2;
+        let lineStyle: 0 | 1 | 2 | 3 = 2; // dashed
+        if (rawLabel.startsWith('P:')) {
+          lineWidth = 3;
+          lineStyle = 0;
+        } else if (rawLabel.startsWith('R3:') || rawLabel.startsWith('S3:')) {
+          lineWidth = 1;
+          lineStyle = 3; // dotted
+        } else if (rawLabel.startsWith('R2:') || rawLabel.startsWith('S2:')) {
+          lineWidth = 1;
+        } else if (rawLabel.startsWith('Range ')) {
+          // Wyckoff range sınırları — kalın + kesik
+          lineWidth = 2;
+          lineStyle = 2;
+        }
         candleSeries.createPriceLine({
           price: ann.price,
           color,
-          lineWidth: 2,
-          lineStyle: 2, // dashed
+          lineWidth,
+          lineStyle,
           axisLabelVisible: true,
-          title: ann.label ?? '',
+          title: rawLabel,
         });
       } else if (ann.type === 'neckline' && ann.price !== undefined) {
         candleSeries.createPriceLine({
