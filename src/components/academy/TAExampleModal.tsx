@@ -14,13 +14,11 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   createChart,
-  createSeriesMarkers,
   CandlestickSeries,
   LineSeries,
   ColorType,
   type IChartApi,
   type ISeriesApi,
-  type SeriesMarker,
   type UTCTimestamp,
 } from 'lightweight-charts';
 import { apiClient, type TAExample, type TAExampleAnnotation } from '@/lib/api';
@@ -101,23 +99,20 @@ function TAChart({ data }: { data: TAExample }) {
         scaleMargins: { top: 0.08, bottom: 0.08 },
       },
       crosshair: { mode: 1 },
-      // Chart body etkileşimi (kullanıcı isteği):
-      //   • Wheel chart body üstünde → mumlar SADECE yatay kayar (pan, ZOOM YOK)
-      //   • Sol klik basılı tutup sürükle → grafik blok halinde yatay kaydırma
-      //   • Touch yatay kaydırma açık, dikey kaydırma kapalı (sayfa scroll'u serbest)
+      // Chart etkileşimi (KISITLI ve BASİT):
+      //   • Wheel → mumlar yatay kayar (pan). HİÇBİR ZOOM yapmaz.
+      //   • Sol klik + drag → blok yatay kaydırma.
       handleScroll: {
-        mouseWheel: true,         // wheel pan'i etkin
-        pressedMouseMove: true,   // sol klik + drag → yatay kaydırma (blok hareket)
+        mouseWheel: true,
+        pressedMouseMove: true,
         horzTouchDrag: true,
         vertTouchDrag: false,
       },
-      // Zoom KISITLI: chart body wheel'i ASLA zaman zoom yapmaz (sadece pan).
-      // Fiyat sütununda wheel/drag → sadece Y (fiyat) zoom; mumlar yana kaymaz.
       handleScale: {
-        axisPressedMouseMove: { time: false, price: true },
-        axisDoubleClickReset: { time: true, price: true },
-        mouseWheel: false,        // KRİTİK: body'de wheel artık zoom yapmaz, pan yapar
-        pinch: true,
+        axisPressedMouseMove: false,
+        axisDoubleClickReset: false,
+        mouseWheel: false,        // wheel ZOOM YAPMAZ
+        pinch: false,
       },
     });
     chartRef.current = chart;
@@ -181,11 +176,10 @@ function TAChart({ data }: { data: TAExample }) {
     // Set of "level" labels üretilen indikatör serileri ile çift çizim olmasın diye filtrelenir
     const SUPPRESSED_LEVEL_LABELS = new Set(['Üst Bant', 'Alt Bant', 'Orta (SMA20)']);
 
-    // Pivot/marker annotation'larını mum üstünde gerçek text label olarak biriktirir.
-    // Kullanıcı omuz-baş-omuz noktalarını, divergence pivotlarını, spring tetiğini
-    // grafiğin tam o mumunda görür — "nereden başlamış, nerede bitmiş, hangi
-    // bağlantı noktası" sorularına görsel cevap.
-    const chartMarkers: SeriesMarker<UTCTimestamp>[] = [];
+    // Kullanıcı talebi: pivot/pattern/marker annotation'ları (oklar + text)
+    // grafiği kalabalıklaştırıyor — grafik üstüne çizilmez. Sadece yatay
+    // priceLine'lar (S/R / Fib / Range sınırları) ve eğik LineSeries'ler
+    // (trendline / divergence) bırakıldı; bunlar bant gibi temiz görünür.
 
     // Annotation'ları işle
     const annotations = data.annotations ?? [];
@@ -292,102 +286,13 @@ function TAChart({ data }: { data: TAExample }) {
             { time: epochMsToTime(toBar.t), value: ann.to_price },
           ]);
         }
-      } else if (ann.type === 'marker' && ann.i !== undefined && ann.price !== undefined) {
-        // Marker — mum üstünde / altında gerçek text label (olay noktasını işaretle)
-        const isBullish = ann.side === 'low' || ann.kind === 'bullish' || ann.kind === 'golden';
-        const bar = bars[Math.max(0, Math.min(ann.i, bars.length - 1))];
-        if (bar) {
-          chartMarkers.push({
-            time: epochMsToTime(bar.t),
-            position: isBullish ? 'belowBar' : 'aboveBar',
-            color: isBullish ? '#26de81' : '#ff5c5c',
-            shape: isBullish ? 'arrowUp' : 'arrowDown',
-            text: ann.label ?? 'Olay',
-            size: 1,
-          });
-        }
-      } else if (ann.type === 'pivot' && ann.i !== undefined && ann.price !== undefined) {
-        // Pivot — formasyon bağlantı noktaları (Sol Omuz / Baş / Sağ Omuz / Dip / Tepe /
-        // Pivot 1 / Pivot 2 / Swing Başlangıcı / Swing Sonu)
-        // Mum üstünde gerçek text label ile gösterilir → kullanıcı formasyonun
-        // başladığı, bittiği, bağlandığı noktayı doğrudan grafiğin üstünde okur.
-        const bar = bars[Math.max(0, Math.min(ann.i, bars.length - 1))];
-        if (bar) {
-          const isHigh = ann.side === 'high';
-          chartMarkers.push({
-            time: epochMsToTime(bar.t),
-            position: isHigh ? 'aboveBar' : 'belowBar',
-            color: isHigh ? '#ff5c5c' : '#26de81',
-            shape: isHigh ? 'arrowDown' : 'arrowUp',
-            text: ann.label ?? (isHigh ? 'Tepe' : 'Dip'),
-            size: 1,
-          });
-        }
-      } else if (ann.type === 'pattern' && ann.i !== undefined) {
-        // Pattern — formasyonun tetik mumu (engulfing/hammer/doji)
-        // price field'ı ZORUNLU değil; marker bar time'ında konumlanır.
-        const bar = bars[Math.max(0, Math.min(ann.i, bars.length - 1))];
-        if (bar) {
-          const isBullish = ann.side === 'low' || ann.side === 'bullish' || ann.kind === 'bullish';
-          chartMarkers.push({
-            time: epochMsToTime(bar.t),
-            position: isBullish ? 'belowBar' : 'aboveBar',
-            color: isBullish ? '#26de81' : '#ff5c5c',
-            shape: isBullish ? 'arrowUp' : 'arrowDown',
-            text: ann.label ?? 'Formasyon',
-            size: 2,
-          });
-        }
       }
-    }
-
-    // Tüm pivot/marker/pattern annotation'larını mum üstüne tek seferde yaz
-    if (chartMarkers.length > 0) {
-      // Aynı (time, position) için duplicate olursa LWC sadece sonuncuyu gösterir;
-      // önce time'a göre sırala (LWC zorunlu) sonra yaz.
-      chartMarkers.sort((a, b) => (a.time as number) - (b.time as number));
-      createSeriesMarkers(candleSeries, chartMarkers);
+      // pattern / pivot / marker tipleri grafiğe ÇİZİLMEZ (kalabalık olmasın).
+      // Bu annotation'lar yine response'ta dururlar; "metric" tablosu altında
+      // sayı/etiket olarak görünürler ama mum üstüne ok+text basılmaz.
     }
 
     chart.timeScale().fitContent();
-
-    // KRİTİK: Fiyat sütununda (sağdaki price axis) wheel scroll yaparken
-    // grafik yatay kaymasın — SADECE Y zoom yapsın.
-    // LWC v5 default'unda wheel chart'ın HER YERİNDE aynı şekilde işlenir,
-    // bu yüzden price scale üstünde wheel time-pan'i tetikler. Bunu DOM-level'da
-    // yakalayıp price scale alanında time-pan'i bloke ediyor, scaleMargins ile
-    // görsel Y zoom (mum boyları büyür/küçülür) uyguluyoruz.
-    let topMargin = 0.08;
-    let botMargin = 0.08;
-    const Y_ZOOM_STEP = 0.04;
-    const Y_ZOOM_MIN = 0.0;
-    const Y_ZOOM_MAX = 0.40;
-
-    const onWheel = (e: WheelEvent) => {
-      const rect = container.getBoundingClientRect();
-      const xFromLeft = e.clientX - rect.left;
-      // Gerçek price-axis genişliğini chart API'sinden al; render edilmemişse 70px varsay
-      let axisW = 70;
-      try {
-        const w = chart.priceScale('right').width();
-        if (w && w > 0) axisW = w;
-      } catch {
-        // ignore
-      }
-      const isOverPriceAxis = xFromLeft > rect.width - axisW;
-      if (!isOverPriceAxis) return; // chart body — LWC handle etsin (time pan)
-
-      // Price axis üstünde wheel → time pan bloke + Y zoom uygula
-      e.preventDefault();
-      e.stopPropagation();
-      const dir = e.deltaY > 0 ? 1 : -1; // aşağı scroll = küçült (zoom out)
-      topMargin = Math.min(Y_ZOOM_MAX, Math.max(Y_ZOOM_MIN, topMargin + dir * Y_ZOOM_STEP));
-      botMargin = Math.min(Y_ZOOM_MAX, Math.max(Y_ZOOM_MIN, botMargin + dir * Y_ZOOM_STEP));
-      chart.priceScale('right').applyOptions({
-        scaleMargins: { top: topMargin, bottom: botMargin },
-      });
-    };
-    container.addEventListener('wheel', onWheel, { capture: true, passive: false });
 
     const resize = () => {
       chart.applyOptions({ width: container.clientWidth });
@@ -396,13 +301,12 @@ function TAChart({ data }: { data: TAExample }) {
 
     return () => {
       window.removeEventListener('resize', resize);
-      container.removeEventListener('wheel', onWheel, { capture: true } as EventListenerOptions);
       chart.remove();
       chartRef.current = null;
     };
   }, [data]);
 
-  return <div ref={containerRef} className="w-full" style={{ height: 360 }} />;
+  return <div ref={containerRef} className="w-full" style={{ height: 480 }} />;
 }
 
 function Teaching({ teaching }: { teaching: TAExample['teaching'] }) {
