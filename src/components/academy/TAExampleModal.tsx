@@ -357,7 +357,6 @@ function TAChart({ data }: { data: TAExample }) {
     // bu yüzden price scale üstünde wheel time-pan'i tetikler. Bunu DOM-level'da
     // yakalayıp price scale alanında time-pan'i bloke ediyor, scaleMargins ile
     // görsel Y zoom (mum boyları büyür/küçülür) uyguluyoruz.
-    const PRICE_AXIS_WIDTH_GUESS = 70; // sağdaki price axis tipik genişliği
     let topMargin = 0.08;
     let botMargin = 0.08;
     const Y_ZOOM_STEP = 0.04;
@@ -367,7 +366,15 @@ function TAChart({ data }: { data: TAExample }) {
     const onWheel = (e: WheelEvent) => {
       const rect = container.getBoundingClientRect();
       const xFromLeft = e.clientX - rect.left;
-      const isOverPriceAxis = xFromLeft > rect.width - PRICE_AXIS_WIDTH_GUESS;
+      // Gerçek price-axis genişliğini chart API'sinden al; render edilmemişse 70px varsay
+      let axisW = 70;
+      try {
+        const w = chart.priceScale('right').width();
+        if (w && w > 0) axisW = w;
+      } catch {
+        // ignore
+      }
+      const isOverPriceAxis = xFromLeft > rect.width - axisW;
       if (!isOverPriceAxis) return; // chart body — LWC handle etsin (time pan)
 
       // Price axis üstünde wheel → time pan bloke + Y zoom uygula
