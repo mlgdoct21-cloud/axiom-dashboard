@@ -143,6 +143,15 @@ export default function MarketHealthCard() {
           fetch('/api/market/stablecoin-pulse'),
         ]);
 
+        // 2026-06-01: CryptoQuant aboneliği iptal edildi; üç route da 503
+        // 'cryptoquant_not_configured' döner. Bu durum hata değil — kullanıcıya
+        // "Yakında geri geliyor" gri kartı gösterilir.
+        if (aRes.status === 503 || eRes.status === 503 || sRes.status === 503) {
+          setError('cryptoquant_not_configured');
+          setLoading(false);
+          return;
+        }
+
         if (aRes.ok) setAltseason(await aRes.json());
         if (eRes.ok) setErc20(await eRes.json());
         if (sRes.ok) setStable(await sRes.json());
@@ -161,6 +170,24 @@ export default function MarketHealthCard() {
         <div className="h-5 bg-[#1a1a2e] rounded w-1/3 mb-4" />
         <div className="h-20 bg-[#1a1a2e] rounded mb-3" />
         <div className="h-3 bg-[#1a1a2e] rounded w-2/3" />
+      </div>
+    );
+  }
+
+  // CryptoQuant kapalıyken hatasız "Yakında" kartı — kullanıcı endişelenmesin.
+  if (error === 'cryptoquant_not_configured') {
+    return (
+      <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xl">📋</span>
+          <h2 className="text-base font-bold text-[#8888a0]">Piyasa Sağlık Karnesi</h2>
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#3a3a52] text-[#8888a0] border border-[#3a3a52]">
+            Yakında
+          </span>
+        </div>
+        <p className="text-xs text-[#666680] leading-snug">
+          Alt sezon, stablecoin akışı ve ERC20 akıllı para verileri yakında geri gelecek.
+        </p>
       </div>
     );
   }
