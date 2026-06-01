@@ -358,7 +358,7 @@ function Agent2Card({ d, dataUsed }: { d: any; dataUsed?: Record<string, any> })
           </div>
         </div>
       )}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {d?.growthEngine && (
           <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3">
             <div className="text-[10px] text-[#ff9800] uppercase mb-1">Büyüme</div>
@@ -462,7 +462,7 @@ function Agent4Card({ d, dataUsed }: { d: any; dataUsed?: Record<string, any> })
             <span className="text-[10px] text-[#26de81] uppercase tracking-wider">Giriş / Çıkış Stratejisi</span>
             {d.overallSignal && <span className="text-sm font-bold px-3 py-1 rounded" style={{ color: sigColor(d.overallSignal), background: sigColor(d.overallSignal) + '22' }}>{d.overallSignal}</span>}
           </div>
-          <div className="grid grid-cols-3 gap-3 mb-3 text-center">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3 text-center">
             <div><div className="text-[10px] text-[#555] mb-1">Alım Bölgesi</div><div className="text-sm font-bold text-[#4fc3f7]">${d.entryStrategy.idealEntryLow}–${d.entryStrategy.idealEntryHigh}</div></div>
             <div><div className="text-[10px] text-[#555] mb-1">Hedef 1 / 2</div><div className="text-sm font-bold text-[#26de81]">${d.entryStrategy.takeProfit1} / ${d.entryStrategy.takeProfit2}</div></div>
             <div><div className="text-[10px] text-[#555] mb-1">Stop / R:R</div><div className="text-sm font-bold text-[#ff4757]">${d.entryStrategy.stopLoss} <span className="text-[#666]">({d.entryStrategy.riskRewardRatio}R)</span></div></div>
@@ -470,7 +470,7 @@ function Agent4Card({ d, dataUsed }: { d: any; dataUsed?: Record<string, any> })
           <p className="text-xs text-[#c0c0d0]">{d.entryStrategy.rationale}</p>
         </div>
       )}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {d?.fibonacci && (
           <div className="bg-[#0d0d1a] border border-[#2a2a3e] rounded p-3">
             <div className="text-[10px] text-[#ff9800] uppercase mb-1">Fibonacci</div>
@@ -1149,7 +1149,7 @@ function RRInfoTip() {
       </button>
       {open && pos && (
         <div
-          className="fixed z-[100] w-[264px] bg-[#0d0d1a] border border-[#2a2a3e] rounded-lg shadow-2xl p-3 text-left"
+          className="fixed z-[100] w-[min(264px,calc(100vw-1rem))] bg-[#0d0d1a] border border-[#2a2a3e] rounded-lg shadow-2xl p-3 text-left"
           style={{ top: pos.top, left: pos.left }}
           onClick={(e) => e.stopPropagation()}
         >

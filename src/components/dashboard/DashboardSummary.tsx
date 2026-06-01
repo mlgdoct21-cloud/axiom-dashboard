@@ -60,6 +60,9 @@ export function DashboardSummary() {
   const [modal, setModal] = useState<ModalContent | null>(null);
   const [onchainData, setOnchainData] = useState<OnChainSnapshot | null>(null);
   const [corpData, setCorpData] = useState<CorporateResponse | null>(null);
+  // 2026-06-01: Mobilde 11 chip yığını haber listesini ekran altına itiyor.
+  // Default kapalı; md:block ile desktop'ta her zaman açık.
+  const [mobileExpanded, setMobileExpanded] = useState(false);
 
   const ageText = (() => {
     if (!data?.last_updated) return '';
@@ -110,9 +113,17 @@ export function DashboardSummary() {
     <div className="space-y-1">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 min-w-0">
+        <button
+          type="button"
+          onClick={() => setMobileExpanded(v => !v)}
+          className="flex items-center gap-2 min-w-0 md:cursor-default"
+          aria-expanded={mobileExpanded}
+        >
           <span className="text-sm font-semibold text-[#e0e0e0] whitespace-nowrap">
             🌙 Sen Uyurken Piyasada
+          </span>
+          <span className="md:hidden text-[10px] text-[#4fc3f7]">
+            {mobileExpanded ? '▲ gizle' : '▼ 11 modül'}
           </span>
           {hasAnyError && (
             <span
@@ -122,7 +133,7 @@ export function DashboardSummary() {
               ⚠ kısmi veri
             </span>
           )}
-        </div>
+        </button>
         <button
           onClick={refresh}
           disabled={loading || digestLoading}
@@ -133,8 +144,9 @@ export function DashboardSummary() {
         </button>
       </div>
 
-      {/* 11-chip compact grid (6 col × 2 row at lg) — son chip: Kurumsal Sentez */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5">
+      {/* 11-chip compact grid (6 col × 2 row at lg) — son chip: Kurumsal Sentez.
+          Mobilde default kapalı; tıklayınca açılır. md:grid ile desktop'ta her zaman görünür. */}
+      <div className={`${mobileExpanded ? 'grid' : 'hidden'} md:grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5`}>
         <DigestRiskChip
           card={digest?.risk_radar}
           loading={digestLoading && !digest}
