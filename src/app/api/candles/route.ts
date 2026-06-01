@@ -96,9 +96,16 @@ async function fetchBinanceCandles(
   const url = `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=${interval}&limit=${limit}`;
   const res = await fetch(url, { next: { revalidate: 15 } });
 
-  if (!res.ok) return [];
+  if (!res.ok) {
+    console.warn(`[candles] Binance ${binanceSymbol} ${interval} HTTP ${res.status}`);
+    return [];
+  }
 
   const data: [number, string, string, string, string, string][] = await res.json();
+  if (!Array.isArray(data) || data.length === 0) {
+    console.warn(`[candles] Binance ${binanceSymbol} ${interval} empty payload`);
+    return [];
+  }
 
   return data.map(k => ({
     time: Math.floor(k[0] / 1000), // ms -> s
@@ -160,9 +167,20 @@ export async function GET(request: NextRequest) {
 
   try {
     let candles: ChartPoint[] = [];
+    let source: 'binance' | 'yahoo' = 'yahoo';
 
     if (symbol.startsWith('BINANCE:') || symbol.startsWith('COINBASE:')) {
       candles = await fetchBinanceCandles(symbol, resolution);
+      source = 'binance';
+      // 2026-06-01: Vercel serverless function'lardan Binance API'sine erişim
+      // bazı bölgelerden 451 (geo-block) dönüyor → candles boş, grafik patlar.
+      // Boş gelirse sembolü Yahoo formatına çevirip oradan dene (BTC-USD).
+      if (candles.length === 0) {
+        const sym = symbol.replace('BINANCE:', '').replace('COINBASE:', '');
+        const yahooSym = sym.replace(/USDT$/, '-USD').replace(/USDC$/, '-USD');
+        candles = await fetchYahooCandles(yahooSym, resolution);
+        if (candles.length > 0) source = 'yahoo';
+      }
     } else {
       candles = await fetchYahooCandles(symbol, resolution);
     }
@@ -171,7 +189,7 @@ export async function GET(request: NextRequest) {
       symbol,
       resolution,
       candles,
-      source: symbol.startsWith('BINANCE:') ? 'binance' : 'yahoo',
+      source,
     });
   } catch (error) {
     console.error('Candles API error:', error);

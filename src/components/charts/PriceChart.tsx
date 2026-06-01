@@ -365,6 +365,11 @@ export default function PriceChart({
       setDataSource('no_data');
       setCurrentPrice(null);
       setPriceChange(null);
+      // 2026-06-01: Yeni sembolün verisi gelmezse eski mumları ekranda
+      // bırakma — "BTCUSDT seçili ama AAPL grafiği görünüyor" bug'ı.
+      candleSeriesRef.current.setData([]);
+      volumeSeriesRef.current.setData([]);
+      indicatorSeriesRefs.current.forEach(s => s.setData([]));
       return;
     }
 
@@ -429,6 +434,14 @@ export default function PriceChart({
   // İlk yükleme
   useEffect(() => {
     let cancelled = false;
+    // 2026-06-01: Sembol/timeframe değiştiğinde eski veriyi loadData
+    // beklemeden ekrandan kaldır — race: yeni sembol gelmeden eski grafik
+    // yanlış etiketle görünmesin.
+    candleSeriesRef.current?.setData([]);
+    volumeSeriesRef.current?.setData([]);
+    indicatorSeriesRefs.current.forEach(s => s.setData([]));
+    setCurrentPrice(null);
+    setPriceChange(null);
     const load = async () => {
       if (cancelled) return;
       await loadData(false);
