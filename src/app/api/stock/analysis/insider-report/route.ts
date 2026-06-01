@@ -27,7 +27,7 @@ export const runtime = 'nodejs';
 
 const FMP_KEY = process.env.FMP_API_KEY;
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 
 // Supabase client — lazy init (request time'da, build time'da değil)
 // URL public olduğu için hardcode — sadece service key env var'dan gelir
@@ -558,10 +558,8 @@ function parseGeminiJson(raw: string): any | null {
 }
 
 const MODELS_CASCADE = [
-  'gemini-2.0-flash',
-  'gemini-flash-latest',
-  'gemini-flash-lite-latest',
   'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
 ];
 
 async function callGeminiModel(model: string, prompt: string): Promise<

@@ -32,7 +32,7 @@ const AGENT_CACHE_TTL_HOURS = 0.25; // 15 dakika
 // ─── Gemini helper (robust, fallback-aware) ──────────────────────────────────
 // maxOutputTokens 4000'e çıkarıldı: 5 ajanın da karmaşık JSON dönmesi gerekiyor,
 // 1500 ile JSON ortasında kesiliyor ve parse başarısız oluyordu → "Veri yetersiz"
-const GEMINI_PRIMARY = 'gemini-2.0-flash';
+const GEMINI_PRIMARY = 'gemini-2.5-flash';
 const GEMINI_FALLBACK = 'gemini-2.5-flash-lite';
 // Ajan 5 (Portföy Yöneticisi) sentez işi — 4 ajanın çelişkisini dengeleyip
 // nihai karar veriyor. Flash burada yüzeysel kalıyordu; Pro daha tutarlı
