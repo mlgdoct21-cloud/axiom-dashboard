@@ -337,8 +337,9 @@ export default function NewsTab({ locale }: NewsTabProps) {
         />
       </div>
 
-        {/* Orta: 3 önemli haber (NewsDetail item=null → AxiomDigestEmptyState) */}
-        <div className="col-span-1 md:col-span-7 border-r border-[#2a2a3e] flex flex-col overflow-hidden">
+        {/* Orta: 3 önemli haber (NewsDetail item=null → AxiomDigestEmptyState).
+            Mobilde gizle — NewsList tek başına tam genişlikte kalsın. */}
+        <div className="hidden md:flex md:col-span-7 border-r border-[#2a2a3e] flex-col overflow-hidden">
           <NewsDetail
             item={null}
             votes={null}
@@ -351,8 +352,8 @@ export default function NewsTab({ locale }: NewsTabProps) {
           />
         </div>
 
-        {/* Sag: Favoriler / Watchlist */}
-        <div className="col-span-1 md:col-span-2 flex flex-col overflow-hidden">
+        {/* Sag: Favoriler / Watchlist — mobilde gizli, yer kazanır. */}
+        <div className="hidden md:flex md:col-span-2 flex-col overflow-hidden">
           <FavoritesBar
             favorites={favorites}
             onAddFavorite={handleAddFavorite}

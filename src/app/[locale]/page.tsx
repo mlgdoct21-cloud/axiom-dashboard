@@ -93,7 +93,7 @@ export default function Home() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`shrink-0 px-4 py-1.5 rounded text-sm font-medium transition-all duration-300 relative hover:-translate-y-[2px] hover:scale-105 hover:z-20 hover:shadow-[0_4px_12px_rgba(79,195,247,0.15)] ${
+            className={`shrink-0 px-4 py-2 rounded text-sm font-medium transition-all duration-300 relative touch-manipulation md:hover:-translate-y-[2px] md:hover:scale-105 md:hover:z-20 md:hover:shadow-[0_4px_12px_rgba(79,195,247,0.15)] ${
               activeTab === tab.id
                 ? 'text-white'
                 : 'text-[#8888a0] hover:text-[#e0e0e0] hover:bg-[#1e1e38]'
