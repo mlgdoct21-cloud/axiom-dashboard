@@ -323,16 +323,17 @@ function TAChart({ data }: { data: TAExample }) {
             size: 1,
           });
         }
-      } else if (ann.type === 'pattern' && ann.i !== undefined && ann.price !== undefined) {
+      } else if (ann.type === 'pattern' && ann.i !== undefined) {
         // Pattern — formasyonun tetik mumu (engulfing/hammer/doji)
+        // price field'ı ZORUNLU değil; marker bar time'ında konumlanır.
         const bar = bars[Math.max(0, Math.min(ann.i, bars.length - 1))];
         if (bar) {
-          const isBullish = ann.side === 'low' || ann.kind === 'bullish';
+          const isBullish = ann.side === 'low' || ann.side === 'bullish' || ann.kind === 'bullish';
           chartMarkers.push({
             time: epochMsToTime(bar.t),
             position: isBullish ? 'belowBar' : 'aboveBar',
-            color: '#a78bfa',
-            shape: 'circle',
+            color: isBullish ? '#26de81' : '#ff5c5c',
+            shape: isBullish ? 'arrowUp' : 'arrowDown',
             text: ann.label ?? 'Formasyon',
             size: 2,
           });
@@ -350,6 +351,37 @@ function TAChart({ data }: { data: TAExample }) {
 
     chart.timeScale().fitContent();
 
+    // KRİTİK: Fiyat sütununda (sağdaki price axis) wheel scroll yaparken
+    // grafik yatay kaymasın — SADECE Y zoom yapsın.
+    // LWC v5 default'unda wheel chart'ın HER YERİNDE aynı şekilde işlenir,
+    // bu yüzden price scale üstünde wheel time-pan'i tetikler. Bunu DOM-level'da
+    // yakalayıp price scale alanında time-pan'i bloke ediyor, scaleMargins ile
+    // görsel Y zoom (mum boyları büyür/küçülür) uyguluyoruz.
+    const PRICE_AXIS_WIDTH_GUESS = 70; // sağdaki price axis tipik genişliği
+    let topMargin = 0.08;
+    let botMargin = 0.08;
+    const Y_ZOOM_STEP = 0.04;
+    const Y_ZOOM_MIN = 0.0;
+    const Y_ZOOM_MAX = 0.40;
+
+    const onWheel = (e: WheelEvent) => {
+      const rect = container.getBoundingClientRect();
+      const xFromLeft = e.clientX - rect.left;
+      const isOverPriceAxis = xFromLeft > rect.width - PRICE_AXIS_WIDTH_GUESS;
+      if (!isOverPriceAxis) return; // chart body — LWC handle etsin (time pan)
+
+      // Price axis üstünde wheel → time pan bloke + Y zoom uygula
+      e.preventDefault();
+      e.stopPropagation();
+      const dir = e.deltaY > 0 ? 1 : -1; // aşağı scroll = küçült (zoom out)
+      topMargin = Math.min(Y_ZOOM_MAX, Math.max(Y_ZOOM_MIN, topMargin + dir * Y_ZOOM_STEP));
+      botMargin = Math.min(Y_ZOOM_MAX, Math.max(Y_ZOOM_MIN, botMargin + dir * Y_ZOOM_STEP));
+      chart.priceScale('right').applyOptions({
+        scaleMargins: { top: topMargin, bottom: botMargin },
+      });
+    };
+    container.addEventListener('wheel', onWheel, { capture: true, passive: false });
+
     const resize = () => {
       chart.applyOptions({ width: container.clientWidth });
     };
@@ -357,6 +389,7 @@ function TAChart({ data }: { data: TAExample }) {
 
     return () => {
       window.removeEventListener('resize', resize);
+      container.removeEventListener('wheel', onWheel, { capture: true } as EventListenerOptions);
       chart.remove();
       chartRef.current = null;
     };
