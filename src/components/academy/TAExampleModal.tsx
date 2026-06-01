@@ -419,12 +419,13 @@ export function TAExampleModal({ technique, techniqueLabel, onClose, showUpsell 
         {showUpsell && (
           <div className="mt-4 rounded-lg border border-[#a78bfa]/30 bg-[#a78bfa]/5 p-4">
             <div className="mb-2 text-sm font-semibold text-[#a78bfa]">
-              🔓 Premium'da 11 teknik daha + Fibonacci/RSI/MACD/Bollinger/Volume canlı avı
+              🔓 Premium'da 15 teknik daha + Advance'da MTF/Pivot/Wyckoff/ATR Stop
             </div>
             <p className="mb-3 text-xs text-[#8a92a8]">
-              S/R sıçraması, trend çizgisi, omuz-baş-omuz, ikili dip, üçgen, Fibonacci
-              retracement, RSI divergence, MACD cross, Golden Cross, Bollinger Squeeze,
-              Volume Pop — her biri canlı OHLC + karakter senaryosu.
+              Premium: S/R sıçraması, trend çizgisi, omuz-baş-omuz, ikili dip, üçgen,
+              Fibonacci retracement, RSI divergence, MACD cross, Golden Cross, Bollinger
+              Squeeze, Volume Pop. Advance: Klasik Pivot, MTF Pusula Sentezi, Wyckoff
+              Range & Spring, ATR Stop Planlayıcı — her biri canlı OHLC + karakter senaryosu.
             </p>
             <a
               href={UPGRADE_LINK}

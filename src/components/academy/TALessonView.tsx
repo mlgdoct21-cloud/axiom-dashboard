@@ -54,10 +54,26 @@ const TA_LIVE_EXAMPLE_BY_SLUG: Record<string, { technique: string; label: string
   'obv-ve-cmf':                  { technique: 'volume-pop',       label: 'Hacim Pop & Akış — Canlı' },
   'vwap-disiplini':              { technique: 'volume-pop',       label: 'Hacim Akışı — Canlı' },
   'volume-profile-giris':        { technique: 'volume-pop',       label: 'Hacim Akışı — Canlı' },
+  // M10 — Çoklu Zaman Dilimi · Risk · İşlem Planı (Faz 3 — advance)
+  'coklu-zaman-dilimi':          { technique: 'multi-timeframe-snapshot', label: 'MTF Pusula Sentezi — Canlı Skorlar' },
+  'pivot-points-capalar':        { technique: 'pivot-points',     label: 'Klasik Pivot — Canlı Çapa Seviyeleri' },
+  'risk-yonetimi-r-multiple':    { technique: 'atr-stop-planner', label: 'ATR Stop Planlayıcı — Canlı R Hedefleri' },
+  'islem-plani-ve-gunluk':       { technique: 'atr-stop-planner', label: 'İşlem Planı — Canlı R Hesabı' },
+  // M11 — İleri Çerçeveler: Wyckoff / Elliott / Market Profile (Faz 3 — advance)
+  'wyckoff-akumulasyon-dagitim': { technique: 'wyckoff-range',    label: 'Wyckoff Range & Spring — Canlı' },
+  'elliott-dalga-teorisi':       { technique: 'multi-timeframe-snapshot', label: 'Trend Hizalama — Canlı MTF' },
+  'market-profile-tpo':          { technique: 'wyckoff-range',    label: 'Range & Profil — Canlı Yapı' },
+  'heikin-ashi-footprint':       { technique: 'multi-timeframe-snapshot', label: 'Trend Filtresi — Canlı MTF' },
+  // M12 — Trader Karar Ağacı (Faz 3 — advance · sentez)
+  'bagiamdan-stratejiye':        { technique: 'multi-timeframe-snapshot', label: 'Rejim Okuma — Canlı MTF' },
+  'confluence-ve-veto':          { technique: 'pivot-points',     label: 'Pivot Confluence — Canlı Çapalar' },
+  'axiom-pusula-sentezi':        { technique: 'multi-timeframe-snapshot', label: 'AXIOM Pusula — Canlı Sentez' },
+  'surdurulebilirlik-ve-hata-gunlugu': { technique: 'atr-stop-planner', label: 'R-Multiple Disiplini — Canlı' },
 };
 
 const BOT_USERNAME = 'AxiomAnaliz_Bot';
-const UPGRADE_LINK = `https://t.me/${BOT_USERNAME}?start=upgrade_premium`;
+const UPGRADE_PREMIUM_LINK = `https://t.me/${BOT_USERNAME}?start=upgrade_premium`;
+const UPGRADE_ADVANCE_LINK = `https://t.me/${BOT_USERNAME}?start=upgrade_advance`;
 
 export default function TALessonView({ lessonId, userTier }: Props) {
   const isPaid = userTier === 'premium' || userTier === 'advance';
@@ -93,29 +109,50 @@ export default function TALessonView({ lessonId, userTier }: Props) {
   const les = payload.lesson;
 
   if (les.locked) {
+    const requiredTier = les.tier_required ?? (les.tier_hint as 'premium' | 'advance' | undefined);
+    const isAdvance = requiredTier === 'advance';
+    const tierLabel = isAdvance ? 'Advance' : 'Premium';
+    const tierColor = isAdvance ? '#ffd166' : '#a78bfa';
+    const upgradeLink = isAdvance ? UPGRADE_ADVANCE_LINK : UPGRADE_PREMIUM_LINK;
+    const benefits = isAdvance
+      ? [
+          '✓ Çoklu Zaman Dilimi disiplini + risk yönetimi (M10)',
+          '✓ Wyckoff / Elliott / Market Profile çerçeveleri (M11)',
+          '✓ Trader Karar Ağacı — AXIOM pusula sentezi (M12)',
+          '✓ 4 advance canlı teknik (MTF / Pivot / Wyckoff / ATR Stop)',
+        ]
+      : [
+          '✓ Tüm formasyonlar, Fibonacci, indikatör müfredatı',
+          '✓ 12 canlı "Gerçek Örnek" tekniği (BTC/ETH/AAPL/SPY)',
+          '✓ Karakter senaryolarıyla adım adım öğrenim',
+        ];
     return (
-      <article className="rounded-xl border border-[#a78bfa]/30 bg-gradient-to-br from-[#1a1a2e] to-[#161629] p-8 text-center">
+      <article
+        className="rounded-xl border bg-gradient-to-br from-[#1a1a2e] to-[#161629] p-8 text-center"
+        style={{ borderColor: `${tierColor}4d` }}
+      >
         <div className="text-5xl mb-3">🔒</div>
         <h2 className="text-2xl font-bold text-white mb-2">{les.title}</h2>
         <p className="text-gray-400 mb-1">{payload.module_title}</p>
         {les.learning_objective && (
-          <p className="text-sm text-[#a78bfa] mb-4 italic">{les.learning_objective}</p>
+          <p className="text-sm mb-4 italic" style={{ color: tierColor }}>
+            {les.learning_objective}
+          </p>
         )}
         <p className="text-gray-300 mb-3">
-          Bu ders <strong className="text-[#a78bfa]">Premium</strong> erişim gerektiriyor.
+          Bu ders <strong style={{ color: tierColor }}>{tierLabel}</strong> erişim gerektiriyor.
         </p>
         <ul className="inline-block text-left text-sm text-gray-300 mb-6 space-y-1">
-          <li>✓ Tüm formasyonlar, Fibonacci, indikatör müfredatı</li>
-          <li>✓ 6 canlı "Gerçek Örnek" tekniği (BTC/ETH/AAPL/SPY)</li>
-          <li>✓ Karakter senaryolarıyla adım adım öğrenim</li>
+          {benefits.map((b) => <li key={b}>{b}</li>)}
         </ul>
         <a
-          href={UPGRADE_LINK}
+          href={upgradeLink}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-block rounded-lg bg-[#a78bfa] px-6 py-3 font-semibold text-white hover:bg-[#9170f0]"
+          className="inline-block rounded-lg px-6 py-3 font-semibold text-white hover:opacity-90"
+          style={{ backgroundColor: tierColor }}
         >
-          Premium'a Yükselt →
+          {tierLabel}'a Yükselt →
         </a>
       </article>
     );
