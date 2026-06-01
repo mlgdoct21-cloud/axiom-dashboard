@@ -34,6 +34,26 @@ const TA_LIVE_EXAMPLE_BY_SLUG: Record<string, { technique: string; label: string
   // M5 (M5L1 free)
   'doji-ailesi':                 { technique: 'engulfing-reversal', label: 'Yutan Formasyon — Canlı Tespit' },
   'yutan-formasyon':             { technique: 'engulfing-reversal', label: 'Yutan Formasyon — Canlı Tespit' },
+  // M6 — Fibonacci (Faz 2)
+  'fibonacci-temelleri':         { technique: 'fibonacci-retracement', label: 'Fibonacci Retracement — Canlı Seviyeler' },
+  'retracement-uygulama':        { technique: 'fibonacci-retracement', label: 'Fibonacci Retracement — Canlı Uygulama' },
+  'extension-ve-hedef':          { technique: 'fibonacci-retracement', label: 'Fibonacci — Canlı Swing Tespiti' },
+  'fibonacci-confluence':        { technique: 'fibonacci-retracement', label: 'Fib Confluence — Canlı' },
+  // M7 — Momentum & Osilatörler (Faz 2)
+  'rsi-temelleri':               { technique: 'rsi-divergence',  label: 'RSI(14) — Canlı Divergence' },
+  'stochastic-osilator':         { technique: 'rsi-divergence',  label: 'Momentum Divergence — Canlı' },
+  'cci-ve-williams':             { technique: 'rsi-divergence',  label: 'Momentum Divergence — Canlı' },
+  'divergence-disiplini':        { technique: 'rsi-divergence',  label: 'Klasik Divergence — Canlı Tespit' },
+  // M8 — Trend & Volatilite (Faz 2)
+  'ma-ailesi':                   { technique: 'golden-cross',     label: 'Golden / Death Cross — Canlı 50/200' },
+  'macd-okuma':                  { technique: 'macd-crossover',   label: 'MACD Kesişimi — Canlı Tespit' },
+  'bollinger-bantlari':          { technique: 'bollinger-squeeze', label: 'Bollinger Squeeze — Canlı' },
+  'ichimoku-bulut':              { technique: 'bollinger-squeeze', label: 'Volatilite Squeeze — Canlı' },
+  // M9 — Hacim & Akış (Faz 2)
+  'hacim-temelleri':             { technique: 'volume-pop',       label: 'Hacim Popu — Canlı Tespit' },
+  'obv-ve-cmf':                  { technique: 'volume-pop',       label: 'Hacim Pop & Akış — Canlı' },
+  'vwap-disiplini':              { technique: 'volume-pop',       label: 'Hacim Akışı — Canlı' },
+  'volume-profile-giris':        { technique: 'volume-pop',       label: 'Hacim Akışı — Canlı' },
 };
 
 const BOT_USERNAME = 'AxiomAnaliz_Bot';

@@ -41,6 +41,17 @@ const LEVEL_COLORS = {
   default: '#4fc3f7',
 } as const;
 
+// Fibonacci seviye renkleri — kalabalığın 'altın bölge' (0.5/0.618) en parlak
+const FIB_COLORS: Record<string, string> = {
+  '0.000': '#5b6480',
+  '0.236': '#8a92a8',
+  '0.382': '#4fc3f7',
+  '0.500': '#a78bfa',
+  '0.618': '#ffd166',
+  '0.786': '#ff9f43',
+  '1.000': '#5b6480',
+};
+
 function formatNumber(n: number | undefined, decimals: number = 0): string {
   if (n === undefined || n === null || !isFinite(n)) return '—';
   return n.toLocaleString('tr-TR', {
@@ -170,6 +181,54 @@ function TAChart({ data }: { data: TAExample }) {
             { time: epochMsToTime(toBar.t), value: ann.to_price },
           ]);
         }
+      } else if (ann.type === 'fib_level' && ann.price !== undefined) {
+        // Fibonacci seviyeleri — yatay çizgi, ratio etiketiyle
+        const labelKey = ann.label ?? (ann.ratio !== undefined ? ann.ratio.toFixed(3) : '');
+        const color = FIB_COLORS[labelKey] ?? '#a78bfa';
+        const isGolden = labelKey === '0.500' || labelKey === '0.618';
+        candleSeries.createPriceLine({
+          price: ann.price,
+          color,
+          lineWidth: isGolden ? 2 : 1,
+          lineStyle: 2, // dashed
+          axisLabelVisible: true,
+          title: `Fib ${labelKey}`,
+        });
+      } else if (
+        ann.type === 'divergence_line' &&
+        ann.from_i !== undefined &&
+        ann.to_i !== undefined &&
+        ann.from_price !== undefined &&
+        ann.to_price !== undefined
+      ) {
+        // Divergence — iki pivotu birleştiren eğik çizgi
+        const fromBar = data.bars[Math.max(0, Math.min(ann.from_i, data.bars.length - 1))];
+        const toBar = data.bars[Math.max(0, Math.min(ann.to_i, data.bars.length - 1))];
+        if (fromBar && toBar) {
+          const divColor = ann.kind === 'bullish' ? '#26de81' : '#ff5c5c';
+          const lineSeries = chart.addSeries(LineSeries, {
+            color: divColor,
+            lineWidth: 2,
+            lineStyle: 2, // dashed
+            lastValueVisible: false,
+            priceLineVisible: false,
+          });
+          lineSeries.setData([
+            { time: epochMsToTime(fromBar.t), value: ann.from_price },
+            { time: epochMsToTime(toBar.t), value: ann.to_price },
+          ]);
+        }
+      } else if (ann.type === 'marker' && ann.i !== undefined && ann.price !== undefined) {
+        // Marker — yatay referans çizgisi (event noktasını işaretle)
+        const isBullish = ann.side === 'low' || ann.kind === 'bullish' || ann.kind === 'golden';
+        candleSeries.createPriceLine({
+          price: ann.price,
+          color: isBullish ? '#26de81' : '#ff5c5c',
+          lineWidth: 1,
+          lineStyle: 3, // dotted
+          axisLabelVisible: true,
+          title: ann.label ?? 'Olay',
+        });
       }
     }
 
@@ -360,11 +419,12 @@ export function TAExampleModal({ technique, techniqueLabel, onClose, showUpsell 
         {showUpsell && (
           <div className="mt-4 rounded-lg border border-[#a78bfa]/30 bg-[#a78bfa]/5 p-4">
             <div className="mb-2 text-sm font-semibold text-[#a78bfa]">
-              🔓 Premium'da 5 teknik daha + ileri formasyon avı
+              🔓 Premium'da 11 teknik daha + Fibonacci/RSI/MACD/Bollinger/Volume canlı avı
             </div>
             <p className="mb-3 text-xs text-[#8a92a8]">
-              Destek/direnç sıçraması, trend çizgisi kırılımı, omuz-baş-omuz, ikili dip,
-              üçgen kırılımı — her biri canlı veriyle, karakter senaryosuyla.
+              S/R sıçraması, trend çizgisi, omuz-baş-omuz, ikili dip, üçgen, Fibonacci
+              retracement, RSI divergence, MACD cross, Golden Cross, Bollinger Squeeze,
+              Volume Pop — her biri canlı OHLC + karakter senaryosu.
             </p>
             <a
               href={UPGRADE_LINK}

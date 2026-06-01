@@ -369,18 +369,28 @@ export interface TAGlossaryTerm {
 export type TAGlossary = Record<string, TAGlossaryTerm[] | Record<string, unknown>>;
 
 export interface TAExampleAnnotation {
-  type: 'level' | 'pivot' | 'trendline' | 'neckline' | 'pattern';
+  type:
+    | 'level'
+    | 'pivot'
+    | 'trendline'
+    | 'neckline'
+    | 'pattern'
+    | 'fib_level'
+    | 'divergence_line'
+    | 'marker';
   i?: number;
   from_i?: number;
   to_i?: number;
   price?: number;
   from_price?: number;
   to_price?: number;
-  side?: 'support' | 'resistance' | 'high' | 'low' | 'bullish' | 'bearish';
+  side?: 'support' | 'resistance' | 'high' | 'low' | 'bullish' | 'bearish' | 'neutral';
   label?: string;
   price_open?: number;
   price_close?: number;
   r2?: number;
+  ratio?: number; // fib_level için: 0.382, 0.5, ...
+  kind?: 'bullish' | 'bearish' | 'golden' | 'death'; // divergence_line / marker için
 }
 
 export interface TAExampleBar {
