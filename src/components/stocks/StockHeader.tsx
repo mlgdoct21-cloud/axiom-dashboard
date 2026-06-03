@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { isBIST } from '@/lib/bist-symbols';
+import TradeDossierModal from '@/components/TradeDossierModal';
 
 interface StockHeaderProps {
   symbol: string;
@@ -27,6 +28,7 @@ interface StockInfo {
 export default function StockHeader({ symbol, locale }: StockHeaderProps) {
   const [info, setInfo] = useState<StockInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [dossierOpen, setDossierOpen] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -162,6 +164,23 @@ export default function StockHeader({ symbol, locale }: StockHeaderProps) {
           {locale === 'tr' ? 'Kuruldu' : 'Founded'}: {info.founded}
         </div>
       )}
+
+      {/* Trade Dossier action */}
+      <div className="pt-3 border-t border-[#2a2a3e]">
+        <button
+          onClick={() => setDossierOpen(true)}
+          className="w-full md:w-auto px-4 py-2 bg-gradient-to-r from-[#4fc3f7]/20 to-[#a78bfa]/20 hover:from-[#4fc3f7]/30 hover:to-[#a78bfa]/30 border border-[#4fc3f7]/40 rounded-md text-sm font-semibold text-[#4fc3f7] transition-all"
+        >
+          🎯 Trade Dossier — AL/TUT/SAT Sentezi
+        </button>
+        <p className="text-[10px] text-[#666680] mt-1">
+          {locale === 'tr'
+            ? 'TA + Temel + Haber + Makro tek sentez (Gemini, ~15s)'
+            : 'TA + Fundamental + News + Macro synthesis (Gemini, ~15s)'}
+        </p>
+      </div>
+
+      <TradeDossierModal symbol={symbol} open={dossierOpen} onClose={() => setDossierOpen(false)} />
     </div>
   );
 }
